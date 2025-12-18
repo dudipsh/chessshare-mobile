@@ -1077,6 +1077,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.0.0"
+  stockfish:
+    dependency: "direct main"
+    description:
+      name: stockfish
+      sha256: "6f282bd7c4313262b47eabff85a23e3ee9bb63ee66d1fc57860e810621f0f9b5"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.7.2"
   storage_client:
     dependency: transitive
     description:

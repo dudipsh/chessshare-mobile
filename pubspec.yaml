@@ -34,7 +34,7 @@ dependencies:
   chessground: ^7.3.0  # Lichess chess board widget
   dartchess: ^0.11.1   # Chess logic library (compatible with chessground)
   fast_immutable_collections: ^11.1.0  # Required for chessground ValidMoves type
-  # stockfish: ^2.1.0  # Add later when implementing analysis
+  stockfish: ^1.7.2    # Chess engine for analysis
 
   # Charts
   fl_chart: ^0.66.2

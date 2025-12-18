@@ -7,6 +7,9 @@ import 'package:dartchess/dartchess.dart';
 import '../../../app/theme/colors.dart';
 import '../../games/models/chess_game.dart';
 import '../providers/analysis_provider.dart';
+import '../providers/engine_provider.dart';
+import '../widgets/analysis_panel.dart';
+import '../widgets/evaluation_bar.dart';
 import '../widgets/move_list.dart';
 import '../widgets/navigation_controls.dart';
 
@@ -20,19 +23,45 @@ class AnalysisScreen extends ConsumerStatefulWidget {
 }
 
 class _AnalysisScreenState extends ConsumerState<AnalysisScreen> {
+  bool _engineEnabled = true;
+  String? _lastAnalyzedFen;
+
   @override
   void initState() {
     super.initState();
     // Load the game when screen opens
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(analysisProvider.notifier).loadGame(widget.game);
+      _initializeEngine();
     });
+  }
+
+  Future<void> _initializeEngine() async {
+    if (!_engineEnabled) return;
+    await ref.read(engineAnalysisProvider.notifier).initialize();
+  }
+
+  void _analyzeCurrentPosition(String fen) {
+    if (!_engineEnabled || fen == _lastAnalyzedFen) return;
+    _lastAnalyzedFen = fen;
+    ref.read(engineAnalysisProvider.notifier).analyzePosition(fen);
+  }
+
+  @override
+  void dispose() {
+    ref.read(engineAnalysisProvider.notifier).stopAnalysis();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final analysisState = ref.watch(analysisProvider);
     final screenWidth = MediaQuery.of(context).size.width;
+
+    // Trigger analysis when FEN changes
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _analyzeCurrentPosition(analysisState.currentFen);
+    });
 
     return Scaffold(
       appBar: AppBar(
@@ -53,6 +82,25 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> {
           ],
         ),
         actions: [
+          // Engine toggle
+          IconButton(
+            icon: Icon(
+              _engineEnabled ? Icons.psychology : Icons.psychology_outlined,
+              color: _engineEnabled ? Colors.greenAccent : null,
+            ),
+            onPressed: () {
+              setState(() {
+                _engineEnabled = !_engineEnabled;
+              });
+              if (_engineEnabled) {
+                _initializeEngine();
+                _lastAnalyzedFen = null;
+              } else {
+                ref.read(engineAnalysisProvider.notifier).stopAnalysis();
+              }
+            },
+            tooltip: _engineEnabled ? 'Disable engine' : 'Enable engine',
+          ),
           IconButton(
             icon: Icon(
               analysisState.orientation == Side.black
@@ -106,10 +154,28 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> {
           // Game info bar
           _buildGameInfoBar(),
 
-          // Chess board with chessground
+          // Chess board with evaluation bar
           Padding(
             padding: const EdgeInsets.all(8.0),
-            child: _buildChessboard(analysisState, screenWidth),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Evaluation bar
+                if (_engineEnabled)
+                  SizedBox(
+                    height: screenWidth - 16 - 32,
+                    child: const EvaluationBar(width: 24),
+                  ),
+                if (_engineEnabled) const SizedBox(width: 8),
+                // Chess board
+                Expanded(
+                  child: _buildChessboard(
+                    analysisState,
+                    _engineEnabled ? screenWidth - 48 : screenWidth - 16,
+                  ),
+                ),
+              ],
+            ),
           ),
 
           // Navigation controls
@@ -139,6 +205,18 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> {
               ),
             ),
           ),
+
+          // Engine analysis panel
+          if (_engineEnabled)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8.0),
+              child: AnalysisPanel(
+                maxLines: 3,
+                onPvTap: (pv) {
+                  // Could show PV on board or preview moves
+                },
+              ),
+            ),
 
           // Move list
           Expanded(
