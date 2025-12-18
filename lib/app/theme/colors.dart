@@ -1,14 +1,19 @@
 import 'package:flutter/material.dart';
 
 class AppColors {
-  // Primary colors
-  static const Color primary = Color(0xFF1A1A2E);
-  static const Color primaryLight = Color(0xFF16213E);
-  static const Color primaryDark = Color(0xFF0F0F1A);
+  // Primary colors (ChessShare green from logo)
+  static const Color primary = Color(0xFF6D974D);
+  static const Color primaryLight = Color(0xFF8AB56A);
+  static const Color primaryDark = Color(0xFF557A3D);
+
+  // Secondary colors (ChessShare beige from logo)
+  static const Color secondary = Color(0xFFEEEDCF);
+  static const Color secondaryLight = Color(0xFFF5F4E3);
+  static const Color secondaryDark = Color(0xFFD9D8B8);
 
   // Accent colors
-  static const Color accent = Color(0xFF4ECDC4);
-  static const Color accentLight = Color(0xFF7EDDD7);
+  static const Color accent = Color(0xFF6D974D);
+  static const Color accentLight = Color(0xFF8AB56A);
 
   // Status colors
   static const Color success = Color(0xFF10B981);

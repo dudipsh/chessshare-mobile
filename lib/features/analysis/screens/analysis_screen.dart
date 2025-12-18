@@ -154,28 +154,21 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> {
           // Game info bar
           _buildGameInfoBar(),
 
-          // Chess board with evaluation bar
+          // Evaluation bar above the board
+          if (_engineEnabled)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8.0),
+              child: EvaluationBar(
+                height: 6,
+                showEvaluation: true,
+                borderRadius: 3,
+              ),
+            ),
+
+          // Chess board
           Padding(
             padding: const EdgeInsets.all(8.0),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Evaluation bar
-                if (_engineEnabled)
-                  SizedBox(
-                    height: screenWidth - 16 - 32,
-                    child: const EvaluationBar(width: 24),
-                  ),
-                if (_engineEnabled) const SizedBox(width: 8),
-                // Chess board
-                Expanded(
-                  child: _buildChessboard(
-                    analysisState,
-                    _engineEnabled ? screenWidth - 48 : screenWidth - 16,
-                  ),
-                ),
-              ],
-            ),
+            child: _buildChessboard(analysisState, screenWidth - 16),
           ),
 
           // Navigation controls
