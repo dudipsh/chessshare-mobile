@@ -2,29 +2,22 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../../app/theme/colors.dart';
+import '../models/chess_game.dart';
 
 class GameCard extends StatelessWidget {
-  final String opponent;
-  final String result;
-  final double accuracy;
-  final String opening;
-  final DateTime date;
+  final ChessGame game;
   final VoidCallback onTap;
 
   const GameCard({
     super.key,
-    required this.opponent,
-    required this.result,
-    required this.accuracy,
-    required this.opening,
-    required this.date,
+    required this.game,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    final resultColor = AppColors.getResultColor(result);
-    final resultText = result[0].toUpperCase() + result.substring(1);
+    final resultColor = _getResultColor(game.result);
+    final resultText = _getResultText(game.result);
 
     return Card(
       child: InkWell(
@@ -52,11 +45,30 @@ class GameCard extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        Text(
-                          'vs $opponent',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 16,
+                        // Color indicator
+                        Container(
+                          width: 14,
+                          height: 14,
+                          margin: const EdgeInsets.only(right: 6),
+                          decoration: BoxDecoration(
+                            color: game.playerColor == 'white'
+                                ? Colors.white
+                                : Colors.black,
+                            border: Border.all(
+                              color: Colors.grey.shade600,
+                              width: 1,
+                            ),
+                            borderRadius: BorderRadius.circular(3),
+                          ),
+                        ),
+                        Expanded(
+                          child: Text(
+                            'vs ${game.opponentUsername}',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 16,
+                            ),
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                         const SizedBox(width: 8),
@@ -81,16 +93,75 @@ class GameCard extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 4),
-                    Text(
-                      opening,
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.6),
-                        fontSize: 14,
-                      ),
+                    Row(
+                      children: [
+                        // Speed icon
+                        Icon(
+                          _getSpeedIcon(game.speed),
+                          size: 14,
+                          color: Colors.white.withOpacity(0.5),
+                        ),
+                        const SizedBox(width: 4),
+                        // Opening name
+                        Expanded(
+                          child: Text(
+                            game.openingName ?? 'Unknown opening',
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.6),
+                              fontSize: 14,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        // Platform icon
+                        _buildPlatformChip(),
+                        const SizedBox(width: 8),
+                        // Ratings
+                        if (game.playerRating != null || game.opponentRating != null)
+                          Text(
+                            '${game.playerRating ?? '?'} vs ${game.opponentRating ?? '?'}',
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.5),
+                              fontSize: 12,
+                            ),
+                          ),
+                        const Spacer(),
+                        // Date
+                        Text(
+                          DateFormat('MMM d, yyyy').format(game.playedAt),
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.4),
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(width: 8),
+
+              // Analysis indicator or accuracy
+              if (game.isAnalyzed && game.playerAccuracy != null) ...[
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
                     Text(
-                      DateFormat('MMM d, yyyy').format(date),
+                      '${game.playerAccuracy!.toStringAsFixed(1)}%',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 18,
+                        color: _getAccuracyColor(game.playerAccuracy!),
+                      ),
+                    ),
+                    Text(
+                      'Accuracy',
                       style: TextStyle(
                         color: Colors.white.withOpacity(0.4),
                         fontSize: 12,
@@ -98,31 +169,28 @@ class GameCard extends StatelessWidget {
                     ),
                   ],
                 ),
-              ),
-
-              // Accuracy
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    '${accuracy.toStringAsFixed(1)}%',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 18,
-                      color: _getAccuracyColor(accuracy),
-                    ),
+              ] else ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
                   ),
-                  Text(
-                    'Accuracy',
+                  decoration: BoxDecoration(
+                    color: AppColors.accent.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Text(
+                    'Analyze',
                     style: TextStyle(
-                      color: Colors.white.withOpacity(0.4),
+                      color: AppColors.accent,
                       fontSize: 12,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
 
-              const SizedBox(width: 8),
+              const SizedBox(width: 4),
               Icon(
                 Icons.chevron_right,
                 color: Colors.white.withOpacity(0.3),
@@ -132,6 +200,62 @@ class GameCard extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Widget _buildPlatformChip() {
+    final isChessCom = game.platform == GamePlatform.chesscom;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: (isChessCom ? Colors.green : Colors.white).withOpacity(0.1),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        isChessCom ? 'Chess.com' : 'Lichess',
+        style: TextStyle(
+          color: isChessCom ? Colors.green.shade300 : Colors.white70,
+          fontSize: 10,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+    );
+  }
+
+  Color _getResultColor(GameResult result) {
+    switch (result) {
+      case GameResult.win:
+        return AppColors.win;
+      case GameResult.loss:
+        return AppColors.loss;
+      case GameResult.draw:
+        return AppColors.draw;
+    }
+  }
+
+  String _getResultText(GameResult result) {
+    switch (result) {
+      case GameResult.win:
+        return 'Win';
+      case GameResult.loss:
+        return 'Loss';
+      case GameResult.draw:
+        return 'Draw';
+    }
+  }
+
+  IconData _getSpeedIcon(GameSpeed speed) {
+    switch (speed) {
+      case GameSpeed.bullet:
+        return Icons.bolt;
+      case GameSpeed.blitz:
+        return Icons.flash_on;
+      case GameSpeed.rapid:
+        return Icons.timer;
+      case GameSpeed.classical:
+        return Icons.hourglass_bottom;
+      case GameSpeed.correspondence:
+        return Icons.mail_outline;
+    }
   }
 
   Color _getAccuracyColor(double accuracy) {

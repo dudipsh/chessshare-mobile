@@ -22,7 +22,9 @@ Premium Chess Analysis & Training App built with Flutter.
 3. Set up Supabase credentials in `lib/main.dart` or use environment variables:
    ```bash
    flutter run --dart-define=SUPABASE_URL=your_url --dart-define=SUPABASE_ANON_KEY=your_key
-   ```
+   flutter run --dart-define=SUPABASE_URL=https://nobysgvvygfqzfsbellh.supabase.co --dart-define=SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5vYnlzZ3Z2eWdmcXpmc2JlbGxoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzg5OTgwMzgsImV4cCI6MjA1NDU3NDAzOH0.GKAybR45O9_9GiX8TvK0pEBmO7jS7mG8lj_weKY5hY4
+   
+     ```
 
 4. Run the app:
    ```bash

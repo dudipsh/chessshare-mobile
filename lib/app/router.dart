@@ -4,6 +4,9 @@ import 'package:go_router/go_router.dart';
 
 import '../features/auth/screens/login_screen.dart';
 import '../features/games/screens/games_list_screen.dart';
+import '../features/games/screens/import_screen.dart';
+import '../features/analysis/screens/analysis_screen.dart';
+import '../features/games/models/chess_game.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
@@ -14,6 +17,26 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/login',
         name: 'login',
         builder: (context, state) => const LoginScreen(),
+      ),
+
+      // Import routes (outside shell - no bottom nav)
+      GoRoute(
+        path: '/import/:platform',
+        name: 'import',
+        builder: (context, state) {
+          final platform = state.pathParameters['platform'] ?? 'chesscom';
+          return ImportScreen(platform: platform);
+        },
+      ),
+
+      // Analysis route (outside shell - no bottom nav)
+      GoRoute(
+        path: '/analysis',
+        name: 'analysis',
+        builder: (context, state) {
+          final game = state.extra as ChessGame;
+          return AnalysisScreen(game: game);
+        },
       ),
 
       // Main app routes with bottom navigation
@@ -28,22 +51,22 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/study',
             name: 'study',
-            builder: (context, state) => const Placeholder(), // TODO: StudyScreen
+            builder: (context, state) => const _PlaceholderScreen(title: 'Study'),
           ),
           GoRoute(
             path: '/puzzles',
             name: 'puzzles',
-            builder: (context, state) => const Placeholder(), // TODO: PuzzlesScreen
+            builder: (context, state) => const _PlaceholderScreen(title: 'Puzzles'),
           ),
           GoRoute(
             path: '/insights',
             name: 'insights',
-            builder: (context, state) => const Placeholder(), // TODO: InsightsScreen
+            builder: (context, state) => const _PlaceholderScreen(title: 'Insights'),
           ),
           GoRoute(
             path: '/profile',
             name: 'profile',
-            builder: (context, state) => const Placeholder(), // TODO: ProfileScreen
+            builder: (context, state) => const _PlaceholderScreen(title: 'Profile'),
           ),
         ],
       ),
@@ -122,5 +145,25 @@ class MainShell extends StatelessWidget {
         context.goNamed('profile');
         break;
     }
+  }
+}
+
+class _PlaceholderScreen extends StatelessWidget {
+  final String title;
+
+  const _PlaceholderScreen({required this.title});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text(title)),
+      body: Center(
+        child: Text(
+          '$title\nComing Soon',
+          textAlign: TextAlign.center,
+          style: Theme.of(context).textTheme.headlineMedium,
+        ),
+      ),
+    );
   }
 }

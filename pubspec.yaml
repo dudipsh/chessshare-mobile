@@ -31,7 +31,9 @@ dependencies:
   path_provider: ^2.1.2
 
   # Chess
-  chess: ^0.8.1
+  chessground: ^7.3.0  # Lichess chess board widget
+  dartchess: ^0.11.1   # Chess logic library (compatible with chessground)
+  fast_immutable_collections: ^11.1.0  # Required for chessground ValidMoves type
   # stockfish: ^2.1.0  # Add later when implementing analysis
 
   # Charts
@@ -39,7 +41,7 @@ dependencies:
 
   # Audio & Haptics
   audioplayers: ^5.2.1
-  vibration: ^1.8.4
+  haptic_feedback: ^0.5.1+1
 
   # Utilities
   intl: ^0.19.0

@@ -44,7 +44,7 @@ class AppTheme {
           return IconThemeData(color: Colors.white.withOpacity(0.6));
         }),
       ),
-      cardTheme: CardTheme(
+      cardTheme: CardThemeData(
         color: AppColors.primaryLight,
         elevation: 2,
         shape: RoundedRectangleBorder(
@@ -110,7 +110,7 @@ class AppTheme {
         elevation: 0,
         centerTitle: true,
       ),
-      cardTheme: CardTheme(
+      cardTheme: CardThemeData(
         color: Colors.white,
         elevation: 2,
         shape: RoundedRectangleBorder(

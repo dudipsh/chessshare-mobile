@@ -34,6 +34,8 @@ class AppColors {
   static const Color check = Color(0x66FF0000);
 
   // Game result colors
+  static const Color win = success;
+  static const Color loss = error;
   static Color winColor = success;
   static Color lossColor = error;
   static Color drawColor = draw;
