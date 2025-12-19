@@ -16,6 +16,9 @@ class GamesState {
   final String? importingPlatform;
   final int importProgress;
   final int importTotal;
+  final String? activeChessComUsername;
+  final String? activeLichessUsername;
+  final bool hasAutoImported;
 
   GamesState({
     this.games = const [],
@@ -25,6 +28,9 @@ class GamesState {
     this.importingPlatform,
     this.importProgress = 0,
     this.importTotal = 0,
+    this.activeChessComUsername,
+    this.activeLichessUsername,
+    this.hasAutoImported = false,
   });
 
   GamesState copyWith({
@@ -35,6 +41,9 @@ class GamesState {
     String? importingPlatform,
     int? importProgress,
     int? importTotal,
+    String? activeChessComUsername,
+    String? activeLichessUsername,
+    bool? hasAutoImported,
   }) {
     return GamesState(
       games: games ?? this.games,
@@ -44,10 +53,14 @@ class GamesState {
       importingPlatform: importingPlatform ?? this.importingPlatform,
       importProgress: importProgress ?? this.importProgress,
       importTotal: importTotal ?? this.importTotal,
+      activeChessComUsername: activeChessComUsername ?? this.activeChessComUsername,
+      activeLichessUsername: activeLichessUsername ?? this.activeLichessUsername,
+      hasAutoImported: hasAutoImported ?? this.hasAutoImported,
     );
   }
 
   bool get hasGames => games.isNotEmpty;
+  bool get hasSavedProfiles => activeChessComUsername != null || activeLichessUsername != null;
 }
 
 // Filter state
@@ -82,42 +95,101 @@ class GamesFilter {
 // Games notifier
 class GamesNotifier extends StateNotifier<GamesState> {
   final String? _userId;
+  final String? _chessComUsername;
+  final String? _lichessUsername;
   Map<String, _GameReviewInfo> _reviewsCache = {};
 
-  GamesNotifier(this._userId) : super(GamesState()) {
-    _loadGameReviewsFromServer();
+  GamesNotifier(this._userId, this._chessComUsername, this._lichessUsername)
+      : super(GamesState(
+          activeChessComUsername: _chessComUsername,
+          activeLichessUsername: _lichessUsername,
+          // Start with loading if we have saved profiles to import from
+          isLoading: (_chessComUsername?.isNotEmpty ?? false) ||
+              (_lichessUsername?.isNotEmpty ?? false),
+        )) {
+    _initialize();
+  }
+
+  Future<void> _initialize() async {
+    await _loadGameReviewsFromServer();
+    // Auto-import if we have saved profiles
+    await _autoImportIfNeeded();
+  }
+
+  /// Auto-import games from saved profiles
+  Future<void> _autoImportIfNeeded() async {
+    if (state.hasAutoImported) {
+      // Clear loading state if already imported
+      if (state.isLoading) {
+        state = state.copyWith(isLoading: false);
+      }
+      return;
+    }
+
+    final hasChessCom = _chessComUsername?.isNotEmpty ?? false;
+    final hasLichess = _lichessUsername?.isNotEmpty ?? false;
+
+    // If no profiles to import from, clear loading state
+    if (!hasChessCom && !hasLichess) {
+      state = state.copyWith(isLoading: false, hasAutoImported: true);
+      return;
+    }
+
+    // Import from Chess.com first if available
+    if (hasChessCom) {
+      await importFromChessCom(_chessComUsername!);
+    }
+
+    // Then import from Lichess if available
+    if (hasLichess) {
+      await importFromLichess(_lichessUsername!);
+    }
+
+    state = state.copyWith(isLoading: false, hasAutoImported: true);
+  }
+
+  /// Refresh games from saved profiles
+  Future<void> refreshFromSavedProfiles() async {
+    final chessComUser = _chessComUsername;
+    final lichessUser = _lichessUsername;
+
+    if (chessComUser != null && chessComUser.isNotEmpty) {
+      await importFromChessCom(chessComUser);
+    }
+    if (lichessUser != null && lichessUser.isNotEmpty) {
+      await importFromLichess(lichessUser);
+    }
   }
 
   /// Load game reviews from the server to know which games are analyzed
   Future<void> _loadGameReviewsFromServer() async {
-    if (_userId == null || _userId.startsWith('guest_')) return;
+    final userId = _userId;
+    if (userId == null || userId.startsWith('guest_')) return;
 
     try {
       final response = await SupabaseService.client
           .from('game_reviews')
           .select('id, external_game_id, accuracy_white, accuracy_black, reviewed_at')
-          .eq('user_id', _userId);
+          .eq('user_id', userId);
 
-      if (response != null && response is List) {
-        for (final review in response) {
-          final externalGameId = review['external_game_id'] as String?;
-          if (externalGameId != null) {
-            _reviewsCache[externalGameId] = _GameReviewInfo(
-              id: review['id'] as String,
-              accuracyWhite: (review['accuracy_white'] as num?)?.toDouble(),
-              accuracyBlack: (review['accuracy_black'] as num?)?.toDouble(),
-              reviewedAt: review['reviewed_at'] != null
-                  ? DateTime.parse(review['reviewed_at'] as String)
-                  : null,
-            );
-          }
+      for (final review in response) {
+        final externalGameId = review['external_game_id'] as String?;
+        if (externalGameId != null) {
+          _reviewsCache[externalGameId] = _GameReviewInfo(
+            id: review['id'] as String,
+            accuracyWhite: (review['accuracy_white'] as num?)?.toDouble(),
+            accuracyBlack: (review['accuracy_black'] as num?)?.toDouble(),
+            reviewedAt: review['reviewed_at'] != null
+                ? DateTime.parse(review['reviewed_at'] as String)
+                : null,
+          );
         }
-        debugPrint('Loaded ${_reviewsCache.length} game reviews from server');
+      }
+      debugPrint('Loaded ${_reviewsCache.length} game reviews from server');
 
-        // Update any existing games with their analysis status
-        if (state.games.isNotEmpty) {
-          _updateGamesWithAnalysisStatus();
-        }
+      // Update any existing games with their analysis status
+      if (state.games.isNotEmpty) {
+        _updateGamesWithAnalysisStatus();
       }
     } catch (e) {
       debugPrint('Error loading game reviews: $e');
@@ -300,8 +372,12 @@ class _GameReviewInfo {
 
 // Providers
 final gamesProvider = StateNotifierProvider<GamesNotifier, GamesState>((ref) {
-  final userId = ref.watch(authProvider).profile?.id;
-  return GamesNotifier(userId);
+  final profile = ref.watch(authProvider).profile;
+  return GamesNotifier(
+    profile?.id,
+    profile?.chessComUsername,
+    profile?.lichessUsername,
+  );
 });
 
 final gamesFilterProvider = StateProvider<GamesFilter>((ref) {

@@ -19,22 +19,45 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
   final _usernameController = TextEditingController();
   bool _saveUsername = true;
   bool _hasText = false;
+  bool _didPrefill = false;
 
   @override
   void initState() {
     super.initState();
-    // Pre-fill with saved username if available
-    final profile = ref.read(authProvider).profile;
-    if (widget.platform == 'chesscom' && profile?.chessComUsername != null) {
-      _usernameController.text = profile!.chessComUsername!;
-      _hasText = true;
-    } else if (widget.platform == 'lichess' && profile?.lichessUsername != null) {
-      _usernameController.text = profile!.lichessUsername!;
-      _hasText = true;
-    }
-
     // Listen to text changes to enable/disable button
     _usernameController.addListener(_onTextChanged);
+    // Pre-fill will happen in didChangeDependencies
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Pre-fill with saved username if available (runs after initState and on profile changes)
+    _prefillUsernameIfNeeded();
+  }
+
+  void _prefillUsernameIfNeeded() {
+    final profile = ref.read(authProvider).profile;
+    String? savedUsername;
+
+    if (widget.platform == 'chesscom') {
+      savedUsername = profile?.chessComUsername;
+    } else if (widget.platform == 'lichess') {
+      savedUsername = profile?.lichessUsername;
+    }
+
+    // Only pre-fill if we have a username and haven't pre-filled yet
+    // or if the text field is empty
+    if (savedUsername != null && savedUsername.isNotEmpty) {
+      if (!_didPrefill || _usernameController.text.isEmpty) {
+        _usernameController.text = savedUsername;
+        _didPrefill = true;
+        // Update _hasText immediately
+        setState(() {
+          _hasText = true;
+        });
+      }
+    }
   }
 
   void _onTextChanged() {
@@ -89,6 +112,16 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
   Widget build(BuildContext context) {
     final gamesState = ref.watch(gamesProvider);
     final isImporting = gamesState.isImporting;
+
+    // Watch auth provider to update when profile changes
+    ref.watch(authProvider);
+
+    // Re-check for username if profile updated and we haven't pre-filled yet
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_didPrefill && mounted) {
+        _prefillUsernameIfNeeded();
+      }
+    });
 
     return Scaffold(
       appBar: AppBar(
