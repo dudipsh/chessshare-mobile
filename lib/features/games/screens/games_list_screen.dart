@@ -126,7 +126,8 @@ class _GamesListScreenState extends ConsumerState<GamesListScreen> {
                   child: GameCard(
                     game: game,
                     onTap: () {
-                      context.pushNamed('analysis', extra: game);
+                      // Navigate to game review with auto-analysis
+                      context.pushNamed('game-review', extra: game);
                     },
                   ),
                 );

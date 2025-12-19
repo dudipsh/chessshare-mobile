@@ -5,8 +5,36 @@ import '../models/study_board.dart';
 
 /// Service for study/board operations
 class StudyService {
-  /// Get public boards
-  static Future<List<StudyBoard>> getPublicBoards({int limit = 20}) async {
+  /// Get public boards with progress using RPC
+  static Future<List<StudyBoard>> getPublicBoards({
+    int limit = 20,
+    String? userId,
+    String? lastBoardId,
+    int? lastViewsCount,
+  }) async {
+    try {
+      final response = await SupabaseService.client.rpc(
+        'get_public_boards_paginated_with_progress',
+        params: {
+          'page_limit': limit,
+          'last_board_id': lastBoardId,
+          'last_views_count': lastViewsCount,
+          'p_user_id': userId,
+        },
+      );
+
+      if (response == null) return [];
+
+      return (response as List).map((j) => StudyBoard.fromRpcJson(j)).toList();
+    } catch (e) {
+      debugPrint('Error fetching public boards: $e');
+      // Fallback to direct query if RPC fails
+      return _getPublicBoardsFallback(limit: limit);
+    }
+  }
+
+  /// Fallback method for getting public boards
+  static Future<List<StudyBoard>> _getPublicBoardsFallback({int limit = 20}) async {
     try {
       final response = await SupabaseService.client
           .from('boards')
@@ -18,12 +46,12 @@ class StudyService {
             variations:board_variations(id, board_id, name, pgn, starting_fen, player_color, position)
           ''')
           .eq('is_public', true)
-          .order('created_at', ascending: false)
+          .order('views_count', ascending: false)
           .limit(limit);
 
       return (response as List).map((j) => StudyBoard.fromJson(j)).toList();
     } catch (e) {
-      debugPrint('Error fetching public boards: $e');
+      debugPrint('Error in fallback: $e');
       return [];
     }
   }
@@ -49,22 +77,31 @@ class StudyService {
     }
   }
 
-  /// Get a single board with progress
+  /// Get a single board with progress using RPC
   static Future<StudyBoard?> getBoard(String boardId, {String? userId}) async {
     try {
-      if (userId != null) {
-        // Use RPC to get board with progress
-        final response = await SupabaseService.client
-            .rpc('get_board_with_progress', params: {
-          'p_board_id': boardId,
-          'p_user_id': userId,
-        });
-        if (response != null) {
-          return StudyBoard.fromJson(response);
-        }
+      // Use RPC to get board with progress
+      final response = await SupabaseService.client
+          .rpc('get_board_with_progress', params: {
+        'p_board_id': boardId,
+        'p_user_id': userId,
+      });
+
+      if (response != null) {
+        return StudyBoard.fromRpcJson(response as Map<String, dynamic>);
       }
 
+      return null;
+    } catch (e) {
+      debugPrint('Error fetching board with RPC: $e');
       // Fallback: get board without progress
+      return _getBoardFallback(boardId);
+    }
+  }
+
+  /// Fallback method for getting a single board
+  static Future<StudyBoard?> _getBoardFallback(String boardId) async {
+    try {
       final response = await SupabaseService.client
           .from('boards')
           .select('''
@@ -79,7 +116,7 @@ class StudyService {
 
       return response != null ? StudyBoard.fromJson(response) : null;
     } catch (e) {
-      debugPrint('Error fetching board: $e');
+      debugPrint('Error in fallback: $e');
       return null;
     }
   }

@@ -57,6 +57,48 @@ class StudyBoard {
     );
   }
 
+  /// Parse from RPC response format (flattened structure)
+  factory StudyBoard.fromRpcJson(Map<String, dynamic> json) {
+    return StudyBoard(
+      id: json['id'] as String,
+      title: json['title'] as String? ?? 'Untitled',
+      description: json['description'] as String?,
+      ownerId: json['owner_id'] as String,
+      ownerName: json['author_name'] as String? ?? json['author']?['full_name'] as String?,
+      ownerAvatarUrl: json['author_avatar'] as String? ?? json['author']?['avatar_url'] as String?,
+      coverImageUrl: json['cover_image_url'] as String?,
+      isPublic: json['is_public'] as bool? ?? true,
+      viewsCount: json['views_count'] as int? ?? 0,
+      likesCount: json['likes_count'] as int? ?? 0,
+      userLiked: json['user_liked'] as bool? ?? false,
+      startingFen: json['starting_fen'] as String?,
+      variations: _parseVariations(json),
+      createdAt: _parseDate(json['created_at']),
+      updatedAt: _parseDate(json['updated_at'] ?? json['created_at']),
+    );
+  }
+
+  static List<StudyVariation> _parseVariations(Map<String, dynamic> json) {
+    // RPC might return variations in different formats
+    if (json['variations'] != null && json['variations'] is List) {
+      return (json['variations'] as List)
+          .map((v) => StudyVariation.fromJson(v as Map<String, dynamic>))
+          .toList();
+    }
+    if (json['variations_list'] != null && json['variations_list'] is List) {
+      return (json['variations_list'] as List)
+          .map((v) => StudyVariation.fromJson(v as Map<String, dynamic>))
+          .toList();
+    }
+    return [];
+  }
+
+  static DateTime _parseDate(dynamic date) {
+    if (date == null) return DateTime.now();
+    if (date is DateTime) return date;
+    return DateTime.tryParse(date.toString()) ?? DateTime.now();
+  }
+
   int get totalMoves => variations.fold(0, (sum, v) => sum + v.moveCount);
 }
 
@@ -70,7 +112,9 @@ class StudyVariation {
   final String? playerColor;
   final int position;
   final int movesCompleted;
-  final int moveCount;
+  final int totalMoves;
+  final bool isCompleted;
+  final double completionPercentage;
 
   StudyVariation({
     required this.id,
@@ -81,11 +125,26 @@ class StudyVariation {
     this.playerColor,
     this.position = 0,
     this.movesCompleted = 0,
-    this.moveCount = 0,
+    this.totalMoves = 0,
+    this.isCompleted = false,
+    this.completionPercentage = 0,
   });
 
   factory StudyVariation.fromJson(Map<String, dynamic> json) {
     final pgn = json['pgn'] as String? ?? '';
+
+    // Parse progress from nested object if available
+    final progress = json['progress'] as Map<String, dynamic>?;
+    final movesCompleted = progress?['moves_completed'] as int? ??
+                           json['moves_completed'] as int? ?? 0;
+    final totalMoves = progress?['total_moves'] as int? ??
+                       json['total_moves'] as int? ??
+                       _countMoves(pgn);
+    final isCompleted = progress?['is_completed'] as bool? ??
+                        json['is_completed'] as bool? ?? false;
+    final completionPct = progress?['completion_percentage'] as num? ??
+                          json['completion_percentage'] as num? ?? 0;
+
     return StudyVariation(
       id: json['id'] as String,
       boardId: json['board_id'] as String? ?? '',
@@ -94,15 +153,14 @@ class StudyVariation {
       startingFen: json['starting_fen'] as String?,
       playerColor: json['player_color'] as String?,
       position: json['position'] as int? ?? 0,
-      movesCompleted: json['moves_completed'] as int? ?? 0,
-      moveCount: _countMoves(pgn),
+      movesCompleted: movesCompleted,
+      totalMoves: totalMoves,
+      isCompleted: isCompleted,
+      completionPercentage: completionPct.toDouble(),
     );
   }
 
-  double get completionPercentage =>
-      moveCount > 0 ? (movesCompleted / moveCount * 100) : 0;
-
-  bool get isCompleted => movesCompleted >= moveCount;
+  int get moveCount => totalMoves;
 
   static int _countMoves(String pgn) {
     if (pgn.isEmpty) return 0;

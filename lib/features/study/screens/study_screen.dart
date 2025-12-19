@@ -1,6 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../app/theme/colors.dart';
 import '../models/study_board.dart';
@@ -152,12 +153,7 @@ class StudyBoardCard extends StatelessWidget {
 
     return GestureDetector(
       onTap: () {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Opening: ${board.title}'),
-            duration: const Duration(seconds: 1),
-          ),
-        );
+        context.pushNamed('study-board', extra: board);
       },
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

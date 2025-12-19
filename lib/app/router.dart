@@ -7,11 +7,14 @@ import '../features/games/screens/games_list_screen.dart';
 import '../features/games/screens/import_screen.dart';
 import '../features/analysis/screens/analysis_screen.dart';
 import '../features/games/models/chess_game.dart';
+import '../features/games/screens/game_review_screen.dart';
 import '../features/puzzles/models/puzzle.dart';
 import '../features/puzzles/screens/puzzle_screen.dart';
 import '../features/puzzles/screens/puzzles_list_screen.dart';
 import '../features/profile/screens/profile_screen.dart';
 import '../features/study/screens/study_screen.dart';
+import '../features/study/screens/study_board_screen.dart';
+import '../features/study/models/study_board.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
@@ -51,6 +54,26 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) {
           final puzzle = state.extra as Puzzle;
           return PuzzleScreen(puzzle: puzzle);
+        },
+      ),
+
+      // Study board route (outside shell - no bottom nav)
+      GoRoute(
+        path: '/study-board',
+        name: 'study-board',
+        builder: (context, state) {
+          final board = state.extra as StudyBoard;
+          return StudyBoardScreen(board: board);
+        },
+      ),
+
+      // Game review route (outside shell - no bottom nav)
+      GoRoute(
+        path: '/game-review',
+        name: 'game-review',
+        builder: (context, state) {
+          final game = state.extra as ChessGame;
+          return GameReviewScreen(game: game);
         },
       ),
 

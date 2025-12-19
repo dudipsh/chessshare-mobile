@@ -52,7 +52,10 @@ class StudyListNotifier extends StateNotifier<StudyListState> {
     state = state.copyWith(isLoading: true, error: null);
 
     try {
-      final publicBoards = await StudyService.getPublicBoards();
+      // Pass userId for progress tracking
+      final publicBoards = await StudyService.getPublicBoards(
+        userId: _userId,
+      );
       if (!mounted) return;
 
       List<StudyBoard> myBoards = [];
