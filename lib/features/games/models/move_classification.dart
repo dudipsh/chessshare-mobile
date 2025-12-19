@@ -17,21 +17,17 @@ enum MoveClassification {
 }
 
 /// Thresholds for move classification (in centipawns)
-/// Matches web version: src/modules/chess-v3/analytics/stores/game-review/constants.ts
+/// Adjusted for mobile's lower analysis depth (10-16) vs web (18-20+)
+/// Lower depth = more volatile evaluations, so thresholds are slightly higher
 class ClassificationThresholds {
-  static const int best = 15;        // 0-15cp = Best move
-  static const int good = 35;        // 15-35cp = Good move
-  static const int inaccuracy = 60;  // 35-60cp = Inaccuracy (~0.5 pawn)
-  static const int miss = 100;       // 60-100cp = Miss (missed opportunity)
-  static const int mistake = 200;    // 100-200cp = Mistake (~1-2 pawns)
-  // >200cp = Blunder
-
-  /// For brilliant move detection
-  static const int brilliantMaxCpl = 25;
-  static const int brilliantMinImprovement = 40;
-  static const int brilliantMaxEvalBefore = 450;
-  static const int brilliantMinEvalBefore = -80;
-  static const int brilliantMinSacrifice = 150;
+  // Mobile-adjusted thresholds (about 20-30% higher than web due to depth difference)
+  // Web uses depth 18-20, mobile uses depth 10-16
+  static const int best = 20;        // 0-20cp = Best move (web: 15)
+  static const int good = 50;        // 20-50cp = Good move (web: 35)
+  static const int inaccuracy = 90;  // 50-90cp = Inaccuracy (web: 60)
+  static const int miss = 140;       // 90-140cp = Miss (web: 100)
+  static const int mistake = 280;    // 140-280cp = Mistake (web: 200)
+  // >280cp = Blunder (web: >200)
 
   /// For position forgiveness
   static const int dominantThreshold = 500;

@@ -5,6 +5,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/puzzle.dart';
 
+/// Marker types for visual feedback (shared with Study mode)
+enum PuzzleMarkerType {
+  none,
+  hint,     // Yellow hint circle on piece to move
+  correct,  // Green checkmark on correct move
+  incorrect, // Red X on wrong move
+}
+
 class PuzzleSolveState {
   final Puzzle? puzzle;
   final String currentFen;
@@ -14,6 +22,9 @@ class PuzzleSolveState {
   final Side orientation;
   final ValidMoves validMoves;
   final String? feedback;
+  final PuzzleMarkerType markerType;
+  final Square? markerSquare;
+  final int hintsUsed;
 
   const PuzzleSolveState({
     this.puzzle,
@@ -24,6 +35,9 @@ class PuzzleSolveState {
     this.orientation = Side.white,
     ValidMoves? validMoves,
     this.feedback,
+    this.markerType = PuzzleMarkerType.none,
+    this.markerSquare,
+    this.hintsUsed = 0,
   }) : validMoves = validMoves ?? const IMapConst({});
 
   PuzzleSolveState copyWith({
@@ -35,8 +49,12 @@ class PuzzleSolveState {
     Side? orientation,
     ValidMoves? validMoves,
     String? feedback,
+    PuzzleMarkerType? markerType,
+    Square? markerSquare,
+    int? hintsUsed,
     bool clearLastMove = false,
     bool clearFeedback = false,
+    bool clearMarker = false,
   }) {
     return PuzzleSolveState(
       puzzle: puzzle ?? this.puzzle,
@@ -47,6 +65,9 @@ class PuzzleSolveState {
       orientation: orientation ?? this.orientation,
       validMoves: validMoves ?? this.validMoves,
       feedback: clearFeedback ? null : (feedback ?? this.feedback),
+      markerType: clearMarker ? PuzzleMarkerType.none : (markerType ?? this.markerType),
+      markerSquare: clearMarker ? null : (markerSquare ?? this.markerSquare),
+      hintsUsed: hintsUsed ?? this.hintsUsed,
     );
   }
 
@@ -193,10 +214,27 @@ class PuzzleSolveNotifier extends StateNotifier<PuzzleSolveState> {
       return;
     }
 
-    final nextMove = puzzle.solution[state.currentMoveIndex];
-    final from = nextMove.substring(0, 2);
+    // Don't show hint if puzzle is not in playing state
+    if (state.state != PuzzleState.playing) return;
 
-    state = state.copyWith(feedback: 'Hint: Move the piece on $from');
+    final nextMove = puzzle.solution[state.currentMoveIndex];
+    final move = _parseUciMove(nextMove);
+
+    if (move != null) {
+      // Show marker on the piece to move (from square)
+      state = state.copyWith(
+        markerType: PuzzleMarkerType.hint,
+        markerSquare: move.from,
+        hintsUsed: state.hintsUsed + 1,
+      );
+
+      // Clear hint marker after 2 seconds
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted && state.markerType == PuzzleMarkerType.hint) {
+          state = state.copyWith(clearMarker: true);
+        }
+      });
+    }
   }
 
   NormalMove? _parseUciMove(String uci) {

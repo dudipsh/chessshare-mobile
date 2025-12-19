@@ -14,6 +14,7 @@ import '../models/chess_game.dart';
 import '../models/game_review.dart';
 import '../models/move_classification.dart';
 import 'book_move_detector.dart';
+import 'brilliant_move_classifier.dart';
 
 /// Configuration for game analysis
 class AnalysisConfig {
@@ -84,6 +85,9 @@ class GameAnalysisService {
 
   // Book move detector
   final BookMoveDetector _bookMoveDetector = BookMoveDetector();
+
+  // Brilliant move classifier (strict, like web version)
+  final BrilliantMoveClassifier _brilliantClassifier = BrilliantMoveClassifier();
 
   // Cache for book moves (move index -> is book)
   final Map<int, bool> _bookMoveCache = {};
@@ -277,14 +281,21 @@ class GameAnalysisService {
         // Check if this is a check move (for Great move detection)
         final isCheck = pos.san.contains('+') || pos.san.contains('#');
 
-        // Check for brilliant move (sacrifice with good result)
-        final isBrilliant = _detectBrilliantMove(
-          san: pos.san,
-          cpl: cpl,
-          evalBefore: evalBeforeCp,
-          evalAfter: evalAfterCp,
-          legalMoveCount: pos.legalMoveCount,
-        );
+        // Check for brilliant move using strict classifier (like web version)
+        final isBrilliant = evalBeforeCp != null && evalAfterCp != null
+            ? _brilliantClassifier.isBrilliant(BrilliantContext(
+                fenBefore: pos.fenBefore,
+                moveSan: pos.san,
+                moveUci: pos.uci,
+                evalBefore: evalBeforeCp,
+                evalAfter: evalAfterCp,
+                isWhiteMove: pos.color == 'white',
+                centipawnLoss: cpl,
+                legalMoveCount: pos.legalMoveCount,
+                mateBefore: mateBefore,
+                mateAfter: mateAfter,
+              ))
+            : false;
 
         // Check for great move (forcing check with ≤15cp loss)
         final isGreat = isCheck && cpl <= ClassificationThresholds.best && !isBrilliant;
@@ -522,11 +533,6 @@ class GameAnalysisService {
     return result;
   }
 
-  /// Legacy method for compatibility
-  Future<_EvalResult> _analyzePosition(String fen) async {
-    return _analyzePositionFast(fen, isCritical: true);
-  }
-
   /// Get best move for a position (fast version)
   Future<_BestMoveResult> _getBestMoveFast(String fen) async {
     final completer = Completer<_BestMoveResult>();
@@ -582,11 +588,6 @@ class GameAnalysisService {
         return _BestMoveResult(uci: '', san: '');
       },
     );
-  }
-
-  /// Legacy method for compatibility
-  Future<_BestMoveResult> _getBestMove(String fen) async {
-    return _getBestMoveFast(fen);
   }
 
   /// Parse UCI move string to NormalMove
@@ -667,65 +668,6 @@ class GameAnalysisService {
     if (san.startsWith('O-O')) return 'castling';
 
     return null;
-  }
-
-  /// Detect brilliant moves (sacrifices that lead to improvement)
-  /// Based on web version: BrilliantMoveClassifier.ts
-  bool _detectBrilliantMove({
-    required String san,
-    required int cpl,
-    int? evalBefore,
-    int? evalAfter,
-    required int legalMoveCount,
-  }) {
-    // Must have low centipawn loss
-    if (cpl > ClassificationThresholds.brilliantMaxCpl) return false;
-
-    // Must not be a forced move
-    if (legalMoveCount <= 1) return false;
-
-    // Must have valid evaluations
-    if (evalBefore == null || evalAfter == null) return false;
-
-    // Must not already be winning significantly
-    if (evalBefore > ClassificationThresholds.brilliantMaxEvalBefore) return false;
-    if (evalBefore < ClassificationThresholds.brilliantMinEvalBefore) return false;
-
-    // Calculate improvement (from perspective of moving side)
-    final improvement = evalAfter - evalBefore;
-
-    // Must have significant improvement
-    if (improvement < ClassificationThresholds.brilliantMinImprovement) return false;
-
-    // Simple sacrifice detection: capture on a defended square
-    // Full implementation would need SEE (Static Exchange Evaluation)
-    // For now, use heuristics based on piece movements
-
-    // Check for piece sacrifice patterns
-    final isCapture = san.contains('x');
-    final isPieceSacrifice = _isPieceSacrificePattern(san);
-
-    // Must involve some form of sacrifice
-    if (!isCapture && !isPieceSacrifice) return false;
-
-    return true;
-  }
-
-  /// Check if move looks like a piece sacrifice
-  bool _isPieceSacrificePattern(String san) {
-    // Queen, Rook, Bishop, Knight moving to potentially attacked squares
-    final piece = san.isNotEmpty ? san[0] : '';
-
-    // Major piece moves (not pawns) that could be sacrifices
-    if (piece == 'Q' || piece == 'R' || piece == 'B' || piece == 'N') {
-      // Check for aggressive moves (captures or moves that look sacrificial)
-      if (san.contains('x')) return true;
-
-      // King-side or queen-side attacks often involve sacrifices
-      if (san.contains('+')) return true;
-    }
-
-    return false;
   }
 
   Future<void> dispose() async {

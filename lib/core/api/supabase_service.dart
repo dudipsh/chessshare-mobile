@@ -4,10 +4,11 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 class SupabaseService {
   static bool _isReady = false;
   static SupabaseClient? _publicClient;
+  static SupabaseClient? _authClient;
 
-  // Direct Supabase URL (bypasses custom domain for public queries)
-  static const _directUrl = 'https://xnczyeqqgkzlbqrplsdg.supabase.co';
-  static const _anonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhuY3p5ZXFxZ2t6bGJxcnBsc2RnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDI0NzQ3NDYsImV4cCI6MjA1ODA1MDc0Nn0.pZZJ9QT-LKtzAM2d1K3-LqqKS18GrFlbhH62Bt9rL_k';
+  // Direct Supabase URL (bypasses custom domain issues)
+  static const directUrl = 'https://xnczyeqqgkzlbqrplsdg.supabase.co';
+  static const anonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhuY3p5ZXFxZ2t6bGJxcnBsc2RnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDI0NzQ3NDYsImV4cCI6MjA1ODA1MDc0Nn0.pZZJ9QT-LKtzAM2d1K3-LqqKS18GrFlbhH62Bt9rL_k';
 
   /// Check if Supabase is ready for queries
   static bool get isReady => _isReady;
@@ -32,8 +33,15 @@ class SupabaseService {
   /// Get a client for public/anonymous queries
   /// Uses direct Supabase URL (bypasses custom domain issues)
   static SupabaseClient get publicClient {
-    _publicClient ??= SupabaseClient(_directUrl, _anonKey);
+    _publicClient ??= SupabaseClient(directUrl, anonKey);
     return _publicClient!;
+  }
+
+  /// Get a client specifically for auth operations
+  /// Uses direct Supabase URL (required for signInWithIdToken)
+  static SupabaseClient get authClient {
+    _authClient ??= SupabaseClient(directUrl, anonKey);
+    return _authClient!;
   }
 
   /// Safely get the client, returns null if not ready

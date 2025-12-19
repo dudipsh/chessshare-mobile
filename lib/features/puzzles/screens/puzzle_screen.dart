@@ -51,10 +51,17 @@ class PuzzleScreen extends ConsumerWidget {
           // Puzzle info
           _buildPuzzleInfo(context, puzzleState),
 
-          // Chess board
+          // Chess board with marker overlay
           Padding(
             padding: const EdgeInsets.all(8.0),
-            child: _buildChessboard(context, ref, puzzleState, screenWidth - 16),
+            child: Stack(
+              children: [
+                _buildChessboard(context, ref, puzzleState, screenWidth - 16),
+                // Marker overlay
+                if (puzzleState.markerType != PuzzleMarkerType.none && puzzleState.markerSquare != null)
+                  _buildMarkerOverlay(puzzleState, screenWidth - 16),
+              ],
+            ),
           ),
 
           // Feedback
@@ -267,5 +274,168 @@ class PuzzleScreen extends ConsumerWidget {
       case PuzzleState.completed:
         return 'Puzzle solved!';
     }
+  }
+
+  Widget _buildMarkerOverlay(PuzzleSolveState state, double boardSize) {
+    final squareSize = boardSize / 8;
+    final square = state.markerSquare!;
+
+    // Calculate position based on orientation
+    int file = square.file;
+    int rank = square.rank;
+
+    double left;
+    double top;
+
+    if (state.orientation == Side.black) {
+      // Black at bottom: h1 at bottom-left, a8 at top-right
+      left = (7 - file) * squareSize;
+      top = rank * squareSize;
+    } else {
+      // White at bottom: a1 at bottom-left, h8 at top-right
+      left = file * squareSize;
+      top = (7 - rank) * squareSize;
+    }
+
+    return Positioned(
+      left: left,
+      top: top,
+      child: SizedBox(
+        width: squareSize,
+        height: squareSize,
+        child: _buildMarkerIcon(state.markerType, squareSize),
+      ),
+    );
+  }
+
+  Widget _buildMarkerIcon(PuzzleMarkerType type, double size) {
+    if (type == PuzzleMarkerType.none) {
+      return const SizedBox.shrink();
+    }
+
+    // Position marker in top-right corner (Chess.com/web style)
+    final markerSize = size * 0.4;
+
+    return Align(
+      alignment: Alignment.topRight,
+      child: Padding(
+        padding: EdgeInsets.all(markerSize * 0.1),
+        child: CustomPaint(
+          size: Size(markerSize, markerSize),
+          painter: _PuzzleMarkerPainter(type),
+        ),
+      ),
+    );
+  }
+}
+
+/// Custom painter for puzzle markers
+class _PuzzleMarkerPainter extends CustomPainter {
+  final PuzzleMarkerType type;
+
+  _PuzzleMarkerPainter(this.type);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = size.width / 2 - 1;
+
+    // Draw shadow
+    final shadowPaint = Paint()
+      ..color = Colors.black.withValues(alpha: 0.25)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2);
+    canvas.drawCircle(Offset(center.dx, center.dy + 1.5), radius, shadowPaint);
+
+    // Draw main circle
+    Color bgColor;
+    Color borderColor;
+
+    switch (type) {
+      case PuzzleMarkerType.correct:
+        bgColor = const Color(0xFF22C55E); // Green
+        borderColor = const Color(0xFF16A34A);
+        break;
+      case PuzzleMarkerType.incorrect:
+        bgColor = const Color(0xFFEF4444); // Red
+        borderColor = const Color(0xFFDC2626);
+        break;
+      case PuzzleMarkerType.hint:
+        bgColor = const Color(0xFFFACC15); // Yellow
+        borderColor = const Color(0xFFEAB308);
+        break;
+      case PuzzleMarkerType.none:
+        return;
+    }
+
+    final bgPaint = Paint()..color = bgColor;
+    canvas.drawCircle(center, radius, bgPaint);
+
+    final borderPaint = Paint()
+      ..color = borderColor
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0;
+    canvas.drawCircle(center, radius, borderPaint);
+
+    // Draw symbol
+    final symbolPaint = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = size.width * 0.12
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+
+    switch (type) {
+      case PuzzleMarkerType.correct:
+        // Checkmark
+        final path = Path();
+        path.moveTo(center.dx - size.width * 0.22, center.dy);
+        path.lineTo(center.dx - size.width * 0.05, center.dy + size.height * 0.15);
+        path.lineTo(center.dx + size.width * 0.22, center.dy - size.height * 0.15);
+        canvas.drawPath(path, symbolPaint);
+        break;
+      case PuzzleMarkerType.incorrect:
+        // X mark
+        final offset = size.width * 0.18;
+        canvas.drawLine(
+          Offset(center.dx - offset, center.dy - offset),
+          Offset(center.dx + offset, center.dy + offset),
+          symbolPaint,
+        );
+        canvas.drawLine(
+          Offset(center.dx + offset, center.dy - offset),
+          Offset(center.dx - offset, center.dy + offset),
+          symbolPaint,
+        );
+        break;
+      case PuzzleMarkerType.hint:
+        // Question mark for hint
+        final textPainter = TextPainter(
+          text: TextSpan(
+            text: '?',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: size.width * 0.5,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          textDirection: TextDirection.ltr,
+        );
+        textPainter.layout();
+        textPainter.paint(
+          canvas,
+          Offset(
+            center.dx - textPainter.width / 2,
+            center.dy - textPainter.height / 2,
+          ),
+        );
+        break;
+      case PuzzleMarkerType.none:
+        break;
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _PuzzleMarkerPainter oldDelegate) {
+    return oldDelegate.type != type;
   }
 }

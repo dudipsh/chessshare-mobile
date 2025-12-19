@@ -29,6 +29,16 @@ const List<_OpeningLine> _openingLines = [
   // E4 openings
   _OpeningLine(eco: 'B00', name: "King's Pawn Opening", moves: 'e4'),
 
+  // Common first move responses to e4 (for book move detection)
+  _OpeningLine(eco: 'B00', name: "King's Pawn: Various", moves: 'e4 e5'),
+  _OpeningLine(eco: 'B00', name: "King's Pawn: Various", moves: 'e4 c5'),
+  _OpeningLine(eco: 'B00', name: "King's Pawn: Various", moves: 'e4 e6'),
+  _OpeningLine(eco: 'B00', name: "King's Pawn: Various", moves: 'e4 c6'),
+  _OpeningLine(eco: 'B00', name: "King's Pawn: Various", moves: 'e4 d5'),
+  _OpeningLine(eco: 'B00', name: "King's Pawn: Various", moves: 'e4 d6'),
+  _OpeningLine(eco: 'B00', name: "King's Pawn: Various", moves: 'e4 Nf6'),
+  _OpeningLine(eco: 'B00', name: "King's Pawn: Various", moves: 'e4 Nc6'),
+
   // Sicilian Defense
   _OpeningLine(eco: 'B20', name: 'Sicilian Defense', moves: 'e4 c5'),
   _OpeningLine(eco: 'B21', name: 'Sicilian Defense: Smith-Morra Gambit', moves: 'e4 c5 d4 cxd4 c3'),
@@ -109,6 +119,64 @@ const List<_OpeningLine> _openingLines = [
 
   // D4 openings
   _OpeningLine(eco: 'D00', name: "Queen's Pawn Opening", moves: 'd4'),
+
+  // Common first move responses to d4 (for book move detection)
+  _OpeningLine(eco: 'D00', name: "Queen's Pawn: Various", moves: 'd4 d5'),
+  _OpeningLine(eco: 'D00', name: "Queen's Pawn: Various", moves: 'd4 Nf6'),
+  _OpeningLine(eco: 'D00', name: "Queen's Pawn: Various", moves: 'd4 e6'),
+  _OpeningLine(eco: 'D00', name: "Queen's Pawn: Various", moves: 'd4 c5'),
+  _OpeningLine(eco: 'D00', name: "Queen's Pawn: Various", moves: 'd4 f5'),
+
+  // Modern Defense via d4 (transposition lines)
+  _OpeningLine(eco: 'A40', name: 'Modern Defense via d4', moves: 'd4 g6'),
+  _OpeningLine(eco: 'A40', name: 'Modern Defense via d4', moves: 'd4 g6 e4'),
+  _OpeningLine(eco: 'A40', name: 'Modern Defense via d4', moves: 'd4 g6 e4 Bg7'),
+  _OpeningLine(eco: 'A40', name: 'Modern Defense via d4', moves: 'd4 g6 c4'),
+  _OpeningLine(eco: 'A40', name: 'Modern Defense via d4', moves: 'd4 g6 Nf3'),
+  _OpeningLine(eco: 'A40', name: 'Modern Defense via d4', moves: 'd4 g6 e4 Bg7 f4'),
+  _OpeningLine(eco: 'A40', name: 'Modern Defense via d4', moves: 'd4 g6 e4 Bg7 Nf3'),
+  _OpeningLine(eco: 'A40', name: 'Modern Defense via d4', moves: 'd4 g6 e4 Bg7 Nc3'),
+  // Extended Modern Defense lines
+  _OpeningLine(eco: 'A40', name: 'Modern Defense via d4', moves: 'd4 g6 e4 Bg7 f4 e6'),
+  _OpeningLine(eco: 'A40', name: 'Modern Defense via d4', moves: 'd4 g6 e4 Bg7 f4 d6'),
+  _OpeningLine(eco: 'A40', name: 'Modern Defense via d4', moves: 'd4 g6 e4 Bg7 f4 c6'),
+  _OpeningLine(eco: 'A40', name: 'Modern Defense via d4', moves: 'd4 g6 e4 Bg7 f4 d5'),
+  _OpeningLine(eco: 'A40', name: 'Modern Defense via d4', moves: 'd4 g6 e4 Bg7 f4 e6 Nf3'),
+  _OpeningLine(eco: 'A40', name: 'Modern Defense via d4', moves: 'd4 g6 e4 Bg7 f4 e6 Nf3 c6'),
+  _OpeningLine(eco: 'A40', name: 'Modern Defense via d4', moves: 'd4 g6 e4 Bg7 f4 e6 Nf3 c6 Nc3'),
+  _OpeningLine(eco: 'A40', name: 'Modern Defense via d4', moves: 'd4 g6 e4 Bg7 f4 e6 Nf3 c6 Nc3 d5'),
+  _OpeningLine(eco: 'A40', name: 'Modern Defense via d4', moves: 'd4 g6 e4 Bg7 f4 e6 Nf3 c6 Nc3 d5 Bd3'),
+  _OpeningLine(eco: 'A40', name: 'Modern Defense via d4', moves: 'd4 g6 e4 Bg7 f4 e6 Nf3 c6 Nc3 d5 Bd3 Ne7'),
+  _OpeningLine(eco: 'A40', name: 'Modern Defense via d4', moves: 'd4 g6 e4 Bg7 f4 e6 Nf3 c6 Nc3 d5 Bd3 Ne7 e5'),
+  // Common castling continuations
+  _OpeningLine(eco: 'A40', name: 'Modern Defense via d4', moves: 'd4 g6 e4 Bg7 f4 e6 Nf3 c6 Nc3 d5 Bd3 Ne7 e5 O-O'),
+  _OpeningLine(eco: 'A40', name: 'Modern Defense via d4', moves: 'd4 g6 e4 Bg7 Nf3 d6'),
+  _OpeningLine(eco: 'A40', name: 'Modern Defense via d4', moves: 'd4 g6 e4 Bg7 Nc3 d6'),
+  _OpeningLine(eco: 'A40', name: 'Modern Defense via d4', moves: 'd4 g6 e4 Bg7 Be3'),
+  _OpeningLine(eco: 'A40', name: 'Modern Defense via d4', moves: 'd4 g6 e4 Bg7 c3'),
+
+  // Pirc Defense via d4 (d4 d6 transposition)
+  _OpeningLine(eco: 'A40', name: 'Pirc Defense via d4', moves: 'd4 d6'),
+  _OpeningLine(eco: 'A40', name: 'Pirc Defense via d4', moves: 'd4 d6 e4'),
+  _OpeningLine(eco: 'A40', name: 'Pirc Defense via d4', moves: 'd4 d6 e4 Nf6'),
+  _OpeningLine(eco: 'A40', name: 'Pirc Defense via d4', moves: 'd4 d6 e4 g6'),
+  _OpeningLine(eco: 'A40', name: 'Pirc Defense via d4', moves: 'd4 d6 Nf3'),
+  _OpeningLine(eco: 'A40', name: 'Pirc Defense via d4', moves: 'd4 d6 c4'),
+
+  // Common d4 second moves after d4 d5
+  _OpeningLine(eco: 'D00', name: "Queen's Pawn: Various", moves: 'd4 d5 c4'),
+  _OpeningLine(eco: 'D00', name: "Queen's Pawn: Various", moves: 'd4 d5 Nf3'),
+  _OpeningLine(eco: 'D00', name: "Queen's Pawn: Various", moves: 'd4 d5 e3'),
+  _OpeningLine(eco: 'D00', name: "Queen's Pawn: Various", moves: 'd4 d5 Bf4'),
+  _OpeningLine(eco: 'D00', name: "Queen's Pawn: Various", moves: 'd4 d5 Nc3'),
+
+  // Common d4 second moves after d4 Nf6
+  _OpeningLine(eco: 'A45', name: "Queen's Pawn: Various", moves: 'd4 Nf6 c4'),
+  _OpeningLine(eco: 'A45', name: "Queen's Pawn: Various", moves: 'd4 Nf6 Nf3'),
+  _OpeningLine(eco: 'A45', name: "Queen's Pawn: Various", moves: 'd4 Nf6 Bf4'),
+  _OpeningLine(eco: 'A45', name: "Queen's Pawn: Various", moves: 'd4 Nf6 Nc3'),
+  _OpeningLine(eco: 'A45', name: "Queen's Pawn: Various", moves: 'd4 Nf6 e3'),
+
   _OpeningLine(eco: 'D00', name: 'Jobava London', moves: 'd4 d5 Nc3'),
   _OpeningLine(eco: 'D00', name: 'Jobava London', moves: 'd4 d5 Nc3 Nf6 Bf4'),
   _OpeningLine(eco: 'A45', name: 'Jobava London', moves: 'd4 Nf6 Nc3 d5 Bf4'),
@@ -228,6 +296,14 @@ class BookMoveDetector {
     // After opening phase, don't check
     if (moveNumber > _maxBookMoves) {
       return (isBook: false, opening: null);
+    }
+
+    // Special case: castling in the first 20 moves is always book
+    // Castling is almost never a mistake in the opening
+    if (moveNumber <= 20 && (moveSan == 'O-O' || moveSan == 'O-O-O' ||
+        moveUci == 'e1g1' || moveUci == 'e1c1' ||
+        moveUci == 'e8g8' || moveUci == 'e8c8')) {
+      return (isBook: true, opening: OpeningInfo(eco: '', name: 'Castling'));
     }
 
     try {

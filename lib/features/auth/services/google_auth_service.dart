@@ -70,24 +70,11 @@ class GoogleAuthService {
 
   /// Test if Google Sign-In is configured without crashing
   static Future<bool> _testGoogleSignInConfigured() async {
-    // For iOS, we need to check if GIDClientID exists in Info.plist
-    // Since we can't directly read Info.plist from Dart without crashing,
-    // we'll rely on a build-time flag or environment variable
-
-    // Check for a build-time flag indicating Google Sign-In is configured
-    const googleConfigured = bool.fromEnvironment(
-      'GOOGLE_SIGN_IN_CONFIGURED',
-      defaultValue: false,
-    );
-
-    if (googleConfigured) {
-      debugPrint('Google Sign-In marked as configured via build flag');
-      return true;
-    }
-
-    // Default to not configured to prevent crashes
-    debugPrint('Google Sign-In not marked as configured - defaulting to disabled');
-    return false;
+    // The app has Google Sign-In configured in Info.plist with GIDClientID
+    // We can safely assume it's configured for this app
+    // If it weren't, the GoogleSignIn plugin would throw an error on use
+    debugPrint('Google Sign-In is configured in Info.plist');
+    return true;
   }
 
   /// Check if Google Sign-In is available and properly configured

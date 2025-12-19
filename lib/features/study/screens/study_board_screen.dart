@@ -4,6 +4,8 @@ import 'package:chessground/chessground.dart';
 import 'package:dartchess/dartchess.dart';
 
 import '../../../app/theme/colors.dart';
+import '../../../core/providers/board_settings_provider.dart';
+import '../../../core/widgets/board_settings_sheet.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../models/study_board.dart';
 import '../providers/study_board_provider.dart';
@@ -74,6 +76,20 @@ class _StudyBoardScreenState extends ConsumerState<StudyBoardScreen> {
               onPressed: () => _showVariationSelector(context, state, isDark),
               tooltip: 'Select variation',
             ),
+          // Settings button
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: () {
+              showBoardSettingsSheet(
+                context: context,
+                ref: ref,
+                onFlipBoard: () {
+                  ref.read(studyBoardProvider.notifier).flipBoard();
+                },
+              );
+            },
+            tooltip: 'Board settings',
+          ),
         ],
       ),
       body: SafeArea(
@@ -330,95 +346,98 @@ class _StudyBoardScreenState extends ConsumerState<StudyBoardScreen> {
     showModalBottomSheet(
       context: context,
       backgroundColor: isDark ? Colors.grey.shade900 : Colors.white,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-              child: Text(
-                'Select Variation',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: isDark ? Colors.white : Colors.black87,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.6,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+                child: Text(
+                  'Select Variation',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.white : Colors.black87,
+                  ),
                 ),
               ),
-            ),
-            const Divider(),
-            // Variations list
-            ConstrainedBox(
-              constraints: BoxConstraints(
-                maxHeight: MediaQuery.of(context).size.height * 0.5,
-              ),
-              child: ListView.builder(
-                shrinkWrap: true,
-                itemCount: variations.length,
-                itemBuilder: (context, index) {
-                  final variation = variations[index];
-                  final isSelected = index == state.currentVariationIndex;
+              const Divider(),
+              // Variations list - wrapped in Flexible to prevent overflow
+              Flexible(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: variations.length,
+                  itemBuilder: (context, index) {
+                    final variation = variations[index];
+                    final isSelected = index == state.currentVariationIndex;
 
-                  return ListTile(
-                    leading: Container(
-                      width: 32,
-                      height: 32,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: variation.isCompleted
-                            ? AppColors.success
-                            : (isSelected
-                                ? AppColors.primary
-                                : (isDark ? Colors.white12 : Colors.grey.shade200)),
-                      ),
-                      child: Center(
-                        child: variation.isCompleted
-                            ? const Icon(Icons.check, size: 16, color: Colors.white)
-                            : Text(
-                                '${index + 1}',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                  color: isSelected
-                                      ? Colors.white
-                                      : (isDark ? Colors.white70 : Colors.black87),
+                    return ListTile(
+                      leading: Container(
+                        width: 32,
+                        height: 32,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: variation.isCompleted
+                              ? AppColors.success
+                              : (isSelected
+                                  ? AppColors.primary
+                                  : (isDark ? Colors.white12 : Colors.grey.shade200)),
+                        ),
+                        child: Center(
+                          child: variation.isCompleted
+                              ? const Icon(Icons.check, size: 16, color: Colors.white)
+                              : Text(
+                                  '${index + 1}',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                    color: isSelected
+                                        ? Colors.white
+                                        : (isDark ? Colors.white70 : Colors.black87),
+                                  ),
                                 ),
+                        ),
+                      ),
+                      title: Text(
+                        variation.name,
+                        style: TextStyle(
+                          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                          color: isDark ? Colors.white : Colors.black87,
+                        ),
+                      ),
+                      subtitle: variation.completionPercentage > 0
+                          ? Text(
+                              '${variation.completionPercentage.toInt()}% completed',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: isDark ? Colors.white54 : Colors.grey.shade600,
                               ),
-                      ),
-                    ),
-                    title: Text(
-                      variation.name,
-                      style: TextStyle(
-                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                        color: isDark ? Colors.white : Colors.black87,
-                      ),
-                    ),
-                    subtitle: variation.completionPercentage > 0
-                        ? Text(
-                            '${variation.completionPercentage.toInt()}% completed',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: isDark ? Colors.white54 : Colors.grey.shade600,
-                            ),
-                          )
-                        : null,
-                    trailing: isSelected
-                        ? Icon(Icons.check, color: AppColors.primary)
-                        : null,
-                    onTap: () {
-                      Navigator.pop(context);
-                      ref.read(studyBoardProvider.notifier).loadVariation(index);
-                    },
-                  );
-                },
+                            )
+                          : null,
+                      trailing: isSelected
+                          ? Icon(Icons.check, color: AppColors.primary)
+                          : null,
+                      onTap: () {
+                        Navigator.pop(context);
+                        ref.read(studyBoardProvider.notifier).loadVariation(index);
+                      },
+                    );
+                  },
+                ),
               ),
-            ),
-            const SizedBox(height: 16),
-          ],
+              const SizedBox(height: 16),
+            ],
+          ),
         ),
       ),
     );
@@ -658,23 +677,28 @@ class _StudyBoardScreenState extends ConsumerState<StudyBoardScreen> {
   }
 
   ChessboardSettings _buildBoardSettings() {
+    final boardSettings = ref.watch(boardSettingsProvider);
+    final lightSquare = boardSettings.colorScheme.lightSquare;
+    final darkSquare = boardSettings.colorScheme.darkSquare;
+    final pieceAssets = boardSettings.pieceSet.pieceSet.assets;
+
     return ChessboardSettings(
-      pieceAssets: PieceSet.merida.assets,
+      pieceAssets: pieceAssets,
       colorScheme: ChessboardColorScheme(
-        lightSquare: AppColors.lightSquare,
-        darkSquare: AppColors.darkSquare,
+        lightSquare: lightSquare,
+        darkSquare: darkSquare,
         background: SolidColorChessboardBackground(
-          lightSquare: AppColors.lightSquare,
-          darkSquare: AppColors.darkSquare,
+          lightSquare: lightSquare,
+          darkSquare: darkSquare,
         ),
         whiteCoordBackground: SolidColorChessboardBackground(
-          lightSquare: AppColors.lightSquare,
-          darkSquare: AppColors.darkSquare,
+          lightSquare: lightSquare,
+          darkSquare: darkSquare,
           coordinates: true,
         ),
         blackCoordBackground: SolidColorChessboardBackground(
-          lightSquare: AppColors.lightSquare,
-          darkSquare: AppColors.darkSquare,
+          lightSquare: lightSquare,
+          darkSquare: darkSquare,
           coordinates: true,
           orientation: Side.black,
         ),

@@ -208,8 +208,9 @@ class AuthNotifier extends StateNotifier<AppAuthState> {
 
       debugPrint('Google Sign-In: Signing in to Supabase...');
 
-      // Sign in to Supabase with Google token
-      final response = await SupabaseService.client.auth.signInWithIdToken(
+      // Sign in to Supabase with Google token using direct URL (not custom domain)
+      // The custom domain may not properly proxy auth requests
+      final response = await SupabaseService.authClient.auth.signInWithIdToken(
         provider: supabase.OAuthProvider.google,
         idToken: idToken,
         accessToken: accessToken,
@@ -217,7 +218,13 @@ class AuthNotifier extends StateNotifier<AppAuthState> {
 
       debugPrint('Google Sign-In: Supabase response user=${response.user?.id}');
 
-      if (response.user != null) {
+      if (response.user != null && response.session != null) {
+        // Set the session on the main client as well
+        debugPrint('Google Sign-In: Setting session on main client...');
+        await SupabaseService.client.auth.setSession(response.session!.refreshToken!);
+
+        await _loadProfile(response.user!);
+      } else if (response.user != null) {
         await _loadProfile(response.user!);
       } else {
         state = state.copyWith(isLoading: false, error: 'Supabase returned no user');

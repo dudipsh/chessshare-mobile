@@ -1,11 +1,14 @@
 import 'package:chessground/chessground.dart';
 import 'package:dartchess/dartchess.dart';
+import 'package:fast_immutable_collections/fast_immutable_collections.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/colors.dart';
 import '../../../core/database/local_database.dart';
+import '../../../core/providers/board_settings_provider.dart';
+import '../../../core/widgets/board_settings_sheet.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../models/analyzed_move.dart';
 import '../models/chess_game.dart';
@@ -29,6 +32,8 @@ class _GameReviewScreenState extends ConsumerState<GameReviewScreen> {
   late String _userId;
   Side _orientation = Side.white;
   Chess _position = Chess.initial;
+  bool _isFreeExploration = false;
+  Chess? _explorationPosition;
 
   @override
   void initState() {
@@ -116,14 +121,41 @@ class _GameReviewScreenState extends ConsumerState<GameReviewScreen> {
           style: const TextStyle(fontSize: 17),
         ),
         actions: [
+          // Free exploration toggle
           IconButton(
-            icon: const Icon(Icons.swap_vert),
+            icon: Icon(
+              _isFreeExploration ? Icons.explore : Icons.explore_outlined,
+              color: _isFreeExploration ? Theme.of(context).primaryColor : null,
+            ),
             onPressed: () {
               setState(() {
-                _orientation = _orientation == Side.white ? Side.black : Side.white;
+                _isFreeExploration = !_isFreeExploration;
+                if (_isFreeExploration) {
+                  // Start exploration from current position
+                  _explorationPosition = Chess.fromSetup(Setup.parseFen(_position.fen));
+                } else {
+                  // Reset exploration position
+                  _explorationPosition = null;
+                }
               });
             },
-            tooltip: 'Flip board',
+            tooltip: _isFreeExploration ? 'Exit free mode' : 'Free exploration',
+          ),
+          // Settings button
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: () {
+              showBoardSettingsSheet(
+                context: context,
+                ref: ref,
+                onFlipBoard: () {
+                  setState(() {
+                    _orientation = _orientation == Side.white ? Side.black : Side.white;
+                  });
+                },
+              );
+            },
+            tooltip: 'Board settings',
           ),
           // Debug menu (only in debug mode)
           if (kDebugMode)
@@ -484,41 +516,106 @@ class _GameReviewScreenState extends ConsumerState<GameReviewScreen> {
   }
 
   Widget _buildChessboard(GameReviewState state, double boardSize) {
-    return Chessboard.fixed(
-      size: boardSize,
-      settings: ChessboardSettings(
-        pieceAssets: PieceSet.merida.assets,
-        colorScheme: ChessboardColorScheme(
-          lightSquare: AppColors.lightSquare,
-          darkSquare: AppColors.darkSquare,
-          background: SolidColorChessboardBackground(
-            lightSquare: AppColors.lightSquare,
-            darkSquare: AppColors.darkSquare,
-          ),
-          whiteCoordBackground: SolidColorChessboardBackground(
-            lightSquare: AppColors.lightSquare,
-            darkSquare: AppColors.darkSquare,
-            coordinates: true,
-          ),
-          blackCoordBackground: SolidColorChessboardBackground(
-            lightSquare: AppColors.lightSquare,
-            darkSquare: AppColors.darkSquare,
-            coordinates: true,
-            orientation: Side.black,
-          ),
-          lastMove: HighlightDetails(solidColor: AppColors.lastMove),
-          selected: HighlightDetails(solidColor: AppColors.highlight),
-          validMoves: Colors.black.withValues(alpha: 0.15),
-          validPremoves: Colors.blue.withValues(alpha: 0.2),
+    final boardSettings = ref.watch(boardSettingsProvider);
+    final lightSquare = boardSettings.colorScheme.lightSquare;
+    final darkSquare = boardSettings.colorScheme.darkSquare;
+    final pieceAssets = boardSettings.pieceSet.pieceSet.assets;
+
+    final settings = ChessboardSettings(
+      pieceAssets: pieceAssets,
+      colorScheme: ChessboardColorScheme(
+        lightSquare: lightSquare,
+        darkSquare: darkSquare,
+        background: SolidColorChessboardBackground(
+          lightSquare: lightSquare,
+          darkSquare: darkSquare,
         ),
-        showValidMoves: false,
-        showLastMove: true,
-        animationDuration: const Duration(milliseconds: 150),
+        whiteCoordBackground: SolidColorChessboardBackground(
+          lightSquare: lightSquare,
+          darkSquare: darkSquare,
+          coordinates: true,
+        ),
+        blackCoordBackground: SolidColorChessboardBackground(
+          lightSquare: lightSquare,
+          darkSquare: darkSquare,
+          coordinates: true,
+          orientation: Side.black,
+        ),
+        lastMove: HighlightDetails(solidColor: AppColors.lastMove),
+        selected: HighlightDetails(solidColor: AppColors.highlight),
+        validMoves: Colors.black.withValues(alpha: 0.15),
+        validPremoves: Colors.blue.withValues(alpha: 0.2),
       ),
-      orientation: _orientation,
-      fen: _position.fen,
-      lastMove: state.currentMove != null ? _parseLastMove(state.currentMove!) : null,
+      showValidMoves: _isFreeExploration,
+      showLastMove: true,
+      animationDuration: const Duration(milliseconds: 150),
+      dragFeedbackScale: 2.0,
+      dragFeedbackOffset: const Offset(0, -1),
     );
+
+    // Use exploration position if in free mode, otherwise use review position
+    final displayPosition = _isFreeExploration && _explorationPosition != null
+        ? _explorationPosition!
+        : _position;
+
+    if (_isFreeExploration && _explorationPosition != null) {
+      // Interactive board for free exploration
+      return Chessboard(
+        size: boardSize,
+        settings: settings,
+        orientation: _orientation,
+        fen: displayPosition.fen,
+        lastMove: null,
+        game: GameData(
+          playerSide: PlayerSide.both, // Allow both sides to move
+          sideToMove: displayPosition.turn == Side.white ? Side.white : Side.black,
+          validMoves: _getValidMoves(displayPosition),
+          promotionMove: null,
+          onMove: (move, {isDrop}) {
+            _makeExplorationMove(move);
+          },
+          onPromotionSelection: (role) {},
+        ),
+      );
+    } else {
+      // Fixed board for normal review
+      return Chessboard.fixed(
+        size: boardSize,
+        settings: settings,
+        orientation: _orientation,
+        fen: displayPosition.fen,
+        lastMove: state.currentMove != null ? _parseLastMove(state.currentMove!) : null,
+      );
+    }
+  }
+
+  /// Get valid moves for the current position
+  IMap<Square, ISet<Square>> _getValidMoves(Chess position) {
+    final Map<Square, Set<Square>> moves = {};
+    for (final entry in position.legalMoves.entries) {
+      final from = entry.key;
+      final toSquares = entry.value;
+      if (toSquares.isNotEmpty) {
+        moves[from] = toSquares.squares.toSet();
+      }
+    }
+    return IMap(moves.map((k, v) => MapEntry(k, ISet(v))));
+  }
+
+  /// Make a move in exploration mode
+  void _makeExplorationMove(NormalMove move) {
+    if (_explorationPosition == null) return;
+
+    try {
+      // Convert chessground NormalMove to dartchess NormalMove
+      final dcMove = NormalMove(from: move.from, to: move.to, promotion: move.promotion);
+      final newPosition = _explorationPosition!.play(dcMove) as Chess;
+      setState(() {
+        _explorationPosition = newPosition;
+      });
+    } catch (e) {
+      // Invalid move, ignore
+    }
   }
 
   NormalMove? _parseLastMove(AnalyzedMove move) {
