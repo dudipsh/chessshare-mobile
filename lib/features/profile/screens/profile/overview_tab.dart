@@ -1,0 +1,128 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+import '../../models/profile_data.dart';
+import '../../providers/profile_provider.dart';
+import 'widgets/account_card.dart';
+import 'widgets/section_card.dart';
+import 'widgets/stat_box.dart';
+
+class OverviewTab extends ConsumerWidget {
+  final ProfileState state;
+  final bool isDark;
+  final VoidCallback onLinkAccount;
+
+  const OverviewTab({
+    super.key,
+    required this.state,
+    required this.isDark,
+    required this.onLinkAccount,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        // Linked accounts
+        SectionCard(
+          title: 'Chess Accounts',
+          isDark: isDark,
+          child: Column(
+            children: [
+              if (state.linkedAccounts.isNotEmpty)
+                ...state.linkedAccounts.map((a) => AccountCard(account: a, isDark: isDark))
+              else
+                _buildEmptyAccounts(context),
+            ],
+          ),
+        ),
+
+        // Quick stats
+        const SizedBox(height: 16),
+        SectionCard(
+          title: 'Quick Stats',
+          isDark: isDark,
+          child: Row(
+            children: [
+              StatBox(label: 'Boards', value: '${state.profile?.boardsCount ?? 0}', icon: Icons.dashboard, isDark: isDark),
+              const SizedBox(width: 12),
+              StatBox(label: 'Analyzed', value: '${state.gameReviews.length}', icon: Icons.analytics, isDark: isDark),
+              const SizedBox(width: 12),
+              StatBox(label: 'Views', value: '${state.profile?.totalViews ?? 0}', icon: Icons.visibility, isDark: isDark),
+            ],
+          ),
+        ),
+
+        // Bio
+        if (state.profile?.bio != null && state.profile!.bio!.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          SectionCard(
+            title: 'About',
+            isDark: isDark,
+            child: Text(state.profile!.bio!, style: Theme.of(context).textTheme.bodyMedium),
+          ),
+        ],
+
+        // Bio links
+        if (state.bioLinks.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          SectionCard(
+            title: 'Links',
+            isDark: isDark,
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: state.bioLinks.map((l) => _buildLinkChip(context, l)).toList(),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildEmptyAccounts(BuildContext context) {
+    return InkWell(
+      onTap: onLinkAccount,
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          border: Border.all(color: isDark ? Colors.grey[700]! : Colors.grey[300]!, style: BorderStyle.solid),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.add_link, color: Colors.grey[500]),
+            const SizedBox(width: 12),
+            const Expanded(child: Text('Link your Chess.com or Lichess account')),
+            const Icon(Icons.chevron_right),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLinkChip(BuildContext context, ProfileBioLink link) {
+    return ActionChip(
+      avatar: Icon(_getLinkIcon(link.linkType), size: 16),
+      label: Text(link.displayName),
+      onPressed: () async {
+        final uri = Uri.parse(link.url);
+        if (await canLaunchUrl(uri)) {
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+        }
+      },
+    );
+  }
+
+  IconData _getLinkIcon(String type) {
+    switch (type) {
+      case 'website': return Icons.language;
+      case 'youtube': return Icons.play_circle;
+      case 'twitter': return Icons.alternate_email;
+      case 'twitch': return Icons.videocam;
+      default: return Icons.link;
+    }
+  }
+}

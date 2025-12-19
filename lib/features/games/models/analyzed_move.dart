@@ -1,4 +1,5 @@
 import 'move_classification.dart';
+export 'move_classification.dart';
 
 /// Represents a single analyzed move from a game review
 class AnalyzedMove {
