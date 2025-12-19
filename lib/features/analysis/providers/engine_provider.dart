@@ -12,31 +12,14 @@ import '../services/uci_parser.dart';
 
 /// State of engine analysis
 class EngineAnalysisState {
-  /// Whether the engine is initialized and ready
   final bool isReady;
-
-  /// Whether analysis is currently running
   final bool isAnalyzing;
-
-  /// Current evaluation (from best PV)
   final EngineEvaluation? evaluation;
-
-  /// All principal variations
   final List<PrincipalVariation> pvLines;
-
-  /// Best move (when analysis completes)
   final BestMove? bestMove;
-
-  /// Latest engine statistics
   final EngineStats? stats;
-
-  /// Current position being analyzed
   final String? currentFen;
-
-  /// Error message if any
   final String? error;
-
-  /// Engine configuration
   final StockfishConfig config;
 
   const EngineAnalysisState({
@@ -77,35 +60,31 @@ class EngineAnalysisState {
     );
   }
 
-  /// Get the best line (PV1)
   PrincipalVariation? get bestLine =>
       pvLines.isNotEmpty ? pvLines.first : null;
 
-  /// Get evaluation bar position (0-1, 0.5 = equal)
   double get evaluationBarPosition => evaluation?.normalizedScore ?? 0.5;
 }
 
 /// Manages Stockfish engine analysis
 class EngineAnalysisNotifier extends StateNotifier<EngineAnalysisState> {
-  final StockfishService _service;
+  StockfishService? _service;
   StreamSubscription<String>? _outputSubscription;
   Timer? _debounceTimer;
 
-  /// Debounce duration for position changes
-  static const _debounceDuration = Duration(milliseconds: 300);
+  static const _debounceDuration = Duration(milliseconds: 150);
 
-  EngineAnalysisNotifier({StockfishService? service})
-      : _service = service ?? StockfishService(),
-        super(const EngineAnalysisState());
+  EngineAnalysisNotifier() : super(const EngineAnalysisState());
 
   /// Initialize the engine
   Future<void> initialize() async {
-    if (state.isReady) return;
+    if (state.isReady || _service != null) return;
 
     try {
-      await _service.initialize();
+      _service = StockfishService();
+      await _service!.initialize();
 
-      _outputSubscription = _service.outputStream.listen(_handleOutput);
+      _outputSubscription = _service!.outputStream.listen(_handleOutput);
 
       state = state.copyWith(isReady: true, error: null);
     } catch (e) {
@@ -118,21 +97,22 @@ class EngineAnalysisNotifier extends StateNotifier<EngineAnalysisState> {
 
   /// Analyze a position
   void analyzePosition(String fen, {List<String>? moves}) {
-    if (!state.isReady) return;
+    if (!state.isReady || _service == null) return;
 
-    // Debounce rapid position changes
     _debounceTimer?.cancel();
-    _debounceTimer = Timer(_debounceDuration, () async {
-      await _startAnalysis(fen, moves: moves);
+    _debounceTimer = Timer(_debounceDuration, () {
+      _startAnalysis(fen, moves: moves);
     });
   }
 
-  /// Start analysis immediately without debouncing
   Future<void> _startAnalysis(String fen, {List<String>? moves}) async {
-    if (!state.isReady) return;
+    if (!state.isReady || _service == null) return;
 
     // Stop any current analysis
-    await stopAnalysis();
+    if (state.isAnalyzing) {
+      _service!.stop();
+      await Future.delayed(const Duration(milliseconds: 50));
+    }
 
     // Clear previous results
     state = state.copyWith(
@@ -144,48 +124,22 @@ class EngineAnalysisNotifier extends StateNotifier<EngineAnalysisState> {
     );
 
     // Set position and start analysis
-    _service.setPosition(fen, moves);
-    _service.startAnalysis();
+    _service!.setPosition(fen, moves);
+    _service!.startAnalysis();
   }
 
   /// Stop current analysis
   Future<void> stopAnalysis() async {
     _debounceTimer?.cancel();
-    await _service.stop();
+    if (_service != null && state.isAnalyzing) {
+      await _service!.stop();
+    }
     state = state.copyWith(isAnalyzing: false);
   }
 
-  /// Update engine configuration
-  Future<void> updateConfig(StockfishConfig config) async {
-    await _service.updateConfig(config);
-    state = state.copyWith(config: config);
-
-    // Restart analysis if one was running
-    if (state.currentFen != null) {
-      await _startAnalysis(state.currentFen!);
-    }
-  }
-
-  /// Set number of PV lines
-  Future<void> setMultiPv(int count) async {
-    final clampedCount = count.clamp(1, 5);
-    await updateConfig(state.config.copyWith(multiPv: clampedCount));
-  }
-
-  /// Convert UCI moves to SAN for display
-  List<PrincipalVariation> _enrichPvLines(
-    List<PrincipalVariation> pvLines,
-    String fen,
-  ) {
-    try {
-      final position = Chess.fromSetup(Setup.parseFen(fen));
-      return pvLines.map((pv) => pv.withSanMoves(position)).toList();
-    } catch (e) {
-      return pvLines;
-    }
-  }
-
   void _handleOutput(String line) {
+    if (!mounted) return;
+
     // Parse info lines
     if (UciParser.isInfoLine(line)) {
       final perspective = _getSideToMove(state.currentFen);
@@ -221,7 +175,6 @@ class EngineAnalysisNotifier extends StateNotifier<EngineAnalysisState> {
   void _updatePvLine(PrincipalVariation pv) {
     final pvLines = List<PrincipalVariation>.from(state.pvLines);
 
-    // Find and replace or add PV line
     final index = pvLines.indexWhere((p) => p.pvNumber == pv.pvNumber);
     if (index != -1) {
       pvLines[index] = pv;
@@ -229,15 +182,25 @@ class EngineAnalysisNotifier extends StateNotifier<EngineAnalysisState> {
       pvLines.add(pv);
     }
 
-    // Sort by PV number and update evaluation from best line
     pvLines.sort((a, b) => a.pvNumber.compareTo(b.pvNumber));
-
     final evaluation = pvLines.isNotEmpty ? pvLines.first.evaluation : null;
 
     state = state.copyWith(
       pvLines: pvLines,
       evaluation: evaluation,
     );
+  }
+
+  List<PrincipalVariation> _enrichPvLines(
+    List<PrincipalVariation> pvLines,
+    String fen,
+  ) {
+    try {
+      final position = Chess.fromSetup(Setup.parseFen(fen));
+      return pvLines.map((pv) => pv.withSanMoves(position)).toList();
+    } catch (e) {
+      return pvLines;
+    }
   }
 
   Side _getSideToMove(String? fen) {
@@ -254,23 +217,15 @@ class EngineAnalysisNotifier extends StateNotifier<EngineAnalysisState> {
   void dispose() {
     _debounceTimer?.cancel();
     _outputSubscription?.cancel();
-    _service.dispose();
+    _service?.dispose();
     super.dispose();
   }
 }
 
-// Providers
-final engineServiceProvider = Provider<StockfishService>((ref) {
-  final service = StockfishService();
-  ref.onDispose(() => service.dispose());
-  return service;
-});
-
+// Main provider - creates a single instance
 final engineAnalysisProvider =
     StateNotifierProvider<EngineAnalysisNotifier, EngineAnalysisState>((ref) {
-  final service = ref.watch(engineServiceProvider);
-  final notifier = EngineAnalysisNotifier(service: service);
-  return notifier;
+  return EngineAnalysisNotifier();
 });
 
 // Convenience providers
@@ -288,4 +243,8 @@ final engineIsAnalyzingProvider = Provider<bool>((ref) {
 
 final engineStatsProvider = Provider<EngineStats?>((ref) {
   return ref.watch(engineAnalysisProvider).stats;
+});
+
+final engineIsReadyProvider = Provider<bool>((ref) {
+  return ref.watch(engineAnalysisProvider).isReady;
 });

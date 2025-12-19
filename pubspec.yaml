@@ -48,6 +48,7 @@ dependencies:
   freezed_annotation: ^2.4.1
   json_annotation: ^4.8.1
   collection: ^1.18.0
+  uuid: ^4.2.1
 
   # Network
   http: ^1.2.0
