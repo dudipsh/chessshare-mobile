@@ -49,6 +49,31 @@ class StudyService {
       }
     }
 
+    // For non-authenticated users (guest or no user), use fallback directly
+    // This avoids RPC issues with unauthenticated requests
+    final isGuest = userId == null || userId.startsWith('guest_');
+    bool isAuthenticated = false;
+    try {
+      isAuthenticated = SupabaseService.isAuthenticated;
+    } catch (e) {
+      debugPrint('Supabase not initialized: $e');
+    }
+
+    if (isGuest || !isAuthenticated) {
+      debugPrint('StudyService: Using fallback for non-authenticated user (isGuest=$isGuest, isAuth=$isAuthenticated, supabaseReady=${SupabaseService.isReady})');
+      final boards = await _getPublicBoardsFallback(limit: limit);
+      debugPrint('StudyService: Fallback returned ${boards.length} boards');
+
+      // Cache first page
+      if (lastBoardId == null && boards.isNotEmpty) {
+        _publicBoardsCache[cacheKey] = boards;
+        _publicBoardsCacheTime = DateTime.now();
+        debugPrint('Cached ${boards.length} public boards (fallback)');
+      }
+
+      return boards;
+    }
+
     try {
       final response = await SupabaseService.client.rpc(
         'get_public_boards_paginated_with_progress',
@@ -79,9 +104,22 @@ class StudyService {
     }
   }
 
-  /// Fallback method for getting public boards
-  static Future<List<StudyBoard>> _getPublicBoardsFallback({int limit = 20}) async {
+  /// Fallback method for getting public boards with retry logic
+  static Future<List<StudyBoard>> _getPublicBoardsFallback({int limit = 20, int retryCount = 0}) async {
+    const maxRetries = 3;
+
+    // Wait for Supabase to be ready before querying
+    if (!SupabaseService.isReady) {
+      debugPrint('StudyService: Waiting for Supabase to be ready...');
+      final isReady = await SupabaseService.waitUntilReady();
+      if (!isReady) {
+        debugPrint('StudyService: Supabase not ready after timeout');
+        return [];
+      }
+    }
+
     try {
+      debugPrint('StudyService: Fetching public boards via fallback (attempt ${retryCount + 1})...');
       final response = await SupabaseService.client
           .from('boards')
           .select('''
@@ -95,9 +133,19 @@ class StudyService {
           .order('views_count', ascending: false)
           .limit(limit);
 
-      return (response as List).map((j) => StudyBoard.fromJson(j)).toList();
+      final boards = (response as List).map((j) => StudyBoard.fromJson(j)).toList();
+      debugPrint('StudyService: Fallback successfully fetched ${boards.length} boards');
+      return boards;
     } catch (e) {
-      debugPrint('Error in fallback: $e');
+      debugPrint('StudyService: Error in fallback (attempt ${retryCount + 1}): $e');
+
+      // Retry on 401 errors (might be timing issue)
+      if (retryCount < maxRetries && e.toString().contains('401')) {
+        debugPrint('StudyService: Retrying after 401 error...');
+        await Future.delayed(Duration(milliseconds: 500 * (retryCount + 1)));
+        return _getPublicBoardsFallback(limit: limit, retryCount: retryCount + 1);
+      }
+
       return [];
     }
   }
@@ -162,6 +210,16 @@ class StudyService {
 
   /// Fallback method for getting a single board
   static Future<StudyBoard?> _getBoardFallback(String boardId) async {
+    // Wait for Supabase to be ready before querying
+    if (!SupabaseService.isReady) {
+      debugPrint('StudyService: Waiting for Supabase to be ready (single board)...');
+      final isReady = await SupabaseService.waitUntilReady();
+      if (!isReady) {
+        debugPrint('StudyService: Supabase not ready after timeout');
+        return null;
+      }
+    }
+
     try {
       final response = await SupabaseService.client
           .from('boards')
@@ -184,6 +242,16 @@ class StudyService {
 
   /// Search boards
   static Future<List<StudyBoard>> searchBoards(String query) async {
+    // Wait for Supabase to be ready before querying
+    if (!SupabaseService.isReady) {
+      debugPrint('StudyService: Waiting for Supabase to be ready (search)...');
+      final isReady = await SupabaseService.waitUntilReady();
+      if (!isReady) {
+        debugPrint('StudyService: Supabase not ready after timeout');
+        return [];
+      }
+    }
+
     try {
       final response = await SupabaseService.client
           .from('boards')

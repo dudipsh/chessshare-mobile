@@ -390,6 +390,13 @@ class GameAnalysisService {
       _isAnalyzing = false;
       await _progressController?.close();
       _progressController = null;
+
+      // Release Stockfish after analysis completes
+      if (_stockfish != null) {
+        debugPrint('GameAnalysisService: Releasing Stockfish after analysis');
+        await GlobalStockfishManager.instance.release(_ownerId);
+        _stockfish = null;
+      }
     }
   }
 
@@ -724,9 +731,11 @@ class GameAnalysisService {
   Future<void> dispose() async {
     // Cancel any ongoing analysis
     cancelAnalysis();
-    // Release Stockfish to global manager (don't dispose directly)
-    await GlobalStockfishManager.instance.release(_ownerId);
-    _stockfish = null;
+    // Release Stockfish to global manager if still held
+    if (_stockfish != null) {
+      await GlobalStockfishManager.instance.release(_ownerId);
+      _stockfish = null;
+    }
     _evalCache.clear();
     _bookMoveCache.clear();
     await _progressController?.close();

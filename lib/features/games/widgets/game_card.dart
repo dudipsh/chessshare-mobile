@@ -127,11 +127,14 @@ class GameCard extends StatelessWidget {
                         const SizedBox(width: 8),
                         // Ratings
                         if (game.playerRating != null || game.opponentRating != null)
-                          Text(
-                            '${game.playerRating ?? '?'} vs ${game.opponentRating ?? '?'}',
-                            style: TextStyle(
-                              color: subtleColor,
-                              fontSize: 12,
+                          Flexible(
+                            child: Text(
+                              '${game.playerRating ?? '?'} vs ${game.opponentRating ?? '?'}',
+                              style: TextStyle(
+                                color: subtleColor,
+                                fontSize: 12,
+                              ),
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                         const Spacer(),

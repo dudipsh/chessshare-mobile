@@ -412,6 +412,31 @@ class LocalDatabase {
     );
   }
 
+  /// Delete game review and its moves by game ID
+  static Future<void> deleteGameReviewByGameId(String userId, String gameId) async {
+    final db = await database;
+
+    // First get the review to find its ID
+    final review = await getGameReviewByGameId(userId, gameId);
+    if (review != null) {
+      final reviewId = review['id'] as String;
+
+      // Delete the moves first
+      await db.delete(
+        gameReviewMovesTable,
+        where: 'game_review_id = ?',
+        whereArgs: [reviewId],
+      );
+
+      // Delete the review
+      await db.delete(
+        gameReviewsTable,
+        where: 'id = ?',
+        whereArgs: [reviewId],
+      );
+    }
+  }
+
   // ========== Game Review Moves ==========
 
   static Future<void> saveAnalyzedMoves(List<Map<String, dynamic>> moves) async {

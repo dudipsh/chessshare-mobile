@@ -1,9 +1,11 @@
 import 'package:chessground/chessground.dart';
 import 'package:dartchess/dartchess.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/colors.dart';
+import '../../../core/database/local_database.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../models/analyzed_move.dart';
 import '../models/chess_game.dart';
@@ -123,6 +125,34 @@ class _GameReviewScreenState extends ConsumerState<GameReviewScreen> {
             },
             tooltip: 'Flip board',
           ),
+          // Debug menu (only in debug mode)
+          if (kDebugMode)
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert),
+              onSelected: (value) => _handleDebugAction(value, userId),
+              itemBuilder: (context) => [
+                const PopupMenuItem(
+                  value: 'clear_analysis',
+                  child: Row(
+                    children: [
+                      Icon(Icons.delete_outline, size: 20),
+                      SizedBox(width: 8),
+                      Text('Clear Analysis'),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 're_analyze',
+                  child: Row(
+                    children: [
+                      Icon(Icons.refresh, size: 20),
+                      SizedBox(width: 8),
+                      Text('Re-analyze'),
+                    ],
+                  ),
+                ),
+              ],
+            ),
         ],
       ),
       body: _buildBody(state, boardSize, isDark),
@@ -169,9 +199,15 @@ class _GameReviewScreenState extends ConsumerState<GameReviewScreen> {
         // Accuracy summary
         _buildAccuracySummary(state.review!, isDark),
 
+        // Evaluation bar above board
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+          child: _buildStaticEvaluationBar(state, boardSize),
+        ),
+
         // Chess board with markers
         Padding(
-          padding: const EdgeInsets.all(8.0),
+          padding: const EdgeInsets.symmetric(horizontal: 8.0),
           child: Stack(
             children: [
               _buildChessboard(state, boardSize),
@@ -298,58 +334,18 @@ class _GameReviewScreenState extends ConsumerState<GameReviewScreen> {
             fontWeight: FontWeight.w500,
             color: isPlayer ? AppColors.primary : null,
           ),
+          overflow: TextOverflow.ellipsis,
         ),
         const SizedBox(height: 4),
-        Row(
-          mainAxisAlignment: isPlayer ? MainAxisAlignment.start : MainAxisAlignment.end,
-          children: [
-            Text(
-              '${accuracy.toStringAsFixed(1)}%',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: _getAccuracyColor(accuracy),
-              ),
-            ),
-            const SizedBox(width: 8),
-            // Mini summary icons
-            if (summary != null) ...[
-              if (summary.brilliant > 0)
-                _buildMiniIcon(MoveClassification.brilliant, summary.brilliant),
-              if (summary.blunder > 0)
-                _buildMiniIcon(MoveClassification.blunder, summary.blunder),
-              if (summary.mistake > 0)
-                _buildMiniIcon(MoveClassification.mistake, summary.mistake),
-            ],
-          ],
+        Text(
+          '${accuracy.toStringAsFixed(1)}%',
+          style: TextStyle(
+            fontSize: 24,
+            fontWeight: FontWeight.bold,
+            color: _getAccuracyColor(accuracy),
+          ),
         ),
       ],
-    );
-  }
-
-  Widget _buildMiniIcon(MoveClassification classification, int count) {
-    return Container(
-      margin: const EdgeInsets.only(left: 4),
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: classification.color.withValues(alpha: 0.2),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(classification.icon, size: 12, color: classification.color),
-          const SizedBox(width: 2),
-          Text(
-            '$count',
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.bold,
-              color: classification.color,
-            ),
-          ),
-        ],
-      ),
     );
   }
 
@@ -360,6 +356,131 @@ class _GameReviewScreenState extends ConsumerState<GameReviewScreen> {
     if (accuracy >= 60) return MoveClassification.inaccuracy.color;
     if (accuracy >= 45) return MoveClassification.mistake.color;
     return MoveClassification.blunder.color;
+  }
+
+  /// Build a static evaluation bar based on the current move's evaluation
+  Widget _buildStaticEvaluationBar(GameReviewState state, double boardSize) {
+    // Get the evaluation from the current move (evalAfter represents eval after the move)
+    int? evalCp;
+    if (state.currentMove != null) {
+      evalCp = state.currentMove!.evalAfter;
+    }
+
+    // Convert centipawns to normalized score (0.0 = black winning, 0.5 = equal, 1.0 = white winning)
+    double normalizedScore = 0.5;
+    if (evalCp != null) {
+      // Use sigmoid-like function to map centipawns to 0-1 range
+      // Clamp to reasonable bounds (-1000 to 1000 cp for display)
+      final clampedCp = evalCp.clamp(-1000, 1000);
+      // Map to 0-1 range with 0.5 as equal
+      normalizedScore = 0.5 + (clampedCp / 2000);
+      normalizedScore = normalizedScore.clamp(0.05, 0.95);
+    }
+
+    // Format evaluation string
+    String evalString = '';
+    if (evalCp != null) {
+      if (evalCp.abs() >= 10000) {
+        // Mate score
+        final mateIn = ((10000 - evalCp.abs()) / 2).ceil();
+        evalString = evalCp > 0 ? 'M$mateIn' : '-M$mateIn';
+      } else {
+        final pawns = evalCp / 100;
+        if (pawns >= 0) {
+          evalString = '+${pawns.toStringAsFixed(1)}';
+        } else {
+          evalString = pawns.toStringAsFixed(1);
+        }
+      }
+    }
+
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return SizedBox(
+      width: boardSize,
+      height: 20,
+      child: Row(
+        children: [
+          // White side evaluation label
+          SizedBox(
+            width: 40,
+            child: Text(
+              normalizedScore > 0.5 ? evalString : '',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: isDark ? Colors.white70 : Colors.grey.shade700,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ),
+          // The evaluation bar
+          Expanded(
+            child: Container(
+              height: 8,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(
+                  color: isDark ? Colors.grey.shade600 : Colors.grey.shade400,
+                  width: 0.5,
+                ),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(3.5),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final whiteWidth = constraints.maxWidth * normalizedScore;
+
+                    return Stack(
+                      children: [
+                        // Black side (right/background)
+                        Positioned.fill(
+                          child: Container(color: Colors.grey.shade800),
+                        ),
+                        // White side (left)
+                        AnimatedPositioned(
+                          duration: const Duration(milliseconds: 200),
+                          curve: Curves.easeInOut,
+                          top: 0,
+                          bottom: 0,
+                          left: 0,
+                          width: whiteWidth,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.2),
+                                  blurRadius: 2,
+                                  offset: const Offset(1, 0),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ),
+            ),
+          ),
+          // Black side evaluation label
+          SizedBox(
+            width: 40,
+            child: Text(
+              normalizedScore < 0.5 ? evalString : '',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildChessboard(GameReviewState state, double boardSize) {
@@ -721,62 +842,47 @@ class _GameReviewScreenState extends ConsumerState<GameReviewScreen> {
         .length;
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       child: Row(
         children: [
-          // Training Mode button (Mistakes to Practice)
+          // Practice button
           Expanded(
-            child: ElevatedButton.icon(
-              onPressed: playerMistakes > 0
-                  ? () => _navigateToPracticeMistakes(state)
-                  : null,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: MoveClassification.mistake.color,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-              ),
-              icon: const Icon(Icons.fitness_center, size: 20),
-              label: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text(
-                    'Practice Mistakes',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                  ),
-                  Text(
-                    '$playerMistakes puzzle${playerMistakes != 1 ? 's' : ''}',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: Colors.white.withValues(alpha: 0.8),
-                    ),
-                  ),
-                ],
+            child: SizedBox(
+              height: 36,
+              child: ElevatedButton.icon(
+                onPressed: playerMistakes > 0
+                    ? () => _navigateToPracticeMistakes(state)
+                    : null,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: MoveClassification.mistake.color,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                ),
+                icon: const Icon(Icons.fitness_center, size: 16),
+                label: Text(
+                  'Practice ($playerMistakes)',
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                ),
               ),
             ),
           ),
-          const SizedBox(width: 12),
-          // Play vs Stockfish button
+          const SizedBox(width: 8),
+          // Play vs Engine button
           Expanded(
-            child: ElevatedButton.icon(
-              onPressed: () => _navigateToPlayVsStockfish(state),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-              ),
-              icon: const Icon(Icons.smart_toy, size: 20),
-              label: const Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    'Play vs Engine',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                  ),
-                  Text(
-                    'From position',
-                    style: TextStyle(fontSize: 11),
-                  ),
-                ],
+            child: SizedBox(
+              height: 36,
+              child: ElevatedButton.icon(
+                onPressed: () => _navigateToPlayVsStockfish(state),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                ),
+                icon: const Icon(Icons.smart_toy, size: 16),
+                label: const Text(
+                  'Play Engine',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                ),
               ),
             ),
           ),
@@ -828,5 +934,28 @@ class _GameReviewScreenState extends ConsumerState<GameReviewScreen> {
         ),
       ),
     );
+  }
+
+  /// Handle debug menu actions
+  Future<void> _handleDebugAction(String action, String userId) async {
+    switch (action) {
+      case 'clear_analysis':
+        // Clear local analysis data and go back
+        await LocalDatabase.deleteGameReviewByGameId(userId, widget.game.id);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Analysis data cleared')),
+          );
+          Navigator.pop(context);
+        }
+        break;
+      case 're_analyze':
+        // Clear local data and re-analyze
+        await LocalDatabase.deleteGameReviewByGameId(userId, widget.game.id);
+        if (mounted) {
+          ref.read(gameReviewProvider(userId).notifier).analyzeGame(widget.game);
+        }
+        break;
+    }
   }
 }

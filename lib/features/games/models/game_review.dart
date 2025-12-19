@@ -12,6 +12,20 @@ enum ReviewStatus {
   failed,     // Analysis failed
 }
 
+/// Move quality scores for accuracy calculation (matches web)
+class _MoveQualityScores {
+  static const int brilliant = 105;
+  static const int great = 100;
+  static const int best = 100;
+  static const int good = 85;
+  static const int book = 100; // Book moves are neutral/perfect
+  static const int inaccuracy = 70;
+  static const int mistake = 45;
+  static const int miss = 25;
+  static const int blunder = 5;
+  static const int forced = 100; // Forced moves are perfect (only choice)
+}
+
 /// Summary of move classifications for a player
 class AccuracySummary {
   final int brilliant;
@@ -42,7 +56,7 @@ class AccuracySummary {
     this.accuracy = 0,
   });
 
-  /// Calculate accuracy from analyzed moves
+  /// Calculate accuracy from analyzed moves using Chess.com-style formula
   factory AccuracySummary.fromMoves(List<AnalyzedMove> moves) {
     if (moves.isEmpty) {
       return AccuracySummary();
@@ -50,8 +64,6 @@ class AccuracySummary {
 
     int brilliant = 0, great = 0, best = 0, good = 0, book = 0;
     int inaccuracy = 0, mistake = 0, miss = 0, blunder = 0, forced = 0;
-    int totalCpl = 0;
-    int countedMoves = 0;
 
     for (final move in moves) {
       switch (move.classification) {
@@ -88,23 +100,41 @@ class AccuracySummary {
         case MoveClassification.none:
           break;
       }
-
-      // Don't count book moves or forced moves in accuracy
-      if (move.classification != MoveClassification.book &&
-          move.classification != MoveClassification.forced &&
-          move.classification != MoveClassification.none) {
-        totalCpl += move.centipawnLoss;
-        countedMoves++;
-      }
     }
 
-    // Calculate accuracy using Chess.com formula approximation
-    // accuracy = 103.1668 * exp(-0.04354 * ACPL) - 3.1669
-    // Capped at 0-100
+    // Calculate accuracy using move quality scores (matches web formula)
+    // Each move type has a quality score out of 100
+    // Accuracy = (totalScore / maxPossibleScore) × 100
+    final totalScore =
+        brilliant * _MoveQualityScores.brilliant +
+        great * _MoveQualityScores.great +
+        best * _MoveQualityScores.best +
+        good * _MoveQualityScores.good +
+        book * _MoveQualityScores.book +
+        inaccuracy * _MoveQualityScores.inaccuracy +
+        mistake * _MoveQualityScores.mistake +
+        miss * _MoveQualityScores.miss +
+        blunder * _MoveQualityScores.blunder +
+        forced * _MoveQualityScores.forced;
+
+    final countedMoves = brilliant + great + best + good + book +
+        inaccuracy + mistake + miss + blunder + forced;
+    final maxPossibleScore = countedMoves * 100;
+
     double accuracy = 0;
-    if (countedMoves > 0) {
-      final acpl = totalCpl / countedMoves;
-      accuracy = (103.1668 * _exp(-0.04354 * acpl) - 3.1669).clamp(0, 100);
+    if (maxPossibleScore > 0) {
+      accuracy = (totalScore / maxPossibleScore) * 100;
+
+      // Apply blunder penalty (0.5% per blunder)
+      if (blunder > 0) {
+        accuracy = math.max(0, accuracy - (blunder * 0.5));
+      }
+
+      // Clamp between 15% min and 99% max (unless perfect)
+      final hasNonPerfectMoves = good > 0 || inaccuracy > 0 ||
+          mistake > 0 || miss > 0 || blunder > 0;
+      final maxAccuracy = hasNonPerfectMoves ? 99.0 : 100.0;
+      accuracy = accuracy.clamp(15.0, maxAccuracy);
     }
 
     return AccuracySummary(
@@ -119,12 +149,8 @@ class AccuracySummary {
       blunder: blunder,
       forced: forced,
       totalMoves: moves.length,
-      accuracy: accuracy,
+      accuracy: (accuracy * 10).round() / 10, // Round to 1 decimal
     );
-  }
-
-  static double _exp(double x) {
-    return math.exp(x);
   }
 
   Map<String, dynamic> toJson() {
