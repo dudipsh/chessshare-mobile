@@ -7,6 +7,11 @@ import '../features/games/screens/games_list_screen.dart';
 import '../features/games/screens/import_screen.dart';
 import '../features/analysis/screens/analysis_screen.dart';
 import '../features/games/models/chess_game.dart';
+import '../features/puzzles/models/puzzle.dart';
+import '../features/puzzles/screens/puzzle_screen.dart';
+import '../features/puzzles/screens/puzzles_list_screen.dart';
+import '../features/profile/screens/profile_screen.dart';
+import '../features/study/screens/study_screen.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
@@ -39,6 +44,16 @@ final routerProvider = Provider<GoRouter>((ref) {
         },
       ),
 
+      // Puzzle solving route (outside shell - no bottom nav)
+      GoRoute(
+        path: '/puzzle',
+        name: 'puzzle',
+        builder: (context, state) {
+          final puzzle = state.extra as Puzzle;
+          return PuzzleScreen(puzzle: puzzle);
+        },
+      ),
+
       // Main app routes with bottom navigation
       ShellRoute(
         builder: (context, state, child) => MainShell(child: child),
@@ -51,12 +66,12 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/study',
             name: 'study',
-            builder: (context, state) => const _PlaceholderScreen(title: 'Study'),
+            builder: (context, state) => const StudyScreen(),
           ),
           GoRoute(
             path: '/puzzles',
             name: 'puzzles',
-            builder: (context, state) => const _PlaceholderScreen(title: 'Puzzles'),
+            builder: (context, state) => const PuzzlesListScreen(),
           ),
           GoRoute(
             path: '/insights',
@@ -66,7 +81,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/profile',
             name: 'profile',
-            builder: (context, state) => const _PlaceholderScreen(title: 'Profile'),
+            builder: (context, state) => const ProfileScreen(),
           ),
         ],
       ),

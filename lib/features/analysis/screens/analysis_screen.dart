@@ -3,9 +3,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:chessground/chessground.dart';
 import 'package:dartchess/dartchess.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../app/theme/colors.dart';
 import '../../games/models/chess_game.dart';
+import '../../puzzles/providers/puzzle_generator_provider.dart';
 import '../providers/analysis_provider.dart';
 import '../providers/engine_provider.dart';
 import '../widgets/analysis_panel.dart';
@@ -99,6 +101,10 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> {
             icon: const Icon(Icons.more_vert),
             onSelected: _handleMenuAction,
             itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'generate_puzzles',
+                child: Text('Generate Puzzles'),
+              ),
               const PopupMenuItem(value: 'share', child: Text('Share PGN')),
               const PopupMenuItem(value: 'copy_fen', child: Text('Copy FEN')),
             ],
@@ -107,43 +113,13 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> {
       ),
       body: Column(
         children: [
-          // Evaluation bar
+          // Evaluation bar (same width as board)
           if (_engineEnabled)
             Padding(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-              child: Row(
-                children: [
-                  // Evaluation text
-                  SizedBox(
-                    width: 50,
-                    child: Text(
-                      engineState.evaluation?.displayString ?? '',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: isDark ? Colors.white : Colors.black,
-                      ),
-                    ),
-                  ),
-                  // Bar
-                  Expanded(
-                    child: CompactEvaluationBar(height: 6),
-                  ),
-                  // Analyzing indicator
-                  SizedBox(
-                    width: 24,
-                    child: engineState.isAnalyzing
-                        ? SizedBox(
-                            width: 14,
-                            height: 14,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: AppColors.primary,
-                            ),
-                          )
-                        : null,
-                  ),
-                ],
+              padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+              child: SizedBox(
+                width: screenWidth - 16,
+                child: _buildEvaluationSection(engineState, isDark, screenWidth - 16),
               ),
             ),
 
@@ -242,8 +218,39 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> {
     );
   }
 
+  Widget _buildEvaluationSection(EngineAnalysisState engineState, bool isDark, double width) {
+    final hasAnalysis = engineState.bestMove != null || engineState.evaluation != null;
+
+    if (!hasAnalysis && !engineState.isAnalyzing) {
+      // No analysis yet - show placeholder
+      return Container(
+        width: width,
+        height: 28,
+        decoration: BoxDecoration(
+          color: isDark ? Colors.grey[800] : Colors.grey[300],
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: Center(
+          child: Text(
+            'No analysis yet',
+            style: TextStyle(
+              fontSize: 12,
+              color: isDark ? Colors.grey[400] : Colors.grey[600],
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Show actual evaluation bar (reads from providers)
+    return const EvaluationBar();
+  }
+
   void _handleMenuAction(String value) {
     switch (value) {
+      case 'generate_puzzles':
+        _generatePuzzles();
+        break;
       case 'share':
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Share coming soon')),
@@ -256,6 +263,49 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> {
           const SnackBar(content: Text('FEN copied')),
         );
         break;
+    }
+  }
+
+  Future<void> _generatePuzzles() async {
+    final pgn = widget.game.pgn;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Generating puzzles from your game...'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+
+    // Generate puzzles
+    await ref.read(puzzleGeneratorProvider.notifier).generateFromPgn(pgn);
+
+    // Check result
+    final state = ref.read(puzzleGeneratorProvider);
+    if (mounted) {
+      if (state.puzzles.isNotEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Found ${state.puzzles.length} puzzles!'),
+            action: SnackBarAction(
+              label: 'View',
+              onPressed: () => context.goNamed('puzzles'),
+            ),
+          ),
+        );
+      } else if (state.error != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(state.error!),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No tactical puzzles found in this game'),
+          ),
+        );
+      }
     }
   }
 }

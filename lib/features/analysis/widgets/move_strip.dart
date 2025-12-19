@@ -158,7 +158,7 @@ class _MoveItem extends StatelessWidget {
   }
 }
 
-/// Compact inline move navigator with arrows
+/// Compact inline move navigator with 3-move carousel
 class CompactMoveNavigator extends StatelessWidget {
   final List<String> moves;
   final int currentIndex;
@@ -180,10 +180,14 @@ class CompactMoveNavigator extends StatelessWidget {
     final canGoForward = currentIndex < moves.length - 1;
 
     return Container(
-      height: 44,
+      height: 52,
+      margin: const EdgeInsets.symmetric(horizontal: 8),
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF1C1C1E) : Colors.white,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isDark ? Colors.white12 : Colors.grey.shade200,
+        ),
       ),
       child: Row(
         children: [
@@ -194,7 +198,7 @@ class CompactMoveNavigator extends StatelessWidget {
             onTap: () => onMoveSelected(currentIndex - 1),
           ),
 
-          // Current move display
+          // 3-move carousel
           Expanded(
             child: GestureDetector(
               onHorizontalDragEnd: (details) {
@@ -207,15 +211,37 @@ class CompactMoveNavigator extends StatelessWidget {
               },
               child: Container(
                 color: Colors.transparent,
-                child: Center(
-                  child: Text(
-                    _getCurrentMoveText(),
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      color: isDark ? Colors.white : Colors.black,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    // Previous move
+                    Expanded(
+                      child: _MoveChip(
+                        text: _getMoveText(currentIndex - 1),
+                        isActive: false,
+                        onTap: canGoBack ? () => onMoveSelected(currentIndex - 1) : null,
+                      ),
                     ),
-                  ),
+                    const SizedBox(width: 4),
+                    // Current move (highlighted)
+                    Expanded(
+                      flex: 2,
+                      child: _MoveChip(
+                        text: _getMoveText(currentIndex),
+                        isActive: true,
+                        onTap: null,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    // Next move
+                    Expanded(
+                      child: _MoveChip(
+                        text: _getMoveText(currentIndex + 1),
+                        isActive: false,
+                        onTap: canGoForward ? () => onMoveSelected(currentIndex + 1) : null,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -232,13 +258,67 @@ class CompactMoveNavigator extends StatelessWidget {
     );
   }
 
-  String _getCurrentMoveText() {
-    if (currentIndex < 0) return 'Start';
-    if (currentIndex >= moves.length) return '';
+  String _getMoveText(int index) {
+    if (index < -1) return '';
+    if (index == -1) return 'Start';
+    if (index >= moves.length) return '';
 
-    final moveNum = (currentIndex ~/ 2) + 1;
-    final isWhite = currentIndex % 2 == 0;
-    return '$moveNum${isWhite ? '.' : '...'} ${moves[currentIndex]}';
+    final moveNum = (index ~/ 2) + 1;
+    final isWhite = index % 2 == 0;
+    return '$moveNum${isWhite ? '.' : '...'} ${moves[index]}';
+  }
+}
+
+class _MoveChip extends StatelessWidget {
+  final String text;
+  final bool isActive;
+  final VoidCallback? onTap;
+
+  const _MoveChip({
+    required this.text,
+    required this.isActive,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    if (text.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        decoration: BoxDecoration(
+          color: isActive
+              ? theme.colorScheme.primary.withOpacity(0.15)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+          border: isActive
+              ? Border.all(color: theme.colorScheme.primary.withOpacity(0.3))
+              : null,
+        ),
+        child: Center(
+          child: Text(
+            text,
+            style: TextStyle(
+              fontSize: isActive ? 14 : 12,
+              fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
+              color: isActive
+                  ? theme.colorScheme.primary
+                  : (isDark ? Colors.white54 : Colors.grey.shade500),
+            ),
+            overflow: TextOverflow.ellipsis,
+            maxLines: 1,
+          ),
+        ),
+      ),
+    );
   }
 }
 

@@ -3,7 +3,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
 
 import '../../../core/api/supabase_service.dart';
+import '../../../core/database/local_database.dart';
 import '../models/user_profile.dart';
+import '../services/google_auth_service.dart';
+
+// Auth mode
+enum AuthMode {
+  online,  // Connected to Supabase
+  offline, // Using local Google auth + SQLite
+}
 
 // Auth state (renamed to avoid conflict with Supabase's AuthState)
 class AppAuthState {
@@ -11,12 +19,16 @@ class AppAuthState {
   final UserProfile? profile;
   final bool isLoading;
   final String? error;
+  final AuthMode mode;
+  final bool isGuest;
 
   AppAuthState({
     this.user,
     this.profile,
     this.isLoading = false,
     this.error,
+    this.mode = AuthMode.offline,
+    this.isGuest = false,
   });
 
   AppAuthState copyWith({
@@ -24,16 +36,22 @@ class AppAuthState {
     UserProfile? profile,
     bool? isLoading,
     String? error,
+    AuthMode? mode,
+    bool? isGuest,
+    bool clearUser = false,
+    bool clearProfile = false,
   }) {
     return AppAuthState(
-      user: user ?? this.user,
-      profile: profile ?? this.profile,
+      user: clearUser ? null : (user ?? this.user),
+      profile: clearProfile ? null : (profile ?? this.profile),
       isLoading: isLoading ?? this.isLoading,
       error: error,
+      mode: mode ?? this.mode,
+      isGuest: isGuest ?? this.isGuest,
     );
   }
 
-  bool get isAuthenticated => user != null;
+  bool get isAuthenticated => profile != null;
 }
 
 // Auth notifier
@@ -44,22 +62,59 @@ class AuthNotifier extends StateNotifier<AppAuthState> {
     _init();
   }
 
-  void _init() {
-    // Listen to auth changes
-    _authSubscription = SupabaseService.authStateChanges.listen((data) {
-      final user = data.session?.user;
+  void _init() async {
+    // First, try to load from local database
+    await _tryLoadLocalProfile();
+
+    // Then, try online auth if available
+    try {
+      _authSubscription = SupabaseService.authStateChanges.listen((data) {
+        final user = data.session?.user;
+        if (user != null) {
+          _loadProfile(user);
+        }
+      });
+
+      // Check current session
+      final user = SupabaseService.currentUser;
       if (user != null) {
         _loadProfile(user);
-      } else {
-        state = AppAuthState();
       }
-    });
+    } catch (e) {
+      // Supabase not available, continue with offline mode
+      print('Supabase not available, using offline mode: $e');
+    }
+  }
 
-    // Check current session
-    final user = SupabaseService.currentUser;
-    if (user != null) {
-      _loadProfile(user);
-    } else {
+  /// Try to load profile from local database first
+  Future<void> _tryLoadLocalProfile() async {
+    try {
+      // Try silent Google sign-in first
+      final profile = await GoogleAuthService.signInSilently();
+      if (profile != null) {
+        state = AppAuthState(
+          profile: profile,
+          mode: AuthMode.offline,
+          isGuest: profile.id.startsWith('guest_'),
+        );
+        return;
+      }
+
+      // Check for cached profile
+      final cachedProfile = await LocalDatabase.getCurrentUserProfile();
+      if (cachedProfile != null) {
+        state = AppAuthState(
+          profile: cachedProfile,
+          mode: AuthMode.offline,
+          isGuest: cachedProfile.id.startsWith('guest_'),
+        );
+        return;
+      }
+
+      // No profile found
+      state = AppAuthState();
+    } catch (e) {
+      print('Error loading local profile: $e');
       state = AppAuthState();
     }
   }
@@ -107,12 +162,49 @@ class AuthNotifier extends StateNotifier<AppAuthState> {
     }
   }
 
+  /// Sign in with Google (native)
   Future<void> signInWithGoogle() async {
+    // Check if Google Sign-In is available
+    if (!GoogleAuthService.isAvailable) {
+      state = state.copyWith(
+        error: 'Google Sign-In is not configured for this device. Please use guest mode or contact support.',
+      );
+      return;
+    }
+
+    state = state.copyWith(isLoading: true, error: null);
+    try {
+      final profile = await GoogleAuthService.signIn();
+      if (profile != null) {
+        state = AppAuthState(
+          profile: profile,
+          mode: AuthMode.offline,
+          isGuest: false,
+        );
+      } else {
+        state = state.copyWith(
+          isLoading: false,
+          error: 'Google sign-in was cancelled',
+        );
+      }
+    } catch (e) {
+      String errorMessage = 'Sign-in failed';
+      if (e.toString().contains('not configured')) {
+        errorMessage = 'Google Sign-In is not configured. Please use guest mode.';
+      } else if (e.toString().contains('network')) {
+        errorMessage = 'No internet connection. Please try again.';
+      }
+      state = state.copyWith(isLoading: false, error: errorMessage);
+    }
+  }
+
+  /// Sign in with Google via Supabase OAuth (for online features)
+  Future<void> signInWithGoogleOnline() async {
     state = state.copyWith(isLoading: true, error: null);
     try {
       await SupabaseService.client.auth.signInWithOAuth(
         supabase.OAuthProvider.google,
-        redirectTo: 'com.chessmastery.app://login-callback',
+        redirectTo: 'com.chessshare.app://login-callback',
       );
     } catch (e) {
       state = state.copyWith(isLoading: false, error: e.toString());
@@ -124,15 +216,46 @@ class AuthNotifier extends StateNotifier<AppAuthState> {
     try {
       await SupabaseService.client.auth.signInWithOAuth(
         supabase.OAuthProvider.apple,
-        redirectTo: 'com.chessmastery.app://login-callback',
+        redirectTo: 'com.chessshare.app://login-callback',
       );
     } catch (e) {
       state = state.copyWith(isLoading: false, error: e.toString());
     }
   }
 
+  /// Continue as guest (no sign-in required)
+  Future<void> continueAsGuest() async {
+    state = state.copyWith(isLoading: true);
+    try {
+      final profile = await GoogleAuthService.createGuestProfile();
+      state = AppAuthState(
+        profile: profile,
+        mode: AuthMode.offline,
+        isGuest: true,
+      );
+    } catch (e) {
+      state = state.copyWith(isLoading: false, error: e.toString());
+    }
+  }
+
+  /// Sign out
   Future<void> signOut() async {
-    await SupabaseService.client.auth.signOut();
+    try {
+      await GoogleAuthService.signOut();
+      await SupabaseService.client.auth.signOut();
+    } catch (e) {
+      // Ignore errors during sign out
+    }
+    state = AppAuthState();
+  }
+
+  /// Delete account and all data
+  Future<void> deleteAccount() async {
+    try {
+      await GoogleAuthService.disconnect();
+    } catch (e) {
+      // Ignore errors
+    }
     state = AppAuthState();
   }
 
@@ -140,10 +263,19 @@ class AuthNotifier extends StateNotifier<AppAuthState> {
     if (state.profile == null) return;
 
     try {
-      await SupabaseService.client
-          .from('profiles')
-          .update({'chess_com_username': username})
-          .eq('id', state.profile!.id);
+      // Update local database
+      await LocalDatabase.updateUserProfile(
+        state.profile!.id,
+        {'chess_com_username': username},
+      );
+
+      // Update Supabase if online
+      if (state.mode == AuthMode.online) {
+        await SupabaseService.client
+            .from('profiles')
+            .update({'chess_com_username': username})
+            .eq('id', state.profile!.id);
+      }
 
       state = state.copyWith(
         profile: state.profile!.copyWith(chessComUsername: username),
@@ -157,10 +289,19 @@ class AuthNotifier extends StateNotifier<AppAuthState> {
     if (state.profile == null) return;
 
     try {
-      await SupabaseService.client
-          .from('profiles')
-          .update({'lichess_username': username})
-          .eq('id', state.profile!.id);
+      // Update local database
+      await LocalDatabase.updateUserProfile(
+        state.profile!.id,
+        {'lichess_username': username},
+      );
+
+      // Update Supabase if online
+      if (state.mode == AuthMode.online) {
+        await SupabaseService.client
+            .from('profiles')
+            .update({'lichess_username': username})
+            .eq('id', state.profile!.id);
+      }
 
       state = state.copyWith(
         profile: state.profile!.copyWith(lichessUsername: username),

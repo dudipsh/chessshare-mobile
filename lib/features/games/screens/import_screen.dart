@@ -115,7 +115,7 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
               decoration: InputDecoration(
                 hintText: 'Enter your username',
                 filled: true,
-                fillColor: AppColors.primaryLight,
+                fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide.none,
@@ -204,7 +204,7 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
       children: [
         LinearProgressIndicator(
           value: progress,
-          backgroundColor: AppColors.primaryLight,
+          backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
           valueColor: const AlwaysStoppedAnimation<Color>(AppColors.accent),
         ),
         const SizedBox(height: 16),

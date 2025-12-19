@@ -58,7 +58,9 @@ class _MoveListState extends State<MoveList> {
       return Center(
         child: Text(
           'No moves',
-          style: TextStyle(color: Colors.white.withOpacity(0.5)),
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
+          ),
         ),
       );
     }
@@ -77,7 +79,7 @@ class _MoveListState extends State<MoveList> {
 
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.primaryLight,
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
       ),
       child: Column(
@@ -100,7 +102,7 @@ class _MoveListState extends State<MoveList> {
                   '${widget.moves.length} moves',
                   style: TextStyle(
                     fontSize: 12,
-                    color: Colors.white.withOpacity(0.5),
+                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
                   ),
                 ),
               ],
@@ -136,7 +138,7 @@ class _MoveListState extends State<MoveList> {
             child: Text(
               '${pair.moveNumber}.',
               style: TextStyle(
-                color: Colors.white.withOpacity(0.5),
+                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -175,6 +177,7 @@ class _MoveListState extends State<MoveList> {
   }) {
     final isSelected = index == widget.currentIndex;
 
+    final theme = Theme.of(context);
     return GestureDetector(
       onTap: () => widget.onMoveSelected(index),
       child: Container(
@@ -182,7 +185,7 @@ class _MoveListState extends State<MoveList> {
         decoration: BoxDecoration(
           color: isSelected
               ? AppColors.accent.withOpacity(0.2)
-              : Colors.white.withOpacity(0.05),
+              : theme.colorScheme.onSurface.withOpacity(0.05),
           borderRadius: BorderRadius.circular(6),
           border: isSelected
               ? Border.all(color: AppColors.accent.withOpacity(0.5))
@@ -209,7 +212,7 @@ class _MoveListState extends State<MoveList> {
               move,
               style: TextStyle(
                 fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                color: isSelected ? AppColors.accent : Colors.white,
+                color: isSelected ? AppColors.accent : theme.colorScheme.onSurface,
                 fontFamily: 'monospace',
               ),
             ),

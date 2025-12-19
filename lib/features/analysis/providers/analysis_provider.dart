@@ -173,9 +173,6 @@ class AnalysisNotifier extends StateNotifier<AnalysisState> {
   }
 
   void onUserMove(NormalMove move, {bool? isDrop}) {
-    // Only allow moves at the end of the game
-    if (!state.isAtEnd) return;
-
     // Check if it's a valid move using legalMoves map
     final validDests = _position.legalMoves[move.from];
     final isLegal = validDests != null && validDests.has(move.to);
@@ -184,17 +181,33 @@ class AnalysisNotifier extends StateNotifier<AnalysisState> {
       final (_, san) = _position.makeSan(move);
       _position = _position.play(move) as Chess;
 
-      final newMoves = [...state.moves, move];
-      final List<String> newSanMoves = [...state.sanMoves, san];
+      // If we're at the end of the current line, just append
+      if (state.isAtEnd) {
+        final newMoves = [...state.moves, move];
+        final List<String> newSanMoves = [...state.sanMoves, san];
 
-      state = state.copyWith(
-        moves: newMoves,
-        sanMoves: newSanMoves,
-        currentMoveIndex: newMoves.length - 1,
-        currentFen: _position.fen,
-        lastMove: move,
-        validMoves: _convertToValidMoves(_position.legalMoves),
-      );
+        state = state.copyWith(
+          moves: newMoves,
+          sanMoves: newSanMoves,
+          currentMoveIndex: newMoves.length - 1,
+          currentFen: _position.fen,
+          lastMove: move,
+          validMoves: _convertToValidMoves(_position.legalMoves),
+        );
+      } else {
+        // If we're in the middle, create a new branch by truncating and appending
+        final newMoves = [...state.moves.sublist(0, state.currentMoveIndex + 1), move];
+        final List<String> newSanMoves = [...state.sanMoves.sublist(0, state.currentMoveIndex + 1), san];
+
+        state = state.copyWith(
+          moves: newMoves,
+          sanMoves: newSanMoves,
+          currentMoveIndex: newMoves.length - 1,
+          currentFen: _position.fen,
+          lastMove: move,
+          validMoves: _convertToValidMoves(_position.legalMoves),
+        );
+      }
     }
   }
 
