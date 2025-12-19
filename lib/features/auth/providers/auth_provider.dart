@@ -148,38 +148,11 @@ class AuthNotifier extends StateNotifier<AppAuthState> {
   }
 
   /// Load linked chess accounts from Supabase and update the profile
+  /// Note: Usernames are already stored in the profile table, so we just return the profile
   Future<UserProfile> _loadLinkedChessAccounts(String userId, UserProfile profile) async {
-    try {
-      final response = await SupabaseService.client.rpc(
-        'get_linked_chess_accounts',
-        params: {'p_user_id': userId},
-      );
-
-      if (response != null && response is List) {
-        String? chessComUsername;
-        String? lichessUsername;
-
-        for (final account in response) {
-          final platform = account['platform'] as String?;
-          final username = account['username'] as String?;
-
-          if (platform == 'chesscom' && username != null) {
-            chessComUsername = username;
-          } else if (platform == 'lichess' && username != null) {
-            lichessUsername = username;
-          }
-        }
-
-        debugPrint('Loaded linked accounts: Chess.com=$chessComUsername, Lichess=$lichessUsername');
-
-        return profile.copyWith(
-          chessComUsername: chessComUsername,
-          lichessUsername: lichessUsername,
-        );
-      }
-    } catch (e) {
-      debugPrint('Error loading linked chess accounts: $e');
-    }
+    // The usernames are already in the profile from the profiles table
+    // No need for a separate RPC call - just log and return
+    debugPrint('Using linked accounts from profile: Chess.com=${profile.chessComUsername}, Lichess=${profile.lichessUsername}');
     return profile;
   }
 

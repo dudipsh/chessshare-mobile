@@ -98,6 +98,7 @@ class GamesNotifier extends StateNotifier<GamesState> {
   final String? _chessComUsername;
   final String? _lichessUsername;
   Map<String, _GameReviewInfo> _reviewsCache = {};
+  bool _disposed = false;
 
   GamesNotifier(this._userId, this._chessComUsername, this._lichessUsername)
       : super(GamesState(
@@ -110,6 +111,15 @@ class GamesNotifier extends StateNotifier<GamesState> {
     _initialize();
   }
 
+  /// Check if the notifier is still mounted (not disposed)
+  bool get mounted => !_disposed;
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
+  }
+
   Future<void> _initialize() async {
     await _loadGameReviewsFromServer();
     // Auto-import if we have saved profiles
@@ -118,9 +128,11 @@ class GamesNotifier extends StateNotifier<GamesState> {
 
   /// Auto-import games from saved profiles
   Future<void> _autoImportIfNeeded() async {
+    if (!mounted) return;
+
     if (state.hasAutoImported) {
       // Clear loading state if already imported
-      if (state.isLoading) {
+      if (state.isLoading && mounted) {
         state = state.copyWith(isLoading: false);
       }
       return;
@@ -131,38 +143,46 @@ class GamesNotifier extends StateNotifier<GamesState> {
 
     // If no profiles to import from, clear loading state
     if (!hasChessCom && !hasLichess) {
-      state = state.copyWith(isLoading: false, hasAutoImported: true);
+      if (mounted) {
+        state = state.copyWith(isLoading: false, hasAutoImported: true);
+      }
       return;
     }
 
     // Import from Chess.com first if available
-    if (hasChessCom) {
+    if (hasChessCom && mounted) {
       await importFromChessCom(_chessComUsername!);
     }
 
     // Then import from Lichess if available
-    if (hasLichess) {
+    if (hasLichess && mounted) {
       await importFromLichess(_lichessUsername!);
     }
 
-    state = state.copyWith(isLoading: false, hasAutoImported: true);
+    if (mounted) {
+      state = state.copyWith(isLoading: false, hasAutoImported: true);
+    }
   }
 
   /// Refresh games from saved profiles
   Future<void> refreshFromSavedProfiles() async {
+    if (!mounted) return;
+
     final chessComUser = _chessComUsername;
     final lichessUser = _lichessUsername;
 
-    if (chessComUser != null && chessComUser.isNotEmpty) {
+    if (chessComUser != null && chessComUser.isNotEmpty && mounted) {
       await importFromChessCom(chessComUser);
     }
-    if (lichessUser != null && lichessUser.isNotEmpty) {
+    if (lichessUser != null && lichessUser.isNotEmpty && mounted) {
       await importFromLichess(lichessUser);
     }
   }
 
   /// Load game reviews from the server to know which games are analyzed
   Future<void> _loadGameReviewsFromServer() async {
+    if (!mounted) return;
+
     final userId = _userId;
     if (userId == null || userId.startsWith('guest_')) return;
 
@@ -172,6 +192,8 @@ class GamesNotifier extends StateNotifier<GamesState> {
           .from('game_reviews')
           .select('id, external_game_id, accuracy_white, accuracy_black, reviewed_at, personal_mistakes(count)')
           .eq('user_id', userId);
+
+      if (!mounted) return;
 
       for (final review in response) {
         final externalGameId = review['external_game_id'] as String?;
@@ -199,7 +221,7 @@ class GamesNotifier extends StateNotifier<GamesState> {
       debugPrint('Loaded ${_reviewsCache.length} game reviews from server');
 
       // Update any existing games with their analysis status
-      if (state.games.isNotEmpty) {
+      if (mounted && state.games.isNotEmpty) {
         _updateGamesWithAnalysisStatus();
       }
     } catch (e) {
@@ -209,6 +231,8 @@ class GamesNotifier extends StateNotifier<GamesState> {
 
   /// Update games with their analysis status from the cache
   void _updateGamesWithAnalysisStatus() {
+    if (!mounted) return;
+
     final updatedGames = state.games.map((game) {
       final review = _reviewsCache[game.externalId];
       if (review != null) {
@@ -236,10 +260,14 @@ class GamesNotifier extends StateNotifier<GamesState> {
       return game;
     }).toList();
 
-    state = state.copyWith(games: updatedGames);
+    if (mounted) {
+      state = state.copyWith(games: updatedGames);
+    }
   }
 
   Future<void> importFromChessCom(String username) async {
+    if (!mounted) return;
+
     state = state.copyWith(
       isImporting: true,
       importingPlatform: 'Chess.com',
@@ -250,6 +278,8 @@ class GamesNotifier extends StateNotifier<GamesState> {
     try {
       // Validate username
       final isValid = await ChessComApi.validateUsername(username);
+      if (!mounted) return;
+
       if (!isValid) {
         state = state.copyWith(
           isImporting: false,
@@ -260,6 +290,8 @@ class GamesNotifier extends StateNotifier<GamesState> {
 
       // Get archives
       final archives = await ChessComApi.getArchives(username);
+      if (!mounted) return;
+
       if (archives.isEmpty) {
         state = state.copyWith(
           isImporting: false,
@@ -274,13 +306,18 @@ class GamesNotifier extends StateNotifier<GamesState> {
 
       final allGames = <ChessGame>[];
       for (var i = 0; i < maxArchives.length; i++) {
+        if (!mounted) return;
         final archiveGames = await ChessComApi.getGamesFromArchive(
           maxArchives[i],
           username,
         );
         allGames.addAll(archiveGames);
-        state = state.copyWith(importProgress: i + 1);
+        if (mounted) {
+          state = state.copyWith(importProgress: i + 1);
+        }
       }
+
+      if (!mounted) return;
 
       // Merge with existing games (avoid duplicates)
       final existingIds = state.games.map((g) => g.externalId).toSet();
@@ -299,14 +336,18 @@ class GamesNotifier extends StateNotifier<GamesState> {
       // Update games with analysis status from cache
       _updateGamesWithAnalysisStatus();
     } catch (e) {
-      state = state.copyWith(
-        isImporting: false,
-        error: 'Failed to import: ${e.toString()}',
-      );
+      if (mounted) {
+        state = state.copyWith(
+          isImporting: false,
+          error: 'Failed to import: ${e.toString()}',
+        );
+      }
     }
   }
 
   Future<void> importFromLichess(String username) async {
+    if (!mounted) return;
+
     state = state.copyWith(
       isImporting: true,
       importingPlatform: 'Lichess',
@@ -317,6 +358,8 @@ class GamesNotifier extends StateNotifier<GamesState> {
     try {
       // Validate username
       final isValid = await LichessApi.validateUsername(username);
+      if (!mounted) return;
+
       if (!isValid) {
         state = state.copyWith(
           isImporting: false,
@@ -329,6 +372,7 @@ class GamesNotifier extends StateNotifier<GamesState> {
 
       // Get recent games
       final games = await LichessApi.getGames(username, max: 100);
+      if (!mounted) return;
 
       state = state.copyWith(importProgress: 100);
 
@@ -349,10 +393,12 @@ class GamesNotifier extends StateNotifier<GamesState> {
       // Update games with analysis status from cache
       _updateGamesWithAnalysisStatus();
     } catch (e) {
-      state = state.copyWith(
-        isImporting: false,
-        error: 'Failed to import: ${e.toString()}',
-      );
+      if (mounted) {
+        state = state.copyWith(
+          isImporting: false,
+          error: 'Failed to import: ${e.toString()}',
+        );
+      }
     }
   }
 

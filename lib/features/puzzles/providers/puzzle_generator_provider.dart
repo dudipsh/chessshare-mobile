@@ -155,9 +155,10 @@ class PuzzleGeneratorNotifier extends StateNotifier<PuzzleGeneratorState> {
     if (_userId == null || _userId.startsWith('guest_')) return;
 
     try {
+      // Note: get_all_user_puzzles uses authenticated user from session
       final response = await SupabaseService.client.rpc(
         'get_all_user_puzzles',
-        params: {'p_user_id': _userId},
+        params: {'p_limit': 100},
       );
 
       if (response != null && response is List) {
