@@ -175,45 +175,62 @@ class _StudyBoardScreenState extends ConsumerState<StudyBoardScreen> {
   }
 
   Widget _buildControlButtons(StudyBoardState state, bool isDark) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.grey.shade900 : Colors.grey.shade100,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
           // Back button
-          _buildControlButton(
-            icon: Icons.arrow_back_ios,
-            label: 'Back',
+          _buildNavButton(
+            icon: Icons.skip_previous_rounded,
+            tooltip: 'Back',
             onPressed: state.moveIndex > 0
                 ? () => ref.read(studyBoardProvider.notifier).goBack()
                 : null,
             isDark: isDark,
           ),
           // Hint button
-          _buildControlButton(
-            icon: Icons.lightbulb_outline,
-            label: 'Hint',
-            onPressed: () => ref.read(studyBoardProvider.notifier).showHint(),
+          _buildActionButton(
+            icon: Icons.lightbulb_rounded,
+            tooltip: 'Hint',
+            color: Colors.amber,
+            onPressed: state.state == StudyState.playing
+                ? () => ref.read(studyBoardProvider.notifier).showHint()
+                : null,
             isDark: isDark,
           ),
           // Flip board
-          _buildControlButton(
-            icon: Icons.swap_vert,
-            label: 'Flip',
+          _buildActionButton(
+            icon: Icons.sync_rounded,
+            tooltip: 'Flip',
+            color: AppColors.primary,
             onPressed: () => ref.read(studyBoardProvider.notifier).flipBoard(),
             isDark: isDark,
           ),
           // Reset
-          _buildControlButton(
-            icon: Icons.refresh,
-            label: 'Reset',
+          _buildActionButton(
+            icon: Icons.replay_rounded,
+            tooltip: 'Reset',
+            color: Colors.orange,
             onPressed: () => ref.read(studyBoardProvider.notifier).resetVariation(),
             isDark: isDark,
           ),
           // Next button
-          _buildControlButton(
-            icon: Icons.arrow_forward_ios,
-            label: 'Next',
+          _buildNavButton(
+            icon: Icons.skip_next_rounded,
+            tooltip: 'Next',
             onPressed: state.moveIndex < state.totalMoves
                 ? () => ref.read(studyBoardProvider.notifier).goForward()
                 : null,
@@ -224,40 +241,80 @@ class _StudyBoardScreenState extends ConsumerState<StudyBoardScreen> {
     );
   }
 
-  Widget _buildControlButton({
+  Widget _buildNavButton({
     required IconData icon,
-    required String label,
+    required String tooltip,
     required VoidCallback? onPressed,
     required bool isDark,
   }) {
     final isEnabled = onPressed != null;
-    final color = isEnabled
-        ? (isDark ? Colors.white : Colors.black87)
-        : (isDark ? Colors.white24 : Colors.grey.shade400);
 
-    return GestureDetector(
-      onTap: onPressed,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(10),
+          child: Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: isEnabled
+                  ? (isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.05))
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(
+              icon,
+              size: 28,
+              color: isEnabled
+                  ? (isDark ? Colors.white : Colors.black87)
+                  : (isDark ? Colors.white24 : Colors.grey.shade400),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActionButton({
+    required IconData icon,
+    required String tooltip,
+    required Color color,
+    required VoidCallback? onPressed,
+    required bool isDark,
+  }) {
+    final isEnabled = onPressed != null;
+
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(10),
+          child: Container(
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: (isDark ? Colors.white : Colors.black87).withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(12),
+              color: isEnabled
+                  ? color.withValues(alpha: 0.15)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(10),
+              border: isEnabled
+                  ? Border.all(color: color.withValues(alpha: 0.3), width: 1)
+                  : null,
             ),
-            child: Icon(icon, size: 20, color: color),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 11,
-              color: color,
+            child: Icon(
+              icon,
+              size: 22,
+              color: isEnabled
+                  ? color
+                  : (isDark ? Colors.white24 : Colors.grey.shade400),
             ),
           ),
-        ],
+        ),
       ),
     );
   }
@@ -462,45 +519,20 @@ class _StudyBoardScreenState extends ConsumerState<StudyBoardScreen> {
   }
 
   Widget _buildMarkerIcon(MarkerType type, double size) {
-    IconData icon;
-    Color color;
-
-    switch (type) {
-      case MarkerType.valid:
-        icon = Icons.check_circle;
-        color = AppColors.success;
-        break;
-      case MarkerType.invalid:
-        icon = Icons.cancel;
-        color = AppColors.error;
-        break;
-      case MarkerType.hint:
-        icon = Icons.help;
-        color = Colors.blue;
-        break;
-      case MarkerType.none:
-        return const SizedBox.shrink();
+    if (type == MarkerType.none) {
+      return const SizedBox.shrink();
     }
 
-    return Center(
-      child: Container(
-        width: size * 0.5,
-        height: size * 0.5,
-        decoration: BoxDecoration(
-          color: Colors.white,
-          shape: BoxShape.circle,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.3),
-              blurRadius: 4,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Icon(
-          icon,
-          size: size * 0.4,
-          color: color,
+    // Position marker in top-right corner (Chess.com/web style)
+    final markerSize = size * 0.4;
+
+    return Align(
+      alignment: Alignment.topRight,
+      child: Padding(
+        padding: EdgeInsets.all(markerSize * 0.1),
+        child: CustomPaint(
+          size: Size(markerSize, markerSize),
+          painter: _StudyMarkerPainter(type),
         ),
       ),
     );
@@ -674,5 +706,116 @@ class _StudyBoardScreenState extends ConsumerState<StudyBoardScreen> {
       case StudyState.completed:
         return 'Excellent! Line completed.';
     }
+  }
+}
+
+/// Custom painter for study mode markers (V/X style like web)
+class _StudyMarkerPainter extends CustomPainter {
+  final MarkerType type;
+
+  _StudyMarkerPainter(this.type);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = size.width / 2 - 1;
+
+    // Draw shadow
+    final shadowPaint = Paint()
+      ..color = Colors.black.withValues(alpha: 0.25)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2);
+    canvas.drawCircle(Offset(center.dx, center.dy + 1.5), radius, shadowPaint);
+
+    // Draw main circle
+    Color bgColor;
+    Color borderColor;
+
+    switch (type) {
+      case MarkerType.valid:
+        bgColor = const Color(0xFF22C55E); // Green
+        borderColor = const Color(0xFF16A34A);
+        break;
+      case MarkerType.invalid:
+        bgColor = const Color(0xFFEF4444); // Red
+        borderColor = const Color(0xFFDC2626);
+        break;
+      case MarkerType.hint:
+        bgColor = const Color(0xFFFACC15); // Yellow
+        borderColor = const Color(0xFFEAB308);
+        break;
+      case MarkerType.none:
+        return;
+    }
+
+    final bgPaint = Paint()..color = bgColor;
+    canvas.drawCircle(center, radius, bgPaint);
+
+    final borderPaint = Paint()
+      ..color = borderColor
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0;
+    canvas.drawCircle(center, radius, borderPaint);
+
+    // Draw symbol
+    final symbolPaint = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = size.width * 0.12
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+
+    switch (type) {
+      case MarkerType.valid:
+        // Checkmark
+        final path = Path();
+        path.moveTo(center.dx - size.width * 0.22, center.dy);
+        path.lineTo(center.dx - size.width * 0.05, center.dy + size.height * 0.15);
+        path.lineTo(center.dx + size.width * 0.22, center.dy - size.height * 0.15);
+        canvas.drawPath(path, symbolPaint);
+        break;
+      case MarkerType.invalid:
+        // X mark
+        final offset = size.width * 0.18;
+        canvas.drawLine(
+          Offset(center.dx - offset, center.dy - offset),
+          Offset(center.dx + offset, center.dy + offset),
+          symbolPaint,
+        );
+        canvas.drawLine(
+          Offset(center.dx + offset, center.dy - offset),
+          Offset(center.dx - offset, center.dy + offset),
+          symbolPaint,
+        );
+        break;
+      case MarkerType.hint:
+        // Question mark for hint
+        final textPainter = TextPainter(
+          text: TextSpan(
+            text: '?',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: size.width * 0.5,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          textDirection: TextDirection.ltr,
+        );
+        textPainter.layout();
+        textPainter.paint(
+          canvas,
+          Offset(
+            center.dx - textPainter.width / 2,
+            center.dy - textPainter.height / 2,
+          ),
+        );
+        break;
+      case MarkerType.none:
+        break;
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _StudyMarkerPainter oldDelegate) {
+    return oldDelegate.type != type;
   }
 }

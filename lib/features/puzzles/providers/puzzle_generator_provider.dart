@@ -11,31 +11,39 @@ class PuzzleGeneratorState {
   final bool isGenerating;
   final bool isLoading;
   final List<Puzzle> puzzles;
+  final List<Puzzle> difficultPuzzles; // Puzzles user struggled with
   final String? error;
   final double progress;
+  final int totalPuzzleCount;
 
   const PuzzleGeneratorState({
     this.isGenerating = false,
     this.isLoading = false,
     this.puzzles = const [],
+    this.difficultPuzzles = const [],
     this.error,
     this.progress = 0,
+    this.totalPuzzleCount = 0,
   });
 
   PuzzleGeneratorState copyWith({
     bool? isGenerating,
     bool? isLoading,
     List<Puzzle>? puzzles,
+    List<Puzzle>? difficultPuzzles,
     String? error,
     double? progress,
+    int? totalPuzzleCount,
     bool clearError = false,
   }) {
     return PuzzleGeneratorState(
       isGenerating: isGenerating ?? this.isGenerating,
       isLoading: isLoading ?? this.isLoading,
       puzzles: puzzles ?? this.puzzles,
+      difficultPuzzles: difficultPuzzles ?? this.difficultPuzzles,
       error: clearError ? null : (error ?? this.error),
       progress: progress ?? this.progress,
+      totalPuzzleCount: totalPuzzleCount ?? this.totalPuzzleCount,
     );
   }
 }
@@ -46,14 +54,31 @@ class PuzzleGeneratorNotifier extends StateNotifier<PuzzleGeneratorState> {
   final String? _userId;
 
   PuzzleGeneratorNotifier(this._userId) : super(const PuzzleGeneratorState()) {
-    _loadPuzzlesFromServer();
+    _loadAllPuzzles();
   }
 
-  /// Load puzzles from the server
-  Future<void> _loadPuzzlesFromServer() async {
+  /// Load all puzzles (all user puzzles + difficult puzzles)
+  Future<void> _loadAllPuzzles() async {
     if (_userId == null || _userId.startsWith('guest_')) return;
 
     state = state.copyWith(isLoading: true);
+
+    try {
+      // Load both in parallel
+      await Future.wait([
+        _loadPuzzlesFromServer(),
+        _loadDifficultPuzzles(),
+      ]);
+    } catch (e) {
+      debugPrint('Error loading puzzles: $e');
+    }
+
+    state = state.copyWith(isLoading: false);
+  }
+
+  /// Load all user puzzles from the server
+  Future<void> _loadPuzzlesFromServer() async {
+    if (_userId == null || _userId.startsWith('guest_')) return;
 
     try {
       final response = await SupabaseService.client.rpc(
@@ -62,30 +87,65 @@ class PuzzleGeneratorNotifier extends StateNotifier<PuzzleGeneratorState> {
       );
 
       if (response != null && response is List) {
-        final puzzles = response.map<Puzzle>((data) {
-          return Puzzle(
-            id: data['id']?.toString() ?? '',
-            fen: data['fen'] as String? ?? '',
-            solution: _parseSolution(data['solution_uci'] as String?),
-            solutionSan: _parseSolution(data['solution_san'] as String?),
-            rating: data['rating'] as int? ?? 1500,
-            theme: _parseTheme(data['theme'] as String?),
-            description: data['classification'] as String?,
-          );
-        }).where((p) => p.fen.isNotEmpty && p.solution.isNotEmpty).toList();
-
+        final puzzles = _parsePuzzles(response);
         state = state.copyWith(
-          isLoading: false,
           puzzles: puzzles,
+          totalPuzzleCount: puzzles.length,
         );
         debugPrint('Loaded ${puzzles.length} puzzles from server');
-      } else {
-        state = state.copyWith(isLoading: false);
       }
     } catch (e) {
       debugPrint('Error loading puzzles from server: $e');
-      state = state.copyWith(isLoading: false);
     }
+  }
+
+  /// Load difficult puzzles (puzzles user struggled with)
+  Future<void> _loadDifficultPuzzles() async {
+    if (_userId == null || _userId.startsWith('guest_')) return;
+
+    try {
+      final response = await SupabaseService.client.rpc(
+        'get_difficult_mistakes',
+        params: {'p_limit': 50},
+      );
+
+      if (response != null && response is List) {
+        final puzzles = _parsePuzzles(response);
+        state = state.copyWith(difficultPuzzles: puzzles);
+        debugPrint('Loaded ${puzzles.length} difficult puzzles');
+      }
+    } catch (e) {
+      debugPrint('Error loading difficult puzzles: $e');
+    }
+  }
+
+  /// Parse puzzle data from API response
+  List<Puzzle> _parsePuzzles(List<dynamic> data) {
+    return data.map<Puzzle>((item) {
+      // Handle solution_sequence if available
+      List<String> solution = _parseSolution(item['solution_uci'] as String?);
+      List<String> solutionSan = _parseSolution(item['solution_san'] as String?);
+
+      // If solution_sequence is available, use that for better puzzle experience
+      if (item['solution_sequence'] != null && item['solution_sequence'] is List) {
+        final sequence = item['solution_sequence'] as List;
+        solution = sequence
+            .where((s) => s['isUserMove'] == true)
+            .map<String>((s) => s['move'] as String)
+            .toList();
+      }
+
+      return Puzzle(
+        id: item['id']?.toString() ?? '',
+        fen: item['fen'] as String? ?? '',
+        solution: solution,
+        solutionSan: solutionSan,
+        rating: item['puzzle_rating'] as int? ?? item['rating'] as int? ?? 1500,
+        theme: _parseTheme(item['marker_type'] as String? ?? item['theme'] as String?),
+        description: item['marker_type'] as String? ?? item['classification'] as String?,
+        isPositive: item['is_positive_puzzle'] as bool? ?? false,
+      );
+    }).where((p) => p.fen.isNotEmpty && p.solution.isNotEmpty).toList();
   }
 
   List<String> _parseSolution(String? solution) {
@@ -105,6 +165,15 @@ class PuzzleGeneratorNotifier extends StateNotifier<PuzzleGeneratorState> {
         return PuzzleTheme.pin;
       case 'sacrifice':
         return PuzzleTheme.sacrifice;
+      case 'brilliant':
+        return PuzzleTheme.sacrifice; // Brilliant moves often involve sacrifices
+      case 'great':
+        return PuzzleTheme.tactics;
+      case 'blunder':
+      case 'mistake':
+      case 'miss':
+      case 'inaccuracy':
+        return PuzzleTheme.tactics;
       default:
         return PuzzleTheme.tactics;
     }
@@ -112,7 +181,7 @@ class PuzzleGeneratorNotifier extends StateNotifier<PuzzleGeneratorState> {
 
   /// Refresh puzzles from server
   Future<void> refresh() async {
-    await _loadPuzzlesFromServer();
+    await _loadAllPuzzles();
   }
 
   /// Generate puzzles from a PGN game

@@ -9,6 +9,7 @@ class Puzzle {
   final int rating;
   final PuzzleTheme theme;
   final String? description;
+  final bool isPositive; // true for brilliant/great tactical finds
 
   const Puzzle({
     required this.id,
@@ -18,6 +19,7 @@ class Puzzle {
     this.rating = 1500,
     this.theme = PuzzleTheme.tactics,
     this.description,
+    this.isPositive = false,
   });
 
   /// Get the side to move in this puzzle
@@ -47,6 +49,7 @@ class Puzzle {
     int? rating,
     PuzzleTheme? theme,
     String? description,
+    bool? isPositive,
   }) {
     return Puzzle(
       id: id ?? this.id,
@@ -56,6 +59,7 @@ class Puzzle {
       rating: rating ?? this.rating,
       theme: theme ?? this.theme,
       description: description ?? this.description,
+      isPositive: isPositive ?? this.isPositive,
     );
   }
 }

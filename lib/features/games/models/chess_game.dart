@@ -23,6 +23,7 @@ class ChessGame {
   final double? accuracyWhite;
   final double? accuracyBlack;
   final bool isAnalyzed;
+  final int puzzleCount; // Number of puzzles generated from analysis
 
   ChessGame({
     required this.id,
@@ -42,6 +43,7 @@ class ChessGame {
     this.accuracyWhite,
     this.accuracyBlack,
     this.isAnalyzed = false,
+    this.puzzleCount = 0,
   });
 
   double? get playerAccuracy =>
@@ -228,6 +230,7 @@ class ChessGame {
       'accuracy_white': accuracyWhite,
       'accuracy_black': accuracyBlack,
       'is_analyzed': isAnalyzed,
+      'puzzle_count': puzzleCount,
     };
   }
 }

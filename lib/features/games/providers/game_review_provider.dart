@@ -2,7 +2,6 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/api/supabase_service.dart';
 import '../../../core/database/local_database.dart';
@@ -34,8 +33,12 @@ class GameReviewState {
 
   AnalyzedMove? get currentMove {
     if (review == null || review!.moves.isEmpty) return null;
-    if (currentMoveIndex < 0 || currentMoveIndex >= review!.moves.length) return null;
-    return review!.moves[currentMoveIndex];
+    // currentMoveIndex represents how many moves have been played
+    // So the current move (just played) is at index currentMoveIndex - 1
+    if (currentMoveIndex <= 0) return null; // At starting position, no move played yet
+    final moveIndex = currentMoveIndex - 1;
+    if (moveIndex >= review!.moves.length) return null;
+    return review!.moves[moveIndex];
   }
 
   String get currentFen {

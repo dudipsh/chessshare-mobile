@@ -167,14 +167,24 @@ class GamesNotifier extends StateNotifier<GamesState> {
     if (userId == null || userId.startsWith('guest_')) return;
 
     try {
+      // Fetch game reviews with personal_mistakes count
       final response = await SupabaseService.client
           .from('game_reviews')
-          .select('id, external_game_id, accuracy_white, accuracy_black, reviewed_at')
+          .select('id, external_game_id, accuracy_white, accuracy_black, reviewed_at, personal_mistakes(count)')
           .eq('user_id', userId);
 
       for (final review in response) {
         final externalGameId = review['external_game_id'] as String?;
         if (externalGameId != null) {
+          // Extract puzzle count from personal_mistakes aggregate
+          int puzzleCount = 0;
+          if (review['personal_mistakes'] != null) {
+            final mistakes = review['personal_mistakes'];
+            if (mistakes is List && mistakes.isNotEmpty) {
+              puzzleCount = (mistakes[0]['count'] as num?)?.toInt() ?? 0;
+            }
+          }
+
           _reviewsCache[externalGameId] = _GameReviewInfo(
             id: review['id'] as String,
             accuracyWhite: (review['accuracy_white'] as num?)?.toDouble(),
@@ -182,6 +192,7 @@ class GamesNotifier extends StateNotifier<GamesState> {
             reviewedAt: review['reviewed_at'] != null
                 ? DateTime.parse(review['reviewed_at'] as String)
                 : null,
+            puzzleCount: puzzleCount,
           );
         }
       }
@@ -219,6 +230,7 @@ class GamesNotifier extends StateNotifier<GamesState> {
           accuracyWhite: review.accuracyWhite,
           accuracyBlack: review.accuracyBlack,
           isAnalyzed: true,
+          puzzleCount: review.puzzleCount,
         );
       }
       return game;
@@ -361,12 +373,14 @@ class _GameReviewInfo {
   final double? accuracyWhite;
   final double? accuracyBlack;
   final DateTime? reviewedAt;
+  final int puzzleCount;
 
   _GameReviewInfo({
     required this.id,
     this.accuracyWhite,
     this.accuracyBlack,
     this.reviewedAt,
+    this.puzzleCount = 0,
   });
 }
 

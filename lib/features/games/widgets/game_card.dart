@@ -171,6 +171,29 @@ class GameCard extends StatelessWidget {
                         fontSize: 12,
                       ),
                     ),
+                    // Show puzzle count if there are puzzles
+                    if (game.puzzleCount > 0) ...[
+                      const SizedBox(height: 2),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.extension,
+                            size: 12,
+                            color: AppColors.accent,
+                          ),
+                          const SizedBox(width: 2),
+                          Text(
+                            '${game.puzzleCount}',
+                            style: TextStyle(
+                              color: AppColors.accent,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ],
                 ),
               ] else ...[
@@ -180,7 +203,7 @@ class GameCard extends StatelessWidget {
                     vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color: AppColors.accent.withOpacity(0.1),
+                    color: AppColors.accent.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: const Text(
