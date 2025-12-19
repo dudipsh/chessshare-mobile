@@ -1,18 +1,57 @@
 import 'package:flutter/material.dart';
 
 /// Classification of a chess move based on engine analysis
+/// Thresholds match the web version for consistency
 enum MoveClassification {
   book,       // Opening book move
-  brilliant,  // Exceptional move finding a tactic
-  great,      // Very accurate move (CPL 0-10)
-  best,       // Top engine move
-  good,       // Good move (CPL 10-25)
-  inaccuracy, // Small mistake (CPL 25-50)
-  mistake,    // Significant mistake (CPL 50-100)
-  miss,       // Missed a winning opportunity
-  blunder,    // Major mistake (CPL > 100)
+  brilliant,  // Exceptional move with sacrifice
+  great,      // Forcing check move ≤15cp loss
+  best,       // Top engine move (≤15cp loss)
+  good,       // Good move (15-35cp loss)
+  inaccuracy, // Small mistake (35-60cp loss)
+  miss,       // Missed opportunity (60-100cp loss)
+  mistake,    // Significant mistake (100-200cp loss)
+  blunder,    // Major mistake (>200cp loss)
   forced,     // Only legal move
   none,       // Unclassified
+}
+
+/// Thresholds for move classification (in centipawns)
+/// Matches web version: src/modules/chess-v3/analytics/stores/game-review/constants.ts
+class ClassificationThresholds {
+  static const int best = 15;        // 0-15cp = Best move
+  static const int good = 35;        // 15-35cp = Good move
+  static const int inaccuracy = 60;  // 35-60cp = Inaccuracy (~0.5 pawn)
+  static const int miss = 100;       // 60-100cp = Miss (missed opportunity)
+  static const int mistake = 200;    // 100-200cp = Mistake (~1-2 pawns)
+  // >200cp = Blunder
+
+  /// For brilliant move detection
+  static const int brilliantMaxCpl = 25;
+  static const int brilliantMinImprovement = 40;
+  static const int brilliantMaxEvalBefore = 450;
+  static const int brilliantMinEvalBefore = -80;
+  static const int brilliantMinSacrifice = 150;
+
+  /// For position forgiveness
+  static const int dominantThreshold = 500;
+  static const int stillWinningThreshold = 400;
+}
+
+/// Game phase multipliers for forgiveness
+/// Applied to centipawn loss based on move number
+class GamePhaseForgiveness {
+  static const double opening = 0.85;      // Moves 1-6: 15% forgiveness
+  static const double postOpening = 0.95;  // Moves 7-20: 5% forgiveness
+  static const double middlegame = 1.0;    // Moves 21-25: NO forgiveness
+  static const double endgame = 0.9;       // Moves 26+: 10% forgiveness
+
+  static double getMultiplier(int moveNumber) {
+    if (moveNumber <= 6) return opening;
+    if (moveNumber <= 20) return postOpening;
+    if (moveNumber <= 25) return middlegame;
+    return endgame;
+  }
 }
 
 extension MoveClassificationExtension on MoveClassification {
@@ -39,6 +78,34 @@ extension MoveClassificationExtension on MoveClassification {
         return 'Blunder';
       case MoveClassification.forced:
         return 'Forced';
+      case MoveClassification.none:
+        return '';
+    }
+  }
+
+  /// Symbol for the classification (matches Chess.com style)
+  String get symbol {
+    switch (this) {
+      case MoveClassification.book:
+        return '📖';
+      case MoveClassification.brilliant:
+        return '!!';
+      case MoveClassification.great:
+        return '!';
+      case MoveClassification.best:
+        return '✓';
+      case MoveClassification.good:
+        return '';
+      case MoveClassification.inaccuracy:
+        return '?!';
+      case MoveClassification.miss:
+        return '×';
+      case MoveClassification.mistake:
+        return '?';
+      case MoveClassification.blunder:
+        return '??';
+      case MoveClassification.forced:
+        return '□';
       case MoveClassification.none:
         return '';
     }
@@ -115,9 +182,21 @@ extension MoveClassificationExtension on MoveClassification {
     }
   }
 
+  /// Whether this is a positive puzzle-worthy move (brilliant/great finds)
+  bool get isPositivePuzzle {
+    switch (this) {
+      case MoveClassification.brilliant:
+      case MoveClassification.great:
+        return true;
+      default:
+        return false;
+    }
+  }
+
   /// Whether this is a mistake that should generate a puzzle
   bool get isPuzzleWorthy {
     switch (this) {
+      case MoveClassification.inaccuracy:
       case MoveClassification.mistake:
       case MoveClassification.blunder:
       case MoveClassification.miss:
@@ -127,24 +206,59 @@ extension MoveClassificationExtension on MoveClassification {
     }
   }
 
-  /// Centipawn loss threshold for this classification
+  /// Classify move based on centipawn loss
+  /// Uses web thresholds: BEST ≤15, GOOD ≤35, INACCURACY ≤60, MISS ≤100, MISTAKE ≤200, BLUNDER >200
   static MoveClassification fromCentipawnLoss(
     int cpl, {
     bool isBestMove = false,
     bool isBookMove = false,
     bool isBrilliant = false,
+    bool isGreat = false,
     bool isMiss = false,
     bool isForced = false,
+    int? moveNumber,
+    int? evalBefore,
+    int? evalAfter,
+    bool isCheck = false,
   }) {
+    // Special classifications first (order matters)
     if (isBookMove) return MoveClassification.book;
     if (isBrilliant) return MoveClassification.brilliant;
     if (isForced) return MoveClassification.forced;
+
+    // Apply game phase forgiveness if move number provided
+    int adjustedCpl = cpl;
+    if (moveNumber != null) {
+      final multiplier = GamePhaseForgiveness.getMultiplier(moveNumber);
+      adjustedCpl = (cpl * multiplier).round();
+    }
+
+    // Position forgiveness: if dominantly winning before AND after
+    if (evalBefore != null && evalAfter != null) {
+      final dominantBefore = evalBefore >= ClassificationThresholds.dominantThreshold;
+      final stillWinning = evalAfter >= ClassificationThresholds.stillWinningThreshold;
+      if (dominantBefore && stillWinning && adjustedCpl <= ClassificationThresholds.miss) {
+        return MoveClassification.good;
+      }
+    }
+
+    // Great move: forcing check with ≤15cp loss
+    if (isGreat || (isCheck && adjustedCpl <= ClassificationThresholds.best)) {
+      return MoveClassification.great;
+    }
+
+    // Miss: specifically for missed tactical opportunities
     if (isMiss) return MoveClassification.miss;
-    if (isBestMove || cpl == 0) return MoveClassification.best;
-    if (cpl <= 10) return MoveClassification.great;
-    if (cpl <= 25) return MoveClassification.good;
-    if (cpl <= 50) return MoveClassification.inaccuracy;
-    if (cpl <= 100) return MoveClassification.mistake;
+
+    // Best move check
+    if (isBestMove || adjustedCpl == 0) return MoveClassification.best;
+
+    // Threshold-based classification (web thresholds)
+    if (adjustedCpl <= ClassificationThresholds.best) return MoveClassification.best;
+    if (adjustedCpl <= ClassificationThresholds.good) return MoveClassification.good;
+    if (adjustedCpl <= ClassificationThresholds.inaccuracy) return MoveClassification.inaccuracy;
+    if (adjustedCpl <= ClassificationThresholds.miss) return MoveClassification.miss;
+    if (adjustedCpl <= ClassificationThresholds.mistake) return MoveClassification.mistake;
     return MoveClassification.blunder;
   }
 

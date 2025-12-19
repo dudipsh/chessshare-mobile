@@ -11,6 +11,8 @@ import '../models/game_review.dart';
 import '../models/move_classification.dart';
 import '../providers/game_review_provider.dart';
 import '../widgets/move_markers.dart';
+import 'practice_mistakes_screen.dart';
+import 'play_vs_stockfish_screen.dart';
 
 class GameReviewScreen extends ConsumerStatefulWidget {
   final ChessGame game;
@@ -191,6 +193,9 @@ class _GameReviewScreenState extends ConsumerState<GameReviewScreen> {
 
         // Navigation controls
         _buildNavigationControls(state),
+
+        // Action buttons (Training Mode + Play vs Stockfish)
+        _buildActionButtons(state, isDark),
 
         SizedBox(height: MediaQuery.of(context).padding.bottom + 8),
       ],
@@ -655,6 +660,9 @@ class _GameReviewScreenState extends ConsumerState<GameReviewScreen> {
   }
 
   Widget _buildNavigationControls(GameReviewState state) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
@@ -675,12 +683,15 @@ class _GameReviewScreenState extends ConsumerState<GameReviewScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             decoration: BoxDecoration(
-              color: Colors.grey[200],
+              color: isDark ? Colors.grey[800] : Colors.grey[200],
               borderRadius: BorderRadius.circular(20),
             ),
             child: Text(
               '${state.currentMoveIndex}/${state.review?.moves.length ?? 0}',
-              style: const TextStyle(fontWeight: FontWeight.w500),
+              style: TextStyle(
+                fontWeight: FontWeight.w500,
+                color: isDark ? Colors.white : Colors.black87,
+              ),
             ),
           ),
           IconButton(
@@ -696,6 +707,125 @@ class _GameReviewScreenState extends ConsumerState<GameReviewScreen> {
             },
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildActionButtons(GameReviewState state, bool isDark) {
+    if (state.review == null) return const SizedBox.shrink();
+
+    // Count mistakes for training mode
+    final playerMistakes = state.review!.moves
+        .where((m) => m.color == widget.game.playerColor)
+        .where((m) => m.classification.isPuzzleWorthy)
+        .length;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        children: [
+          // Training Mode button (Mistakes to Practice)
+          Expanded(
+            child: ElevatedButton.icon(
+              onPressed: playerMistakes > 0
+                  ? () => _navigateToPracticeMistakes(state)
+                  : null,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: MoveClassification.mistake.color,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+              icon: const Icon(Icons.fitness_center, size: 20),
+              label: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Practice Mistakes',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                  ),
+                  Text(
+                    '$playerMistakes puzzle${playerMistakes != 1 ? 's' : ''}',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.white.withValues(alpha: 0.8),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          // Play vs Stockfish button
+          Expanded(
+            child: ElevatedButton.icon(
+              onPressed: () => _navigateToPlayVsStockfish(state),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+              icon: const Icon(Icons.smart_toy, size: 20),
+              label: const Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Play vs Engine',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                  ),
+                  Text(
+                    'From position',
+                    style: TextStyle(fontSize: 11),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _navigateToPracticeMistakes(GameReviewState state) {
+    if (state.review == null) return;
+
+    // Get all player mistakes
+    final mistakes = state.review!.moves
+        .where((m) => m.color == widget.game.playerColor)
+        .where((m) => m.classification.isPuzzleWorthy)
+        .toList();
+
+    if (mistakes.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No mistakes to practice!')),
+      );
+      return;
+    }
+
+    // Navigate to practice screen with mistakes
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => PracticeMistakesScreen(
+          mistakes: mistakes,
+          game: widget.game,
+          reviewId: state.review!.id,
+        ),
+      ),
+    );
+  }
+
+  void _navigateToPlayVsStockfish(GameReviewState state) {
+    // Get current position FEN
+    final currentFen = _position.fen;
+
+    // Navigate to play vs Stockfish screen
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => PlayVsStockfishScreen(
+          startFen: currentFen,
+          playerColor: widget.game.playerColor == 'white' ? Side.white : Side.black,
+        ),
       ),
     );
   }

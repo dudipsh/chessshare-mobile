@@ -6,12 +6,14 @@ import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../core/database/local_database.dart';
+import '../../../core/services/global_stockfish_manager.dart';
 import '../../analysis/services/stockfish_service.dart';
 import '../../analysis/services/uci_parser.dart';
 import '../models/analyzed_move.dart';
 import '../models/chess_game.dart';
 import '../models/game_review.dart';
 import '../models/move_classification.dart';
+import 'book_move_detector.dart';
 
 /// Configuration for game analysis
 class AnalysisConfig {
@@ -68,14 +70,23 @@ class AnalysisConfig {
 
 /// Service for analyzing chess games with Stockfish
 class GameAnalysisService {
+  static const _ownerId = 'GameAnalysisService';
+
   StockfishService? _stockfish;
   final AnalysisConfig config;
 
   bool _isAnalyzing = false;
+  bool _isCancelled = false;
   StreamController<AnalysisProgress>? _progressController;
 
   // Cache for position evaluations to avoid re-analyzing
   final Map<String, _EvalResult> _evalCache = {};
+
+  // Book move detector
+  final BookMoveDetector _bookMoveDetector = BookMoveDetector();
+
+  // Cache for book moves (move index -> is book)
+  final Map<int, bool> _bookMoveCache = {};
 
   GameAnalysisService({
     this.config = AnalysisConfig.fast,
@@ -86,6 +97,14 @@ class GameAnalysisService {
 
   /// Whether analysis is in progress
   bool get isAnalyzing => _isAnalyzing;
+
+  /// Cancel the current analysis
+  void cancelAnalysis() {
+    if (_isAnalyzing) {
+      debugPrint('GameAnalysisService: Cancelling analysis...');
+      _isCancelled = true;
+    }
+  }
 
   /// Analyze a game and return the review
   Future<GameReview> analyzeGame({
@@ -98,15 +117,19 @@ class GameAnalysisService {
     }
 
     _isAnalyzing = true;
+    _isCancelled = false;
     _progressController = StreamController<AnalysisProgress>.broadcast();
     _evalCache.clear();
+    _bookMoveCache.clear();
 
     final reviewId = const Uuid().v4();
     final createdAt = DateTime.now();
 
     try {
-      // Initialize Stockfish if needed
-      _stockfish ??= StockfishService(
+      // Acquire Stockfish from global manager
+      _reportProgress(0, 'Initializing engine...', onProgress);
+      _stockfish = await GlobalStockfishManager.instance.acquire(
+        _ownerId,
         config: StockfishConfig(
           multiPv: 1,
           hashSizeMb: config.hashSizeMb,
@@ -114,11 +137,6 @@ class GameAnalysisService {
           maxDepth: config.criticalDepth,
         ),
       );
-
-      if (_stockfish!.state == StockfishState.uninitialized) {
-        _reportProgress(0, 'Initializing engine...', onProgress);
-        await _stockfish!.initialize();
-      }
 
       // Parse the PGN to get positions
       _reportProgress(0, 'Parsing game...', onProgress);
@@ -141,13 +159,17 @@ class GameAnalysisService {
 
       // Analyze each position - optimized with caching and time limits
       final analyzedMoves = <AnalyzedMove>[];
-      int? previousEval;
-      int? previousMate;
 
       // First pass: get all evaluations (using cache)
       _reportProgress(0, 'Evaluating positions...', onProgress);
 
       for (var i = 0; i < positions.length; i++) {
+        // Check for cancellation
+        if (_isCancelled) {
+          debugPrint('GameAnalysisService: Analysis cancelled at move $i');
+          throw StateError('Analysis cancelled');
+        }
+
         final pos = positions[i];
         final progress = (i + 1) / positions.length;
 
@@ -162,48 +184,125 @@ class GameAnalysisService {
           );
         }
 
-        // Analyze position before the move (uses cache)
-        final evalResult = await _analyzePositionFast(pos.fenBefore, isCritical: i < 5);
+        // Check for book move using ECO database
+        final bookResult = _bookMoveDetector.isBookMove(
+          pos.fenBefore,
+          pos.uci,
+          i + 1,
+          moveSan: pos.san,
+        );
+        final isBookMove = bookResult.isBook;
+        _bookMoveCache[i] = isBookMove;
 
-        // Calculate centipawn loss
-        final currentEval = evalResult.centipawns;
-        final currentMate = evalResult.mateInMoves;
+        // If it's a book move, skip engine analysis
+        if (isBookMove) {
+          final analyzedMove = AnalyzedMove(
+            id: const Uuid().v4(),
+            gameReviewId: reviewId,
+            moveNumber: i + 1,
+            color: pos.color,
+            fen: pos.fenBefore,
+            san: pos.san,
+            uci: pos.uci,
+            classification: MoveClassification.book,
+            evalBefore: null,
+            evalAfter: null,
+            mateBefore: null,
+            mateAfter: null,
+            bestMove: pos.san,
+            bestMoveUci: pos.uci,
+            centipawnLoss: 0,
+            hasPuzzle: false,
+          );
+          analyzedMoves.add(analyzedMove);
+          continue;
+        }
 
+        // Analyze position BEFORE the move
+        final evalBefore = await _analyzePositionFast(pos.fenBefore, isCritical: i < 5 || i > positions.length - 5);
+
+        // Check cancellation after engine analysis
+        if (_isCancelled) {
+          debugPrint('GameAnalysisService: Analysis cancelled at move $i');
+          throw StateError('Analysis cancelled');
+        }
+
+        // Analyze position AFTER the move
+        final evalAfter = await _analyzePositionFast(pos.fenAfter, isCritical: false);
+
+        final evalBeforeCp = evalBefore.centipawns;
+        final evalAfterCp = evalAfter.centipawns;
+        final mateBefore = evalBefore.mateInMoves;
+        final mateAfter = evalAfter.mateInMoves;
+
+        // Get best move for this position
+        final bestMoveResult = await _getBestMoveFast(pos.fenBefore);
+        final bestMoveUci = bestMoveResult.uci;
+        final bestMoveSan = bestMoveResult.san;
+
+        // Check if the played move is the best move
+        final isBestMove = bestMoveUci == pos.uci;
+
+        // Calculate centipawn loss properly:
+        // CPL = eval if best move was played - eval after actual move
+        // For White: higher eval is better, so loss = best_eval - actual_eval
+        // For Black: lower eval is better (from engine perspective which is always White POV)
         int cpl = 0;
-        if (previousEval != null && currentEval != null) {
-          // Calculate loss from the player's perspective
+        if (evalBeforeCp != null && evalAfterCp != null && !isBestMove) {
           if (pos.color == 'white') {
-            cpl = (previousEval - currentEval).clamp(0, 999);
+            // White wants higher eval. If eval dropped, that's a loss.
+            // Before: eval of position before move (what White could maintain with best play)
+            // After: eval after White's move (what White actually got)
+            // Loss = what we had - what we got (if negative, no loss)
+            cpl = (evalBeforeCp - evalAfterCp).clamp(0, 999);
           } else {
-            cpl = (currentEval - previousEval).clamp(0, 999);
+            // Black wants lower eval (engine gives positive = good for White)
+            // If eval increased after Black's move, that's bad for Black
+            // Loss = what we got - what we had (if eval went up, Black lost advantage)
+            cpl = (evalAfterCp - evalBeforeCp).clamp(0, 999);
           }
         }
 
-        // Check for missed wins
+        // Check for missed wins (had mate, now doesn't)
         bool isMiss = false;
-        if (previousMate != null && previousMate > 0 && currentMate == null) {
-          isMiss = true; // Had mate, now doesn't
+        if (mateBefore != null && mateAfter == null) {
+          // Had a forced mate before, but not after the move
+          if (pos.color == 'white' && mateBefore > 0) {
+            isMiss = true; // White had mate in N, now doesn't
+          } else if (pos.color == 'black' && mateBefore < 0) {
+            isMiss = true; // Black had mate in N (negative), now doesn't
+          }
         }
 
-        // Only get best move if the move might not be best
-        String? bestMoveUci;
-        String? bestMoveSan;
-        if (cpl > 10 || isMiss || pos.legalMoveCount > 1) {
-          final bestMoveResult = await _getBestMoveFast(pos.fenBefore);
-          bestMoveUci = bestMoveResult.uci;
-          bestMoveSan = bestMoveResult.san;
-        } else {
-          bestMoveUci = pos.uci;
-          bestMoveSan = pos.san;
-        }
+        // Check if this is a check move (for Great move detection)
+        final isCheck = pos.san.contains('+') || pos.san.contains('#');
 
-        // Classify the move
+        // Check for brilliant move (sacrifice with good result)
+        final isBrilliant = _detectBrilliantMove(
+          san: pos.san,
+          cpl: cpl,
+          evalBefore: evalBeforeCp,
+          evalAfter: evalAfterCp,
+          legalMoveCount: pos.legalMoveCount,
+        );
+
+        // Check for great move (forcing check with ≤15cp loss)
+        final isGreat = isCheck && cpl <= ClassificationThresholds.best && !isBrilliant;
+
+        // Classify the move with game phase forgiveness and position context
+        // Note: Book moves are handled above and skip this section
         final classification = MoveClassificationExtension.fromCentipawnLoss(
           cpl,
-          isBestMove: bestMoveUci == pos.uci,
-          isBookMove: i < 10 && cpl == 0, // Simple book detection for first 10 moves
+          isBestMove: isBestMove,
+          isBookMove: false, // Book moves are already handled above
+          isBrilliant: isBrilliant,
+          isGreat: isGreat,
           isMiss: isMiss,
           isForced: pos.legalMoveCount == 1,
+          moveNumber: i + 1,
+          evalBefore: evalBeforeCp,
+          evalAfter: evalAfterCp,
+          isCheck: isCheck,
         );
 
         final analyzedMove = AnalyzedMove(
@@ -215,10 +314,10 @@ class GameAnalysisService {
           san: pos.san,
           uci: pos.uci,
           classification: classification,
-          evalBefore: previousEval,
-          evalAfter: currentEval,
-          mateBefore: previousMate,
-          mateAfter: currentMate,
+          evalBefore: evalBeforeCp,
+          evalAfter: evalAfterCp,
+          mateBefore: mateBefore,
+          mateAfter: mateAfter,
           bestMove: bestMoveSan,
           bestMoveUci: bestMoveUci,
           centipawnLoss: cpl,
@@ -226,11 +325,6 @@ class GameAnalysisService {
         );
 
         analyzedMoves.add(analyzedMove);
-
-        // Update previous eval for next iteration (use cached value from fenAfter)
-        final evalAfterMove = await _analyzePositionFast(pos.fenAfter, isCritical: false);
-        previousEval = evalAfterMove.centipawns;
-        previousMate = evalAfterMove.mateInMoves;
       }
 
       // Calculate summaries
@@ -568,10 +662,73 @@ class GameAnalysisService {
     return null;
   }
 
+  /// Detect brilliant moves (sacrifices that lead to improvement)
+  /// Based on web version: BrilliantMoveClassifier.ts
+  bool _detectBrilliantMove({
+    required String san,
+    required int cpl,
+    int? evalBefore,
+    int? evalAfter,
+    required int legalMoveCount,
+  }) {
+    // Must have low centipawn loss
+    if (cpl > ClassificationThresholds.brilliantMaxCpl) return false;
+
+    // Must not be a forced move
+    if (legalMoveCount <= 1) return false;
+
+    // Must have valid evaluations
+    if (evalBefore == null || evalAfter == null) return false;
+
+    // Must not already be winning significantly
+    if (evalBefore > ClassificationThresholds.brilliantMaxEvalBefore) return false;
+    if (evalBefore < ClassificationThresholds.brilliantMinEvalBefore) return false;
+
+    // Calculate improvement (from perspective of moving side)
+    final improvement = evalAfter - evalBefore;
+
+    // Must have significant improvement
+    if (improvement < ClassificationThresholds.brilliantMinImprovement) return false;
+
+    // Simple sacrifice detection: capture on a defended square
+    // Full implementation would need SEE (Static Exchange Evaluation)
+    // For now, use heuristics based on piece movements
+
+    // Check for piece sacrifice patterns
+    final isCapture = san.contains('x');
+    final isPieceSacrifice = _isPieceSacrificePattern(san);
+
+    // Must involve some form of sacrifice
+    if (!isCapture && !isPieceSacrifice) return false;
+
+    return true;
+  }
+
+  /// Check if move looks like a piece sacrifice
+  bool _isPieceSacrificePattern(String san) {
+    // Queen, Rook, Bishop, Knight moving to potentially attacked squares
+    final piece = san.isNotEmpty ? san[0] : '';
+
+    // Major piece moves (not pawns) that could be sacrifices
+    if (piece == 'Q' || piece == 'R' || piece == 'B' || piece == 'N') {
+      // Check for aggressive moves (captures or moves that look sacrificial)
+      if (san.contains('x')) return true;
+
+      // King-side or queen-side attacks often involve sacrifices
+      if (san.contains('+')) return true;
+    }
+
+    return false;
+  }
+
   Future<void> dispose() async {
-    await _stockfish?.dispose();
+    // Cancel any ongoing analysis
+    cancelAnalysis();
+    // Release Stockfish to global manager (don't dispose directly)
+    await GlobalStockfishManager.instance.release(_ownerId);
     _stockfish = null;
     _evalCache.clear();
+    _bookMoveCache.clear();
     await _progressController?.close();
   }
 }

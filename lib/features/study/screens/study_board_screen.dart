@@ -76,59 +76,63 @@ class _StudyBoardScreenState extends ConsumerState<StudyBoardScreen> {
             ),
         ],
       ),
-      body: Column(
-        children: [
-          // Current variation indicator (compact)
-          if ((state.board?.variations.length ?? 0) > 1)
-            _buildCurrentVariationIndicator(state, isDark),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          child: Column(
+            children: [
+              // Current variation indicator (compact)
+              if ((state.board?.variations.length ?? 0) > 1)
+                _buildCurrentVariationIndicator(state, isDark),
 
-          // Progress indicator
-          _buildProgressBar(state),
+              // Progress indicator
+              _buildProgressBar(state),
 
-          // Chess board with markers
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: Stack(
-              children: [
-                _buildChessboard(state, boardSize),
-                // Marker overlay
-                if (state.markerType != MarkerType.none && state.markerSquare != null)
-                  _buildMarkerOverlay(state, boardSize),
-              ],
-            ),
-          ),
-
-          // Control buttons (below the board)
-          _buildControlButtons(state, isDark),
-
-          // Feedback message
-          if (state.feedback != null)
-            _buildFeedback(state, isDark),
-
-          // Instructions / status
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Text(
-              _getInstructions(state),
-              style: TextStyle(
-                fontSize: 15,
-                color: isDark ? Colors.white70 : Colors.grey.shade700,
+              // Chess board with markers
+              Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Stack(
+                  children: [
+                    _buildChessboard(state, boardSize),
+                    // Marker overlay
+                    if (state.markerType != MarkerType.none && state.markerSquare != null)
+                      _buildMarkerOverlay(state, boardSize),
+                  ],
+                ),
               ),
-              textAlign: TextAlign.center,
-            ),
+
+              // Control buttons (below the board)
+              _buildControlButtons(state, isDark),
+
+              // Feedback message
+              if (state.feedback != null)
+                _buildFeedback(state, isDark),
+
+              // Instructions / status
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Text(
+                  _getInstructions(state),
+                  style: TextStyle(
+                    fontSize: 15,
+                    color: isDark ? Colors.white70 : Colors.grey.shade700,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              // Bottom action buttons
+              if (state.state == StudyState.completed)
+                _buildCompletedActions(state),
+
+              // Stats
+              _buildStats(state, isDark),
+
+              const SizedBox(height: 8),
+            ],
           ),
-
-          const Spacer(),
-
-          // Bottom action buttons
-          if (state.state == StudyState.completed)
-            _buildCompletedActions(state),
-
-          // Stats
-          _buildStats(state, isDark),
-
-          SizedBox(height: MediaQuery.of(context).padding.bottom + 8),
-        ],
+        ),
       ),
     );
   }

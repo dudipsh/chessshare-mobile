@@ -301,9 +301,11 @@ class GameReviewNotifier extends StateNotifier<GameReviewState> {
       );
     } catch (e) {
       debugPrint('Analysis error: $e');
+      // Don't show error if analysis was cancelled
+      final wasCancelled = e.toString().contains('cancelled');
       state = state.copyWith(
         isAnalyzing: false,
-        error: e.toString(),
+        error: wasCancelled ? null : e.toString(),
       );
     }
   }
@@ -338,9 +340,23 @@ class GameReviewNotifier extends StateNotifier<GameReviewState> {
     goToMove(state.review!.moves.length);
   }
 
+  /// Cancel ongoing analysis
+  void cancelAnalysis() {
+    if (_analysisService.isAnalyzing) {
+      debugPrint('GameReviewNotifier: Cancelling analysis...');
+      _analysisService.cancelAnalysis();
+      state = state.copyWith(
+        isAnalyzing: false,
+        analysisMessage: 'Analysis cancelled',
+      );
+    }
+  }
+
   /// Dispose resources
   @override
   void dispose() {
+    // Cancel any ongoing analysis before disposing
+    cancelAnalysis();
     _analysisService.dispose();
     super.dispose();
   }
