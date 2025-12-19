@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../app/theme/colors.dart';
+import '../../../app/theme/theme_provider.dart';
 import '../../auth/providers/auth_provider.dart';
 
 class ProfileScreen extends ConsumerWidget {
@@ -418,53 +419,15 @@ class ProfileScreen extends ConsumerWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.dark_mode),
-              title: const Text('Dark Mode'),
-              trailing: Switch(
-                value: Theme.of(context).brightness == Brightness.dark,
-                onChanged: (value) {
-                  // TODO: Implement theme toggle
-                },
-              ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.notifications_outlined),
-              title: const Text('Notifications'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () {
-                Navigator.pop(context);
-                // TODO: Notifications settings
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.info_outline),
-              title: const Text('About'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () {
-                Navigator.pop(context);
-                _showAboutDialog(context);
-              },
-            ),
-            const Divider(),
-            ListTile(
-              leading: const Icon(Icons.delete_outline, color: Colors.red),
-              title: const Text(
-                'Delete Account',
-                style: TextStyle(color: Colors.red),
-              ),
-              onTap: () {
-                Navigator.pop(context);
-                _confirmDeleteAccount(context, ref);
-              },
-            ),
-            const SizedBox(height: 8),
-          ],
-        ),
+      builder: (sheetContext) => _SettingsSheet(
+        onAbout: () {
+          Navigator.pop(sheetContext);
+          _showAboutDialog(context);
+        },
+        onDeleteAccount: () {
+          Navigator.pop(sheetContext);
+          _confirmDeleteAccount(context, ref);
+        },
       ),
     );
   }
@@ -563,7 +526,7 @@ class _StatCard extends StatelessWidget {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: isDark
-            ? Colors.white.withOpacity(0.05)
+            ? Colors.white.withValues(alpha: 0.05)
             : Colors.grey.shade100,
         borderRadius: BorderRadius.circular(12),
       ),
@@ -584,6 +547,67 @@ class _StatCard extends StatelessWidget {
               color: isDark ? Colors.white54 : Colors.grey.shade600,
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SettingsSheet extends ConsumerWidget {
+  final VoidCallback onAbout;
+  final VoidCallback onDeleteAccount;
+
+  const _SettingsSheet({
+    required this.onAbout,
+    required this.onDeleteAccount,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final themeState = ref.watch(themeProvider);
+    final isDark = themeState.mode == AppThemeMode.dark ||
+        (themeState.mode == AppThemeMode.system &&
+            MediaQuery.platformBrightnessOf(context) == Brightness.dark);
+
+    return SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(
+            leading: const Icon(Icons.dark_mode),
+            title: const Text('Dark Mode'),
+            trailing: Switch(
+              value: isDark,
+              onChanged: (value) {
+                ref.read(themeProvider.notifier).setDarkMode(value);
+              },
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.notifications_outlined),
+            title: const Text('Notifications'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {
+              Navigator.pop(context);
+              // TODO: Notifications settings
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.info_outline),
+            title: const Text('About'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: onAbout,
+          ),
+          const Divider(),
+          ListTile(
+            leading: const Icon(Icons.delete_outline, color: Colors.red),
+            title: const Text(
+              'Delete Account',
+              style: TextStyle(color: Colors.red),
+            ),
+            onTap: onDeleteAccount,
+          ),
+          const SizedBox(height: 8),
         ],
       ),
     );

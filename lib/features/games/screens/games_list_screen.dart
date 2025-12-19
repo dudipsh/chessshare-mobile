@@ -111,6 +111,8 @@ class _GamesListScreenState extends ConsumerState<GamesListScreen> {
     return Column(
       children: [
         const GamesStatsBar(),
+        // Quick access buttons for Puzzles and Insights
+        _buildQuickAccess(context),
         Expanded(
           child: RefreshIndicator(
             onRefresh: () async {
@@ -136,6 +138,84 @@ class _GamesListScreenState extends ConsumerState<GamesListScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildQuickAccess(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: _QuickAccessButton(
+              icon: Icons.extension,
+              label: 'My Puzzles',
+              color: Colors.orange,
+              isDark: isDark,
+              onTap: () => context.pushNamed('puzzles'),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: _QuickAccessButton(
+              icon: Icons.insights,
+              label: 'Insights',
+              color: Colors.blue,
+              isDark: isDark,
+              onTap: () => context.pushNamed('insights'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _QuickAccessButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final bool isDark;
+  final VoidCallback onTap;
+
+  const _QuickAccessButton({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.isDark,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: color.withValues(alpha: 0.1),
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, color: color, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: TextStyle(
+                  color: color,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

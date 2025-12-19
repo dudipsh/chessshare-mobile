@@ -77,6 +77,20 @@ final routerProvider = Provider<GoRouter>((ref) {
         },
       ),
 
+      // Puzzles route (outside shell - accessed from My Games)
+      GoRoute(
+        path: '/puzzles',
+        name: 'puzzles',
+        builder: (context, state) => const PuzzlesListScreen(),
+      ),
+
+      // Insights route (outside shell - accessed from My Games)
+      GoRoute(
+        path: '/insights',
+        name: 'insights',
+        builder: (context, state) => const _PlaceholderScreen(title: 'Insights'),
+      ),
+
       // Main app routes with bottom navigation
       ShellRoute(
         builder: (context, state, child) => MainShell(child: child),
@@ -90,16 +104,6 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: '/study',
             name: 'study',
             builder: (context, state) => const StudyScreen(),
-          ),
-          GoRoute(
-            path: '/puzzles',
-            name: 'puzzles',
-            builder: (context, state) => const PuzzlesListScreen(),
-          ),
-          GoRoute(
-            path: '/insights',
-            name: 'insights',
-            builder: (context, state) => const _PlaceholderScreen(title: 'Insights'),
           ),
           GoRoute(
             path: '/profile',
@@ -128,22 +132,12 @@ class MainShell extends StatelessWidget {
           NavigationDestination(
             icon: Icon(Icons.sports_esports_outlined),
             selectedIcon: Icon(Icons.sports_esports),
-            label: 'Games',
+            label: 'My Games',
           ),
           NavigationDestination(
             icon: Icon(Icons.menu_book_outlined),
             selectedIcon: Icon(Icons.menu_book),
             label: 'Study',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.extension_outlined),
-            selectedIcon: Icon(Icons.extension),
-            label: 'Puzzles',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.insights_outlined),
-            selectedIcon: Icon(Icons.insights),
-            label: 'Insights',
           ),
           NavigationDestination(
             icon: Icon(Icons.person_outline),
@@ -159,9 +153,7 @@ class MainShell extends StatelessWidget {
     final location = GoRouterState.of(context).uri.path;
     if (location.startsWith('/games')) return 0;
     if (location.startsWith('/study')) return 1;
-    if (location.startsWith('/puzzles')) return 2;
-    if (location.startsWith('/insights')) return 3;
-    if (location.startsWith('/profile')) return 4;
+    if (location.startsWith('/profile')) return 2;
     return 0;
   }
 
@@ -174,12 +166,6 @@ class MainShell extends StatelessWidget {
         context.goNamed('study');
         break;
       case 2:
-        context.goNamed('puzzles');
-        break;
-      case 3:
-        context.goNamed('insights');
-        break;
-      case 4:
         context.goNamed('profile');
         break;
     }

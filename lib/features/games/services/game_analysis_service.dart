@@ -13,18 +13,73 @@ import '../models/chess_game.dart';
 import '../models/game_review.dart';
 import '../models/move_classification.dart';
 
+/// Configuration for game analysis
+class AnalysisConfig {
+  /// Depth for quick analysis (most moves)
+  final int quickDepth;
+
+  /// Depth for critical positions (captures, checks, low eval swings)
+  final int criticalDepth;
+
+  /// Max time per move in milliseconds (fallback if depth not reached)
+  final int maxMoveTimeMs;
+
+  /// Number of threads for Stockfish
+  final int threads;
+
+  /// Hash table size in MB
+  final int hashSizeMb;
+
+  const AnalysisConfig({
+    this.quickDepth = 12,
+    this.criticalDepth = 16,
+    this.maxMoveTimeMs = 500,
+    this.threads = 2,
+    this.hashSizeMb = 64,
+  });
+
+  /// Fast config for quick analysis
+  static const fast = AnalysisConfig(
+    quickDepth: 10,
+    criticalDepth: 14,
+    maxMoveTimeMs: 300,
+    threads: 2,
+    hashSizeMb: 32,
+  );
+
+  /// Balanced config (default)
+  static const balanced = AnalysisConfig(
+    quickDepth: 12,
+    criticalDepth: 16,
+    maxMoveTimeMs: 500,
+    threads: 2,
+    hashSizeMb: 64,
+  );
+
+  /// Deep config for thorough analysis
+  static const deep = AnalysisConfig(
+    quickDepth: 16,
+    criticalDepth: 20,
+    maxMoveTimeMs: 1000,
+    threads: 4,
+    hashSizeMb: 128,
+  );
+}
+
 /// Service for analyzing chess games with Stockfish
 class GameAnalysisService {
-  final StockfishService _stockfish;
-  final int analysisDepth;
+  StockfishService? _stockfish;
+  final AnalysisConfig config;
 
   bool _isAnalyzing = false;
   StreamController<AnalysisProgress>? _progressController;
 
+  // Cache for position evaluations to avoid re-analyzing
+  final Map<String, _EvalResult> _evalCache = {};
+
   GameAnalysisService({
-    StockfishService? stockfish,
-    this.analysisDepth = 18,
-  }) : _stockfish = stockfish ?? StockfishService();
+    this.config = AnalysisConfig.fast,
+  });
 
   /// Stream of analysis progress updates
   Stream<AnalysisProgress>? get progressStream => _progressController?.stream;
@@ -44,15 +99,25 @@ class GameAnalysisService {
 
     _isAnalyzing = true;
     _progressController = StreamController<AnalysisProgress>.broadcast();
+    _evalCache.clear();
 
     final reviewId = const Uuid().v4();
     final createdAt = DateTime.now();
 
     try {
       // Initialize Stockfish if needed
-      if (_stockfish.state == StockfishState.uninitialized) {
+      _stockfish ??= StockfishService(
+        config: StockfishConfig(
+          multiPv: 1,
+          hashSizeMb: config.hashSizeMb,
+          threads: config.threads,
+          maxDepth: config.criticalDepth,
+        ),
+      );
+
+      if (_stockfish!.state == StockfishState.uninitialized) {
         _reportProgress(0, 'Initializing engine...', onProgress);
-        await _stockfish.initialize();
+        await _stockfish!.initialize();
       }
 
       // Parse the PGN to get positions
@@ -70,30 +135,35 @@ class GameAnalysisService {
         'game_id': game.id,
         'status': 'analyzing',
         'progress': 0.0,
-        'depth': analysisDepth,
+        'depth': config.quickDepth,
         'created_at': createdAt.toIso8601String(),
       });
 
-      // Analyze each position
+      // Analyze each position - optimized with caching and time limits
       final analyzedMoves = <AnalyzedMove>[];
       int? previousEval;
       int? previousMate;
+
+      // First pass: get all evaluations (using cache)
+      _reportProgress(0, 'Evaluating positions...', onProgress);
 
       for (var i = 0; i < positions.length; i++) {
         final pos = positions[i];
         final progress = (i + 1) / positions.length;
 
-        _reportProgress(progress, 'Analyzing move ${i + 1}/${positions.length}', onProgress);
+        _reportProgress(progress * 0.8, 'Move ${i + 1}/${positions.length}', onProgress);
 
-        // Update database progress
-        await LocalDatabase.updateGameReviewProgress(
-          reviewId,
-          progress,
-          'analyzing',
-        );
+        // Update database progress every 5 moves
+        if (i % 5 == 0) {
+          await LocalDatabase.updateGameReviewProgress(
+            reviewId,
+            progress * 0.8,
+            'analyzing',
+          );
+        }
 
-        // Analyze position before the move
-        final evalResult = await _analyzePosition(pos.fenBefore);
+        // Analyze position before the move (uses cache)
+        final evalResult = await _analyzePositionFast(pos.fenBefore, isCritical: i < 5);
 
         // Calculate centipawn loss
         final currentEval = evalResult.centipawns;
@@ -115,13 +185,22 @@ class GameAnalysisService {
           isMiss = true; // Had mate, now doesn't
         }
 
-        // Get best move for comparison
-        final bestMoveResult = await _getBestMove(pos.fenBefore);
+        // Only get best move if the move might not be best
+        String? bestMoveUci;
+        String? bestMoveSan;
+        if (cpl > 10 || isMiss || pos.legalMoveCount > 1) {
+          final bestMoveResult = await _getBestMoveFast(pos.fenBefore);
+          bestMoveUci = bestMoveResult.uci;
+          bestMoveSan = bestMoveResult.san;
+        } else {
+          bestMoveUci = pos.uci;
+          bestMoveSan = pos.san;
+        }
 
         // Classify the move
         final classification = MoveClassificationExtension.fromCentipawnLoss(
           cpl,
-          isBestMove: bestMoveResult.uci == pos.uci,
+          isBestMove: bestMoveUci == pos.uci,
           isBookMove: i < 10 && cpl == 0, // Simple book detection for first 10 moves
           isMiss: isMiss,
           isForced: pos.legalMoveCount == 1,
@@ -140,17 +219,16 @@ class GameAnalysisService {
           evalAfter: currentEval,
           mateBefore: previousMate,
           mateAfter: currentMate,
-          bestMove: bestMoveResult.san,
-          bestMoveUci: bestMoveResult.uci,
+          bestMove: bestMoveSan,
+          bestMoveUci: bestMoveUci,
           centipawnLoss: cpl,
           hasPuzzle: classification.isPuzzleWorthy,
         );
 
         analyzedMoves.add(analyzedMove);
 
-        // Update previous eval for next iteration
-        // Use the eval after this move (which is the eval before the opponent's move)
-        final evalAfterMove = await _analyzePosition(pos.fenAfter);
+        // Update previous eval for next iteration (use cached value from fenAfter)
+        final evalAfterMove = await _analyzePositionFast(pos.fenAfter, isCritical: false);
         previousEval = evalAfterMove.centipawns;
         previousMate = evalAfterMove.mateInMoves;
       }
@@ -194,7 +272,7 @@ class GameAnalysisService {
         whiteSummary: whiteSummary,
         blackSummary: blackSummary,
         moves: analyzedMoves,
-        depth: analysisDepth,
+        depth: config.quickDepth,
         analyzedAt: DateTime.now(),
         createdAt: createdAt,
       );
@@ -208,7 +286,7 @@ class GameAnalysisService {
         'game_id': game.id,
         'status': 'failed',
         'progress': 0.0,
-        'depth': analysisDepth,
+        'depth': config.quickDepth,
         'created_at': createdAt.toIso8601String(),
         'error_message': e.toString(),
       });
@@ -292,47 +370,69 @@ class GameAnalysisService {
     return moves;
   }
 
-  /// Analyze a position and return the evaluation
-  Future<_EvalResult> _analyzePosition(String fen) async {
+  /// Fast position analysis with caching
+  Future<_EvalResult> _analyzePositionFast(String fen, {bool isCritical = false}) async {
+    // Check cache first
+    if (_evalCache.containsKey(fen)) {
+      return _evalCache[fen]!;
+    }
+
+    final depth = isCritical ? config.criticalDepth : config.quickDepth;
     final completer = Completer<_EvalResult>();
     StreamSubscription<String>? subscription;
+    _EvalResult? lastResult;
 
-    subscription = _stockfish.outputStream.listen((line) {
-      if (line.startsWith('info') && line.contains('depth $analysisDepth')) {
+    subscription = _stockfish!.outputStream.listen((line) {
+      if (line.startsWith('info') && line.contains('depth')) {
         final parsed = UciParser.parseInfo(line);
         if (parsed?.pv?.evaluation != null) {
           final eval = parsed!.pv!.evaluation;
-          if (!completer.isCompleted) {
-            completer.complete(_EvalResult(
-              centipawns: eval.centipawns,
-              mateInMoves: eval.mateInMoves,
-            ));
+          lastResult = _EvalResult(
+            centipawns: eval.centipawns,
+            mateInMoves: eval.mateInMoves,
+          );
+
+          // Check if we reached target depth
+          if (line.contains('depth $depth')) {
+            if (!completer.isCompleted) {
+              completer.complete(lastResult);
+            }
+            subscription?.cancel();
           }
-          subscription?.cancel();
         }
       }
     });
 
-    _stockfish.setPosition(fen);
-    _stockfish.startAnalysis(depth: analysisDepth);
+    _stockfish!.setPosition(fen);
+    _stockfish!.startAnalysis(moveTimeMs: config.maxMoveTimeMs);
 
-    // Timeout after 5 seconds
-    return completer.future.timeout(
-      const Duration(seconds: 5),
+    // Use time-based timeout
+    final result = await completer.future.timeout(
+      Duration(milliseconds: config.maxMoveTimeMs + 200),
       onTimeout: () {
         subscription?.cancel();
-        return _EvalResult(centipawns: 0);
+        _stockfish!.stop();
+        return lastResult ?? _EvalResult(centipawns: 0);
       },
     );
+
+    // Cache the result
+    _evalCache[fen] = result;
+    return result;
   }
 
-  /// Get best move for a position
-  Future<_BestMoveResult> _getBestMove(String fen) async {
+  /// Legacy method for compatibility
+  Future<_EvalResult> _analyzePosition(String fen) async {
+    return _analyzePositionFast(fen, isCritical: true);
+  }
+
+  /// Get best move for a position (fast version)
+  Future<_BestMoveResult> _getBestMoveFast(String fen) async {
     final completer = Completer<_BestMoveResult>();
     StreamSubscription<String>? subscription;
     String? bestMoveUci;
 
-    subscription = _stockfish.outputStream.listen((line) {
+    subscription = _stockfish!.outputStream.listen((line) {
       if (line.startsWith('info') && line.contains('pv')) {
         final parsed = UciParser.parseInfo(line);
         if (parsed?.pv != null && parsed!.pv!.uciMoves.isNotEmpty) {
@@ -370,16 +470,22 @@ class GameAnalysisService {
       }
     });
 
-    _stockfish.setPosition(fen);
-    _stockfish.startAnalysis(depth: analysisDepth);
+    _stockfish!.setPosition(fen);
+    _stockfish!.startAnalysis(moveTimeMs: config.maxMoveTimeMs);
 
     return completer.future.timeout(
-      const Duration(seconds: 5),
+      Duration(milliseconds: config.maxMoveTimeMs + 200),
       onTimeout: () {
         subscription?.cancel();
+        _stockfish!.stop();
         return _BestMoveResult(uci: '', san: '');
       },
     );
+  }
+
+  /// Legacy method for compatibility
+  Future<_BestMoveResult> _getBestMove(String fen) async {
+    return _getBestMoveFast(fen);
   }
 
   /// Parse UCI move string to NormalMove
@@ -463,7 +569,9 @@ class GameAnalysisService {
   }
 
   Future<void> dispose() async {
-    await _stockfish.dispose();
+    await _stockfish?.dispose();
+    _stockfish = null;
+    _evalCache.clear();
     await _progressController?.close();
   }
 }
