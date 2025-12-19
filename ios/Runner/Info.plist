@@ -45,5 +45,17 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.chessshare.app</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.chessshare.app</string>
+				<string>chessshare</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

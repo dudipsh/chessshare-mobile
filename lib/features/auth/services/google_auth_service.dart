@@ -102,6 +102,22 @@ class GoogleAuthService {
   /// Check if user is signed in
   static bool get isSignedIn => _googleSignIn?.currentUser != null;
 
+  /// Sign in with Google and return account for token extraction
+  static Future<GoogleSignInAccount?> signInForToken() async {
+    // Create GoogleSignIn on demand if not initialized
+    _googleSignIn ??= GoogleSignIn(scopes: ['email', 'profile']);
+
+    try {
+      // Try silent sign in first
+      GoogleSignInAccount? account = await _googleSignIn!.signInSilently();
+      account ??= await _googleSignIn!.signIn();
+      return account;
+    } catch (e) {
+      debugPrint('Google Sign-In error: $e');
+      rethrow;
+    }
+  }
+
   /// Sign in with Google
   static Future<UserProfile?> signIn() async {
     if (!isAvailable) {

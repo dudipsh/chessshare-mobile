@@ -71,14 +71,30 @@ class EngineAnalysisNotifier extends StateNotifier<EngineAnalysisState> {
   StockfishService? _service;
   StreamSubscription<String>? _outputSubscription;
   Timer? _debounceTimer;
+  int _initAttempts = 0;
+  static const _maxInitAttempts = 3;
 
   static const _debounceDuration = Duration(milliseconds: 150);
 
   EngineAnalysisNotifier() : super(const EngineAnalysisState());
 
-  /// Initialize the engine
+  /// Initialize the engine with retry capability
   Future<void> initialize() async {
-    if (state.isReady || _service != null) return;
+    if (state.isReady) return;
+
+    // Don't retry if we've exceeded max attempts
+    if (_initAttempts >= _maxInitAttempts) {
+      state = state.copyWith(
+        isReady: false,
+        error: 'Engine failed after $_maxInitAttempts attempts',
+      );
+      return;
+    }
+
+    _initAttempts++;
+
+    // Clean up any previous attempt
+    await _cleanup();
 
     try {
       _service = StockfishService();
@@ -87,12 +103,29 @@ class EngineAnalysisNotifier extends StateNotifier<EngineAnalysisState> {
       _outputSubscription = _service!.outputStream.listen(_handleOutput);
 
       state = state.copyWith(isReady: true, error: null);
+      _initAttempts = 0; // Reset on success
     } catch (e) {
+      await _cleanup();
+
+      // Retry with exponential backoff
+      if (_initAttempts < _maxInitAttempts) {
+        final delay = Duration(milliseconds: 500 * _initAttempts);
+        await Future.delayed(delay);
+        return initialize(); // Retry
+      }
+
       state = state.copyWith(
         isReady: false,
-        error: 'Failed to initialize engine: $e',
+        error: 'Engine init failed: $e',
       );
     }
+  }
+
+  Future<void> _cleanup() async {
+    await _outputSubscription?.cancel();
+    _outputSubscription = null;
+    await _service?.dispose();
+    _service = null;
   }
 
   /// Analyze a position
@@ -216,8 +249,7 @@ class EngineAnalysisNotifier extends StateNotifier<EngineAnalysisState> {
   @override
   void dispose() {
     _debounceTimer?.cancel();
-    _outputSubscription?.cancel();
-    _service?.dispose();
+    _cleanup();
     super.dispose();
   }
 }

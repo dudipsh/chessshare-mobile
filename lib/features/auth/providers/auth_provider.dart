@@ -162,62 +162,69 @@ class AuthNotifier extends StateNotifier<AppAuthState> {
     }
   }
 
-  /// Sign in with Google (native)
+  /// Sign in with Google using native sign-in + Supabase token
   Future<void> signInWithGoogle() async {
-    // Check if Google Sign-In is available
-    if (!GoogleAuthService.isAvailable) {
-      state = state.copyWith(
-        error: 'Google Sign-In is not configured for this device. Please use guest mode or contact support.',
-      );
-      return;
-    }
-
     state = state.copyWith(isLoading: true, error: null);
     try {
-      final profile = await GoogleAuthService.signIn();
-      if (profile != null) {
-        state = AppAuthState(
-          profile: profile,
-          mode: AuthMode.offline,
-          isGuest: false,
-        );
+      // Use native Google Sign-In
+      final googleUser = await GoogleAuthService.signInForToken();
+
+      if (googleUser == null) {
+        state = state.copyWith(isLoading: false, error: 'Sign-in was cancelled');
+        return;
+      }
+
+      // Get ID token
+      final googleAuth = await googleUser.authentication;
+      final idToken = googleAuth.idToken;
+      final accessToken = googleAuth.accessToken;
+
+      if (idToken == null) {
+        state = state.copyWith(isLoading: false, error: 'Failed to get Google credentials');
+        return;
+      }
+
+      // Sign in to Supabase with Google token
+      final response = await SupabaseService.client.auth.signInWithIdToken(
+        provider: supabase.OAuthProvider.google,
+        idToken: idToken,
+        accessToken: accessToken,
+      );
+
+      if (response.user != null) {
+        await _loadProfile(response.user!);
       } else {
-        state = state.copyWith(
-          isLoading: false,
-          error: 'Google sign-in was cancelled',
-        );
+        state = state.copyWith(isLoading: false, error: 'Sign-in failed');
       }
     } catch (e) {
       String errorMessage = 'Sign-in failed';
-      if (e.toString().contains('not configured')) {
-        errorMessage = 'Google Sign-In is not configured. Please use guest mode.';
-      } else if (e.toString().contains('network')) {
-        errorMessage = 'No internet connection. Please try again.';
+      final errorStr = e.toString();
+      if (errorStr.contains('network') || errorStr.contains('SocketException')) {
+        errorMessage = 'No internet connection';
+      } else if (errorStr.contains('not configured') || errorStr.contains('PlatformException')) {
+        errorMessage = 'Google Sign-In not configured. Use guest mode.';
+      } else if (errorStr.contains('canceled') || errorStr.contains('cancelled')) {
+        errorMessage = 'Sign-in was cancelled';
       }
       state = state.copyWith(isLoading: false, error: errorMessage);
-    }
-  }
-
-  /// Sign in with Google via Supabase OAuth (for online features)
-  Future<void> signInWithGoogleOnline() async {
-    state = state.copyWith(isLoading: true, error: null);
-    try {
-      await SupabaseService.client.auth.signInWithOAuth(
-        supabase.OAuthProvider.google,
-        redirectTo: 'com.chessshare.app://login-callback',
-      );
-    } catch (e) {
-      state = state.copyWith(isLoading: false, error: e.toString());
     }
   }
 
   Future<void> signInWithApple() async {
     state = state.copyWith(isLoading: true, error: null);
     try {
-      await SupabaseService.client.auth.signInWithOAuth(
+      final result = await SupabaseService.client.auth.signInWithOAuth(
         supabase.OAuthProvider.apple,
         redirectTo: 'com.chessshare.app://login-callback',
+        authScreenLaunchMode: supabase.LaunchMode.inAppWebView,
       );
+
+      if (!result) {
+        state = state.copyWith(
+          isLoading: false,
+          error: 'Sign-in was cancelled',
+        );
+      }
     } catch (e) {
       state = state.copyWith(isLoading: false, error: e.toString());
     }

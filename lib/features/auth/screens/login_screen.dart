@@ -6,7 +6,6 @@ import 'package:go_router/go_router.dart';
 
 import '../../../app/theme/colors.dart';
 import '../providers/auth_provider.dart';
-import '../services/google_auth_service.dart';
 
 class LoginScreen extends ConsumerWidget {
   const LoginScreen({super.key});
@@ -16,7 +15,6 @@ class LoginScreen extends ConsumerWidget {
     final authState = ref.watch(authProvider);
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final googleAvailable = GoogleAuthService.isAvailable;
 
     // Navigate when authenticated
     ref.listen<AppAuthState>(authProvider, (previous, next) {
@@ -110,46 +108,42 @@ class LoginScreen extends ConsumerWidget {
               const SizedBox(height: 24),
 
               // Divider with text
-              if (googleAvailable || Platform.isIOS) ...[
-                Row(
-                  children: [
-                    Expanded(
-                      child: Divider(
-                        color: isDark ? Colors.white24 : Colors.grey.shade300,
+              Row(
+                children: [
+                  Expanded(
+                    child: Divider(
+                      color: isDark ? Colors.white24 : Colors.grey.shade300,
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Text(
+                      'or sign in with',
+                      style: TextStyle(
+                        color: isDark ? Colors.white54 : Colors.grey.shade600,
+                        fontSize: 12,
                       ),
                     ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Text(
-                        'or sign in with',
-                        style: TextStyle(
-                          color: isDark ? Colors.white54 : Colors.grey.shade600,
-                          fontSize: 12,
-                        ),
-                      ),
+                  ),
+                  Expanded(
+                    child: Divider(
+                      color: isDark ? Colors.white24 : Colors.grey.shade300,
                     ),
-                    Expanded(
-                      child: Divider(
-                        color: isDark ? Colors.white24 : Colors.grey.shade300,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 24),
-              ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
 
-              // Google Sign In Button (only if configured)
-              if (googleAvailable) ...[
-                _SocialLoginButton(
-                  icon: Icons.g_mobiledata,
-                  label: 'Continue with Google',
-                  isLoading: authState.isLoading,
-                  onPressed: () {
-                    ref.read(authProvider.notifier).signInWithGoogle();
-                  },
-                ),
-                const SizedBox(height: 16),
-              ],
+              // Google Sign In Button (uses Supabase OAuth)
+              _SocialLoginButton(
+                icon: Icons.g_mobiledata,
+                label: 'Continue with Google',
+                isLoading: authState.isLoading,
+                onPressed: () {
+                  ref.read(authProvider.notifier).signInWithGoogle();
+                },
+              ),
+              const SizedBox(height: 16),
 
               // Apple Sign In Button (iOS only)
               if (Platform.isIOS) ...[

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:stockfish/stockfish.dart';
 
 /// Configuration for Stockfish engine
@@ -53,6 +54,7 @@ class StockfishService {
   StockfishState _state = StockfishState.uninitialized;
   StockfishConfig _config;
   StreamSubscription<String>? _outputSubscription;
+  Completer<void>? _readyCompleter;
 
   final _outputController = StreamController<String>.broadcast();
   final _stateController = StreamController<StockfishState>.broadcast();
@@ -80,25 +82,91 @@ class StockfishService {
     }
 
     _setState(StockfishState.initializing);
+    debugPrint('Stockfish: Starting initialization...');
 
     try {
       _stockfish = Stockfish();
+      debugPrint('Stockfish: Instance created, state: ${_stockfish?.state}');
 
-      _outputSubscription = _stockfish!.stdout.listen((line) {
-        _outputController.add(line);
-      });
+      // Wait for the Stockfish binary to be ready before sending commands
+      await _waitForStockfishReady();
+      debugPrint('Stockfish: Binary ready');
 
-      // Wait for engine to be ready
-      await _waitForReady();
+      // Set up single listener that handles all output
+      _readyCompleter = Completer<void>();
+      _outputSubscription = _stockfish!.stdout.listen(_handleStdout);
+
+      // Send UCI command to start protocol
+      debugPrint('Stockfish: Sending uci command...');
+      _send('uci');
+
+      // Wait for uciok response
+      await _readyCompleter!.future.timeout(
+        const Duration(seconds: 10),
+        onTimeout: () {
+          throw TimeoutException('Stockfish failed to respond to UCI');
+        },
+      );
+      debugPrint('Stockfish: UCI OK received');
 
       // Apply configuration
       await _applyConfig();
+      debugPrint('Stockfish: Config applied');
 
       _setState(StockfishState.ready);
+      debugPrint('Stockfish: Initialization complete');
     } catch (e) {
+      debugPrint('Stockfish: Initialization error - $e');
       _setState(StockfishState.uninitialized);
+      await _cleanup();
       rethrow;
     }
+  }
+
+  /// Wait for the Stockfish binary to finish starting
+  Future<void> _waitForStockfishReady() async {
+    if (_stockfish == null) return;
+
+    // Poll until the stockfish state is ready (not starting)
+    const maxWait = Duration(seconds: 10);
+    const pollInterval = Duration(milliseconds: 100);
+    final stopwatch = Stopwatch()..start();
+
+    while (stopwatch.elapsed < maxWait) {
+      final stateValue = _stockfish!.state.value;
+      debugPrint('Stockfish: Waiting for binary, current state: $stateValue');
+
+      // StockfishState from the package: starting, ready, disposed
+      if (stateValue.name == 'ready') {
+        return;
+      }
+      if (stateValue.name == 'disposed') {
+        throw StateError('Stockfish was disposed during initialization');
+      }
+
+      await Future.delayed(pollInterval);
+    }
+
+    throw TimeoutException('Stockfish binary failed to start');
+  }
+
+  void _handleStdout(String line) {
+    debugPrint('Stockfish output: $line');
+    _outputController.add(line);
+
+    // Handle initialization response
+    if (_readyCompleter != null && !_readyCompleter!.isCompleted) {
+      if (line.contains('uciok') || line.contains('readyok')) {
+        _readyCompleter!.complete();
+      }
+    }
+  }
+
+  Future<void> _cleanup() async {
+    await _outputSubscription?.cancel();
+    _outputSubscription = null;
+    _stockfish?.dispose();
+    _stockfish = null;
   }
 
   /// Update engine configuration
@@ -164,22 +232,38 @@ class StockfishService {
   Future<void> dispose() async {
     if (_state == StockfishState.disposed) return;
 
-    await stop();
-
-    _send('quit');
+    // Only send commands if engine is ready
+    if (_stockfish != null && _stockfish!.state.value.name == 'ready') {
+      try {
+        await stop();
+        _send('quit');
+      } catch (e) {
+        debugPrint('Stockfish: Error during dispose: $e');
+      }
+    }
 
     await _outputSubscription?.cancel();
     _stockfish?.dispose();
     _stockfish = null;
 
-    await _outputController.close();
-    await _stateController.close();
+    if (!_outputController.isClosed) {
+      await _outputController.close();
+    }
+    if (!_stateController.isClosed) {
+      await _stateController.close();
+    }
 
     _setState(StockfishState.disposed);
   }
 
   void _send(String command) {
-    _stockfish?.stdin = command;
+    if (_stockfish == null) return;
+    // Only send if stockfish is ready
+    if (_stockfish!.state.value.name != 'ready') {
+      debugPrint('Stockfish: Cannot send "$command" - engine not ready');
+      return;
+    }
+    _stockfish!.stdin = command;
   }
 
   void _setState(StockfishState newState) {
@@ -189,54 +273,19 @@ class StockfishService {
     }
   }
 
-  Future<void> _waitForReady() async {
-    final completer = Completer<void>();
-
-    late StreamSubscription<String> sub;
-    sub = _stockfish!.stdout.listen((line) {
-      if (line.contains('uciok') || line.contains('readyok')) {
-        sub.cancel();
-        if (!completer.isCompleted) {
-          completer.complete();
-        }
-      }
-    });
-
-    _send('uci');
-
-    // Timeout after 5 seconds
-    await completer.future.timeout(
-      const Duration(seconds: 5),
-      onTimeout: () {
-        sub.cancel();
-        throw TimeoutException('Stockfish failed to initialize');
-      },
-    );
-  }
-
   Future<void> _applyConfig() async {
     _send('setoption name MultiPV value ${_config.multiPv}');
     _send('setoption name Hash value ${_config.hashSizeMb}');
     _send('setoption name Threads value ${_config.threads}');
+
+    // Wait for ready confirmation using the unified completer
+    _readyCompleter = Completer<void>();
     _send('isready');
 
-    // Wait for ready confirmation
-    final completer = Completer<void>();
-
-    late StreamSubscription<String> sub;
-    sub = _stockfish!.stdout.listen((line) {
-      if (line.contains('readyok')) {
-        sub.cancel();
-        if (!completer.isCompleted) {
-          completer.complete();
-        }
-      }
-    });
-
-    await completer.future.timeout(
-      const Duration(seconds: 2),
+    await _readyCompleter!.future.timeout(
+      const Duration(seconds: 5),
       onTimeout: () {
-        sub.cancel();
+        debugPrint('Stockfish: Config apply timeout');
       },
     );
   }

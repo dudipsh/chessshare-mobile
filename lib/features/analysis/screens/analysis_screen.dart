@@ -219,10 +219,19 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> {
   }
 
   Widget _buildEvaluationSection(EngineAnalysisState engineState, bool isDark, double width) {
-    final hasAnalysis = engineState.bestMove != null || engineState.evaluation != null;
+    // Determine status message
+    String? statusMessage;
+    if (engineState.error != null) {
+      statusMessage = 'Engine error: ${engineState.error}';
+    } else if (!engineState.isReady) {
+      statusMessage = 'Starting engine...';
+    } else if (engineState.isAnalyzing && engineState.evaluation == null) {
+      statusMessage = 'Analyzing...';
+    } else if (engineState.evaluation == null && engineState.bestMove == null) {
+      statusMessage = 'No analysis yet';
+    }
 
-    if (!hasAnalysis && !engineState.isAnalyzing) {
-      // No analysis yet - show placeholder
+    if (statusMessage != null) {
       return Container(
         width: width,
         height: 28,
@@ -232,7 +241,7 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> {
         ),
         child: Center(
           child: Text(
-            'No analysis yet',
+            statusMessage,
             style: TextStyle(
               fontSize: 12,
               color: isDark ? Colors.grey[400] : Colors.grey[600],
@@ -242,7 +251,7 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> {
       );
     }
 
-    // Show actual evaluation bar (reads from providers)
+    // Show actual evaluation bar
     return const EvaluationBar();
   }
 
