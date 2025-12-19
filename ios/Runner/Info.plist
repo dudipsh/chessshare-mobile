@@ -45,6 +45,8 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>GIDClientID</key>
+	<string>482276566888-upicdtk1cmohoim6qh8ku4djdhgfhf3e.apps.googleusercontent.com</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -54,6 +56,7 @@
 			<array>
 				<string>com.chessshare.app</string>
 				<string>chessshare</string>
+				<string>com.googleusercontent.apps.482276566888-upicdtk1cmohoim6qh8ku4djdhgfhf3e</string>
 			</array>
 		</dict>
 	</array>

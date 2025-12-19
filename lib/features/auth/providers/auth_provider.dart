@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
 
@@ -82,7 +83,7 @@ class AuthNotifier extends StateNotifier<AppAuthState> {
       }
     } catch (e) {
       // Supabase not available, continue with offline mode
-      print('Supabase not available, using offline mode: $e');
+      debugPrint('Supabase not available, using offline mode: $e');
     }
   }
 
@@ -114,7 +115,7 @@ class AuthNotifier extends StateNotifier<AppAuthState> {
       // No profile found
       state = AppAuthState();
     } catch (e) {
-      print('Error loading local profile: $e');
+      debugPrint('Error loading local profile: $e');
       state = AppAuthState();
     }
   }
@@ -166,23 +167,32 @@ class AuthNotifier extends StateNotifier<AppAuthState> {
   Future<void> signInWithGoogle() async {
     state = state.copyWith(isLoading: true, error: null);
     try {
+      debugPrint('Google Sign-In: Starting...');
+
       // Use native Google Sign-In
       final googleUser = await GoogleAuthService.signInForToken();
 
       if (googleUser == null) {
+        debugPrint('Google Sign-In: User cancelled');
         state = state.copyWith(isLoading: false, error: 'Sign-in was cancelled');
         return;
       }
+
+      debugPrint('Google Sign-In: Got user ${googleUser.email}');
 
       // Get ID token
       final googleAuth = await googleUser.authentication;
       final idToken = googleAuth.idToken;
       final accessToken = googleAuth.accessToken;
 
+      debugPrint('Google Sign-In: idToken=${idToken != null ? "present" : "NULL"}, accessToken=${accessToken != null ? "present" : "NULL"}');
+
       if (idToken == null) {
-        state = state.copyWith(isLoading: false, error: 'Failed to get Google credentials');
+        state = state.copyWith(isLoading: false, error: 'No ID token - check serverClientId config');
         return;
       }
+
+      debugPrint('Google Sign-In: Signing in to Supabase...');
 
       // Sign in to Supabase with Google token
       final response = await SupabaseService.client.auth.signInWithIdToken(
@@ -191,20 +201,18 @@ class AuthNotifier extends StateNotifier<AppAuthState> {
         accessToken: accessToken,
       );
 
+      debugPrint('Google Sign-In: Supabase response user=${response.user?.id}');
+
       if (response.user != null) {
         await _loadProfile(response.user!);
       } else {
-        state = state.copyWith(isLoading: false, error: 'Sign-in failed');
+        state = state.copyWith(isLoading: false, error: 'Supabase returned no user');
       }
     } catch (e) {
-      String errorMessage = 'Sign-in failed';
-      final errorStr = e.toString();
-      if (errorStr.contains('network') || errorStr.contains('SocketException')) {
-        errorMessage = 'No internet connection';
-      } else if (errorStr.contains('not configured') || errorStr.contains('PlatformException')) {
-        errorMessage = 'Google Sign-In not configured. Use guest mode.';
-      } else if (errorStr.contains('canceled') || errorStr.contains('cancelled')) {
-        errorMessage = 'Sign-in was cancelled';
+      debugPrint('Google Sign-In ERROR: $e');
+      String errorMessage = e.toString();
+      if (errorMessage.length > 100) {
+        errorMessage = errorMessage.substring(0, 100);
       }
       state = state.copyWith(isLoading: false, error: errorMessage);
     }

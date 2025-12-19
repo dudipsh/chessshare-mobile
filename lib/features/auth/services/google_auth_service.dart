@@ -102,10 +102,16 @@ class GoogleAuthService {
   /// Check if user is signed in
   static bool get isSignedIn => _googleSignIn?.currentUser != null;
 
+  // Web Client ID for server-side token validation (Supabase)
+  static const _webClientId = '482276566888-b2u07f0fniqvm6di02tmn17nid644gpi.apps.googleusercontent.com';
+
   /// Sign in with Google and return account for token extraction
   static Future<GoogleSignInAccount?> signInForToken() async {
-    // Create GoogleSignIn on demand if not initialized
-    _googleSignIn ??= GoogleSignIn(scopes: ['email', 'profile']);
+    // Create GoogleSignIn with serverClientId for ID token
+    _googleSignIn ??= GoogleSignIn(
+      scopes: ['email', 'profile'],
+      serverClientId: _webClientId,
+    );
 
     try {
       // Try silent sign in first
