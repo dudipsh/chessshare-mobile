@@ -2,9 +2,13 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/api/supabase_service.dart';
+import '../../../core/database/local_database.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../models/puzzle.dart';
 import '../services/puzzle_generator.dart';
+
+/// Cache duration for puzzles (30 minutes)
+const _puzzleCacheDuration = Duration(minutes: 30);
 
 /// State for puzzle generation
 class PuzzleGeneratorState {
@@ -58,22 +62,92 @@ class PuzzleGeneratorNotifier extends StateNotifier<PuzzleGeneratorState> {
   }
 
   /// Load all puzzles (all user puzzles + difficult puzzles)
+  /// First loads from local cache, then fetches from server if cache is stale
   Future<void> _loadAllPuzzles() async {
     if (_userId == null || _userId.startsWith('guest_')) return;
 
     state = state.copyWith(isLoading: true);
 
     try {
-      // Load both in parallel
-      await Future.wait([
-        _loadPuzzlesFromServer(),
-        _loadDifficultPuzzles(),
-      ]);
+      // First try to load from local cache
+      final cachedPuzzles = await _loadPuzzlesFromCache();
+      if (cachedPuzzles.isNotEmpty) {
+        state = state.copyWith(
+          puzzles: cachedPuzzles,
+          totalPuzzleCount: cachedPuzzles.length,
+        );
+        debugPrint('Loaded ${cachedPuzzles.length} puzzles from cache');
+      }
+
+      // Check if cache is still valid
+      final userId = _userId;
+      final cacheTime = userId != null
+          ? await LocalDatabase.getPuzzlesCacheTime(userId)
+          : null;
+      final isCacheValid = cacheTime != null &&
+          DateTime.now().difference(cacheTime) < _puzzleCacheDuration;
+
+      // If cache is invalid or empty, fetch from server
+      if (!isCacheValid || cachedPuzzles.isEmpty) {
+        await Future.wait([
+          _loadPuzzlesFromServer(),
+          _loadDifficultPuzzles(),
+        ]);
+      }
     } catch (e) {
       debugPrint('Error loading puzzles: $e');
     }
 
     state = state.copyWith(isLoading: false);
+  }
+
+  /// Load puzzles from local SQLite cache
+  Future<List<Puzzle>> _loadPuzzlesFromCache() async {
+    final userId = _userId;
+    if (userId == null) return [];
+
+    try {
+      final cached = await LocalDatabase.getPuzzles(userId);
+      return cached.map((data) {
+        return Puzzle(
+          id: data['id'] as String? ?? '',
+          fen: data['fen'] as String? ?? '',
+          solution: _parseSolution(data['solution'] as String?),
+          solutionSan: _parseSolution(data['solution_san'] as String?),
+          rating: data['rating'] as int? ?? 1500,
+          theme: _parseTheme(data['theme'] as String?),
+          description: data['description'] as String?,
+          isPositive: data['is_positive'] as bool? ?? false,
+        );
+      }).where((p) => p.fen.isNotEmpty && p.solution.isNotEmpty).toList();
+    } catch (e) {
+      debugPrint('Error loading puzzles from cache: $e');
+      return [];
+    }
+  }
+
+  /// Save puzzles to local cache
+  Future<void> _savePuzzlesToCache(List<Puzzle> puzzles) async {
+    final userId = _userId;
+    if (userId == null) return;
+
+    try {
+      final puzzleData = puzzles.map((p) => {
+        'id': p.id,
+        'fen': p.fen,
+        'solution': p.solution.join(' '),
+        'solution_san': p.solutionSan.join(' '),
+        'rating': p.rating,
+        'theme': p.theme.name,
+        'description': p.description,
+        'is_positive': p.isPositive,
+        'created_at': DateTime.now().toIso8601String(),
+      }).toList();
+
+      await LocalDatabase.savePuzzles(userId, puzzleData);
+    } catch (e) {
+      debugPrint('Error saving puzzles to cache: $e');
+    }
   }
 
   /// Load all user puzzles from the server
@@ -93,6 +167,9 @@ class PuzzleGeneratorNotifier extends StateNotifier<PuzzleGeneratorState> {
           totalPuzzleCount: puzzles.length,
         );
         debugPrint('Loaded ${puzzles.length} puzzles from server');
+
+        // Save to local cache for offline access
+        await _savePuzzlesToCache(puzzles);
       }
     } catch (e) {
       debugPrint('Error loading puzzles from server: $e');

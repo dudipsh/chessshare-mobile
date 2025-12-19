@@ -10,7 +10,7 @@ import '../../features/games/models/chess_game.dart';
 class LocalDatabase {
   static Database? _database;
   static const String _databaseName = 'chessshare.db';
-  static const int _databaseVersion = 2;
+  static const int _databaseVersion = 3;
 
   // Table names
   static const String userProfileTable = 'user_profile';
@@ -187,6 +187,15 @@ class LocalDatabase {
 
     if (oldVersion < 2) {
       await _createV2Tables(db);
+    }
+
+    if (oldVersion < 3) {
+      // Add is_positive column to puzzles table
+      try {
+        await db.execute('ALTER TABLE $puzzlesTable ADD COLUMN is_positive INTEGER DEFAULT 0');
+      } catch (e) {
+        debugPrint('Column is_positive may already exist: $e');
+      }
     }
   }
 
@@ -515,5 +524,79 @@ class LocalDatabase {
       [userId, DateTime.now().toIso8601String()],
     );
     return result.first['count'] as int;
+  }
+
+  // ========== Puzzles Cache ==========
+
+  /// Save puzzles to local cache
+  static Future<void> savePuzzles(String userId, List<Map<String, dynamic>> puzzles) async {
+    final db = await database;
+    final batch = db.batch();
+
+    for (final puzzle in puzzles) {
+      batch.insert(
+        puzzlesTable,
+        {
+          'id': puzzle['id'],
+          'user_id': userId,
+          'fen': puzzle['fen'],
+          'solution': puzzle['solution'],
+          'solution_san': puzzle['solution_san'],
+          'rating': puzzle['rating'],
+          'theme': puzzle['theme'],
+          'description': puzzle['description'],
+          'is_positive': puzzle['is_positive'] == true ? 1 : 0,
+          'completed': puzzle['completed'] == true ? 1 : 0,
+          'created_at': puzzle['created_at'] ?? DateTime.now().toIso8601String(),
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    }
+
+    await batch.commit(noResult: true);
+    debugPrint('Cached ${puzzles.length} puzzles locally');
+  }
+
+  /// Get cached puzzles for a user
+  static Future<List<Map<String, dynamic>>> getPuzzles(String userId) async {
+    final db = await database;
+    final results = await db.query(
+      puzzlesTable,
+      where: 'user_id = ?',
+      whereArgs: [userId],
+      orderBy: 'created_at DESC',
+    );
+
+    return results.map((r) => {
+      ...r,
+      'is_positive': r['is_positive'] == 1,
+      'completed': r['completed'] == 1,
+    }).toList();
+  }
+
+  /// Clear puzzles cache for a user
+  static Future<void> clearPuzzlesCache(String userId) async {
+    final db = await database;
+    await db.delete(
+      puzzlesTable,
+      where: 'user_id = ?',
+      whereArgs: [userId],
+    );
+  }
+
+  /// Get timestamp of last puzzle cache update
+  static Future<DateTime?> getPuzzlesCacheTime(String userId) async {
+    final db = await database;
+    final results = await db.query(
+      puzzlesTable,
+      where: 'user_id = ?',
+      whereArgs: [userId],
+      orderBy: 'created_at DESC',
+      limit: 1,
+    );
+
+    if (results.isEmpty) return null;
+    final createdAt = results.first['created_at'] as String?;
+    return createdAt != null ? DateTime.tryParse(createdAt) : null;
   }
 }

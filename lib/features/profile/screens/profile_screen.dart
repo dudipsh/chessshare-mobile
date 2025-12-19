@@ -570,45 +570,47 @@ class _SettingsSheet extends ConsumerWidget {
             MediaQuery.platformBrightnessOf(context) == Brightness.dark);
 
     return SafeArea(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          ListTile(
-            leading: const Icon(Icons.dark_mode),
-            title: const Text('Dark Mode'),
-            trailing: Switch(
-              value: isDark,
-              onChanged: (value) {
-                ref.read(themeProvider.notifier).setDarkMode(value);
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.dark_mode),
+              title: const Text('Dark Mode'),
+              trailing: Switch(
+                value: isDark,
+                onChanged: (value) {
+                  ref.read(themeProvider.notifier).setDarkMode(value);
+                },
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.notifications_outlined),
+              title: const Text('Notifications'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                Navigator.pop(context);
+                // TODO: Notifications settings
               },
             ),
-          ),
-          ListTile(
-            leading: const Icon(Icons.notifications_outlined),
-            title: const Text('Notifications'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () {
-              Navigator.pop(context);
-              // TODO: Notifications settings
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.info_outline),
-            title: const Text('About'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: onAbout,
-          ),
-          const Divider(),
-          ListTile(
-            leading: const Icon(Icons.delete_outline, color: Colors.red),
-            title: const Text(
-              'Delete Account',
-              style: TextStyle(color: Colors.red),
+            ListTile(
+              leading: const Icon(Icons.info_outline),
+              title: const Text('About'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: onAbout,
             ),
-            onTap: onDeleteAccount,
-          ),
-          const SizedBox(height: 8),
-        ],
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.delete_outline, color: Colors.red),
+              title: const Text(
+                'Delete Account',
+                style: TextStyle(color: Colors.red),
+              ),
+              onTap: onDeleteAccount,
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
       ),
     );
   }
