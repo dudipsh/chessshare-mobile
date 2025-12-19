@@ -508,6 +508,82 @@ class StudyBoardNotifier extends StateNotifier<StudyBoardState> {
     }
   }
 
+  /// Go back one move (for review)
+  void goBack() {
+    if (state.moveIndex <= 0) return;
+
+    // Replay moves up to moveIndex - 1
+    final targetMoveIndex = state.moveIndex - 1;
+    _replayToMoveIndex(targetMoveIndex);
+  }
+
+  /// Go forward one move (for review)
+  void goForward() {
+    if (state.moveIndex >= state.expectedMoves.length) return;
+
+    final san = state.expectedMoves[state.moveIndex];
+    try {
+      final move = _position.parseSan(san);
+      if (move != null && move is NormalMove) {
+        final moveInfo = _getMoveInfo(move);
+        _position = _position.play(move) as Chess;
+
+        _audioService.playMoveSound(
+          isCapture: moveInfo.isCapture,
+          isCheck: moveInfo.isCheck,
+          isCastle: moveInfo.isCastle,
+          isCheckmate: moveInfo.isCheckmate,
+        );
+
+        final newMoveIndex = state.moveIndex + 1;
+        final isComplete = newMoveIndex >= state.expectedMoves.length;
+
+        state = state.copyWith(
+          currentFen: _position.fen,
+          moveIndex: newMoveIndex,
+          lastMove: move,
+          state: isComplete ? StudyState.completed : StudyState.playing,
+          validMoves: isComplete ? IMap() : _getValidMoves(),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error going forward: $e');
+    }
+  }
+
+  void _replayToMoveIndex(int targetIndex) {
+    final variation = state.currentVariation;
+    if (variation == null) return;
+
+    try {
+      final startingFen = variation.startingFen ?? kInitialFEN;
+      _position = Chess.fromSetup(Setup.parseFen(startingFen));
+
+      NormalMove? lastMove;
+      for (int i = 0; i < targetIndex; i++) {
+        if (i >= state.expectedMoves.length) break;
+        final san = state.expectedMoves[i];
+        final move = _position.parseSan(san);
+        if (move != null && move is NormalMove) {
+          _position = _position.play(move) as Chess;
+          lastMove = move;
+        }
+      }
+
+      state = state.copyWith(
+        currentFen: _position.fen,
+        moveIndex: targetIndex,
+        lastMove: lastMove,
+        state: StudyState.playing,
+        validMoves: _getValidMoves(),
+        clearFeedback: true,
+        clearMarker: true,
+      );
+    } catch (e) {
+      debugPrint('Error replaying moves: $e');
+    }
+  }
+
   MoveInfo _getMoveInfo(NormalMove move) {
     final piece = _position.board.pieceAt(move.from);
     final capturedPiece = _position.board.pieceAt(move.to);

@@ -67,37 +67,20 @@ class _StudyBoardScreenState extends ConsumerState<StudyBoardScreen> {
           style: const TextStyle(fontSize: 17),
         ),
         actions: [
-          // Hint button
-          IconButton(
-            icon: const Icon(Icons.lightbulb_outline),
-            onPressed: () {
-              ref.read(studyBoardProvider.notifier).showHint();
-            },
-            tooltip: 'Hint',
-          ),
-          // Flip board
-          IconButton(
-            icon: const Icon(Icons.swap_vert),
-            onPressed: () {
-              ref.read(studyBoardProvider.notifier).flipBoard();
-            },
-            tooltip: 'Flip board',
-          ),
-          // Reset
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: () {
-              ref.read(studyBoardProvider.notifier).resetVariation();
-            },
-            tooltip: 'Reset',
-          ),
+          // Variation selector button (if multiple variations)
+          if ((state.board?.variations.length ?? 0) > 1)
+            IconButton(
+              icon: const Icon(Icons.list),
+              onPressed: () => _showVariationSelector(context, state, isDark),
+              tooltip: 'Select variation',
+            ),
         ],
       ),
       body: Column(
         children: [
-          // Variation selector (show if board has multiple variations)
+          // Current variation indicator (compact)
           if ((state.board?.variations.length ?? 0) > 1)
-            _buildVariationSelector(state, isDark),
+            _buildCurrentVariationIndicator(state, isDark),
 
           // Progress indicator
           _buildProgressBar(state),
@@ -114,6 +97,9 @@ class _StudyBoardScreenState extends ConsumerState<StudyBoardScreen> {
               ],
             ),
           ),
+
+          // Control buttons (below the board)
+          _buildControlButtons(state, isDark),
 
           // Feedback message
           if (state.feedback != null)
@@ -147,72 +133,232 @@ class _StudyBoardScreenState extends ConsumerState<StudyBoardScreen> {
     );
   }
 
-  Widget _buildVariationSelector(StudyBoardState state, bool isDark) {
+  Widget _buildCurrentVariationIndicator(StudyBoardState state, bool isDark) {
     final variations = state.board?.variations ?? [];
-
     if (variations.isEmpty) return const SizedBox.shrink();
 
-    return Container(
-      height: 52,
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        itemCount: variations.length,
-        itemBuilder: (context, index) {
-          final variation = variations[index];
-          final isSelected = index == state.currentVariationIndex;
+    final currentVariation = variations[state.currentVariationIndex];
 
-          return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-            child: ChoiceChip(
-              label: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    variation.name,
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: isSelected
-                          ? Colors.white
-                          : (isDark ? Colors.white70 : Colors.black87),
-                    ),
-                  ),
-                  // Show progress indicator if started
-                  if (variation.completionPercentage > 0) ...[
-                    const SizedBox(width: 6),
-                    Container(
-                      width: 20,
-                      height: 20,
+    return GestureDetector(
+      onTap: () => _showVariationSelector(context, state, isDark),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              currentVariation.name,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: isDark ? Colors.white : Colors.black87,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              '${state.currentVariationIndex + 1}/${variations.length}',
+              style: TextStyle(
+                fontSize: 12,
+                color: isDark ? Colors.white54 : Colors.grey.shade600,
+              ),
+            ),
+            const SizedBox(width: 4),
+            Icon(
+              Icons.arrow_drop_down,
+              size: 20,
+              color: isDark ? Colors.white54 : Colors.grey.shade600,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildControlButtons(StudyBoardState state, bool isDark) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          // Back button
+          _buildControlButton(
+            icon: Icons.arrow_back_ios,
+            label: 'Back',
+            onPressed: state.moveIndex > 0
+                ? () => ref.read(studyBoardProvider.notifier).goBack()
+                : null,
+            isDark: isDark,
+          ),
+          // Hint button
+          _buildControlButton(
+            icon: Icons.lightbulb_outline,
+            label: 'Hint',
+            onPressed: () => ref.read(studyBoardProvider.notifier).showHint(),
+            isDark: isDark,
+          ),
+          // Flip board
+          _buildControlButton(
+            icon: Icons.swap_vert,
+            label: 'Flip',
+            onPressed: () => ref.read(studyBoardProvider.notifier).flipBoard(),
+            isDark: isDark,
+          ),
+          // Reset
+          _buildControlButton(
+            icon: Icons.refresh,
+            label: 'Reset',
+            onPressed: () => ref.read(studyBoardProvider.notifier).resetVariation(),
+            isDark: isDark,
+          ),
+          // Next button
+          _buildControlButton(
+            icon: Icons.arrow_forward_ios,
+            label: 'Next',
+            onPressed: state.moveIndex < state.totalMoves
+                ? () => ref.read(studyBoardProvider.notifier).goForward()
+                : null,
+            isDark: isDark,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildControlButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback? onPressed,
+    required bool isDark,
+  }) {
+    final isEnabled = onPressed != null;
+    final color = isEnabled
+        ? (isDark ? Colors.white : Colors.black87)
+        : (isDark ? Colors.white24 : Colors.grey.shade400);
+
+    return GestureDetector(
+      onTap: onPressed,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: (isDark ? Colors.white : Colors.black87).withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, size: 20, color: color),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showVariationSelector(BuildContext context, StudyBoardState state, bool isDark) {
+    final variations = state.board?.variations ?? [];
+    if (variations.isEmpty) return;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: isDark ? Colors.grey.shade900 : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+              child: Text(
+                'Select Variation',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: isDark ? Colors.white : Colors.black87,
+                ),
+              ),
+            ),
+            const Divider(),
+            // Variations list
+            ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.5,
+              ),
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: variations.length,
+                itemBuilder: (context, index) {
+                  final variation = variations[index];
+                  final isSelected = index == state.currentVariationIndex;
+
+                  return ListTile(
+                    leading: Container(
+                      width: 32,
+                      height: 32,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         color: variation.isCompleted
                             ? AppColors.success
-                            : (isSelected ? Colors.white24 : AppColors.primary.withValues(alpha: 0.2)),
+                            : (isSelected
+                                ? AppColors.primary
+                                : (isDark ? Colors.white12 : Colors.grey.shade200)),
                       ),
                       child: Center(
                         child: variation.isCompleted
-                            ? const Icon(Icons.check, size: 12, color: Colors.white)
+                            ? const Icon(Icons.check, size: 16, color: Colors.white)
                             : Text(
-                                '${variation.completionPercentage.toInt()}',
+                                '${index + 1}',
                                 style: TextStyle(
-                                  fontSize: 9,
+                                  fontSize: 14,
                                   fontWeight: FontWeight.bold,
-                                  color: isSelected ? Colors.white : AppColors.primary,
+                                  color: isSelected
+                                      ? Colors.white
+                                      : (isDark ? Colors.white70 : Colors.black87),
                                 ),
                               ),
                       ),
                     ),
-                  ],
-                ],
+                    title: Text(
+                      variation.name,
+                      style: TextStyle(
+                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                        color: isDark ? Colors.white : Colors.black87,
+                      ),
+                    ),
+                    subtitle: variation.completionPercentage > 0
+                        ? Text(
+                            '${variation.completionPercentage.toInt()}% completed',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: isDark ? Colors.white54 : Colors.grey.shade600,
+                            ),
+                          )
+                        : null,
+                    trailing: isSelected
+                        ? Icon(Icons.check, color: AppColors.primary)
+                        : null,
+                    onTap: () {
+                      Navigator.pop(context);
+                      ref.read(studyBoardProvider.notifier).loadVariation(index);
+                    },
+                  );
+                },
               ),
-              selected: isSelected,
-              selectedColor: AppColors.primary,
-              onSelected: (_) {
-                ref.read(studyBoardProvider.notifier).loadVariation(index);
-              },
             ),
-          );
-        },
+            const SizedBox(height: 16),
+          ],
+        ),
       ),
     );
   }

@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'analyzed_move.dart';
 import 'chess_game.dart';
 import 'move_classification.dart';
@@ -122,8 +124,7 @@ class AccuracySummary {
   }
 
   static double _exp(double x) {
-    // Simple exp approximation for accuracy calculation
-    return 2.718281828459045 * (1 + x + x * x / 2 + x * x * x / 6);
+    return math.exp(x);
   }
 
   Map<String, dynamic> toJson() {

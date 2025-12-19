@@ -38,6 +38,7 @@ class PuzzlesListScreen extends ConsumerWidget {
 
   Widget _buildEmptyState(BuildContext context, PuzzleGeneratorState state) {
     final theme = Theme.of(context);
+    final isLoadingOrGenerating = state.isLoading || state.isGenerating;
 
     return Center(
       child: Padding(
@@ -52,22 +53,30 @@ class PuzzlesListScreen extends ConsumerWidget {
                 color: AppColors.accent.withOpacity(0.1),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(
-                Icons.extension_outlined,
-                size: 50,
-                color: AppColors.accent,
-              ),
+              child: isLoadingOrGenerating
+                  ? const CircularProgressIndicator()
+                  : const Icon(
+                      Icons.extension_outlined,
+                      size: 50,
+                      color: AppColors.accent,
+                    ),
             ),
             const SizedBox(height: 24),
             Text(
-              state.isGenerating ? 'Generating puzzles...' : 'No puzzles yet',
+              state.isLoading
+                  ? 'Loading puzzles...'
+                  : state.isGenerating
+                      ? 'Generating puzzles...'
+                      : 'No puzzles yet',
               style: theme.textTheme.headlineSmall,
             ),
             const SizedBox(height: 8),
             Text(
-              state.isGenerating
-                  ? 'Analyzing your game for tactical moments'
-                  : 'Analyze a game to generate personalized puzzles from your missed tactics',
+              state.isLoading
+                  ? 'Fetching your puzzles from the server'
+                  : state.isGenerating
+                      ? 'Analyzing your game for tactical moments'
+                      : 'Analyze a game to generate personalized puzzles from your missed tactics',
               style: theme.textTheme.bodyMedium,
               textAlign: TextAlign.center,
             ),

@@ -129,9 +129,14 @@ class AuthNotifier extends StateNotifier<AppAuthState> {
           .maybeSingle();
 
       if (response != null) {
+        var profile = UserProfile.fromJson(response);
+
+        // Load linked chess accounts from the server
+        profile = await _loadLinkedChessAccounts(user.id, profile);
+
         state = AppAuthState(
           user: user,
-          profile: UserProfile.fromJson(response),
+          profile: profile,
         );
       } else {
         // Create profile if doesn't exist
@@ -140,6 +145,42 @@ class AuthNotifier extends StateNotifier<AppAuthState> {
     } catch (e) {
       state = AppAuthState(user: user, error: e.toString());
     }
+  }
+
+  /// Load linked chess accounts from Supabase and update the profile
+  Future<UserProfile> _loadLinkedChessAccounts(String userId, UserProfile profile) async {
+    try {
+      final response = await SupabaseService.client.rpc(
+        'get_linked_chess_accounts',
+        params: {'p_user_id': userId},
+      );
+
+      if (response != null && response is List) {
+        String? chessComUsername;
+        String? lichessUsername;
+
+        for (final account in response) {
+          final platform = account['platform'] as String?;
+          final username = account['username'] as String?;
+
+          if (platform == 'chesscom' && username != null) {
+            chessComUsername = username;
+          } else if (platform == 'lichess' && username != null) {
+            lichessUsername = username;
+          }
+        }
+
+        debugPrint('Loaded linked accounts: Chess.com=$chessComUsername, Lichess=$lichessUsername');
+
+        return profile.copyWith(
+          chessComUsername: chessComUsername,
+          lichessUsername: lichessUsername,
+        );
+      }
+    } catch (e) {
+      debugPrint('Error loading linked chess accounts: $e');
+    }
+    return profile;
   }
 
   Future<void> _createProfile(supabase.User user) async {
@@ -285,17 +326,22 @@ class AuthNotifier extends StateNotifier<AppAuthState> {
       );
 
       // Update Supabase if online
-      if (state.mode == AuthMode.online) {
+      if (state.user != null) {
+        // Update profile table
         await SupabaseService.client
             .from('profiles')
             .update({'chess_com_username': username})
             .eq('id', state.profile!.id);
+
+        // Also save to linked_chess_accounts table via RPC
+        await _saveLinkedChessAccount('chesscom', username);
       }
 
       state = state.copyWith(
         profile: state.profile!.copyWith(chessComUsername: username),
       );
     } catch (e) {
+      debugPrint('Error updating Chess.com username: $e');
       state = state.copyWith(error: e.toString());
     }
   }
@@ -311,18 +357,39 @@ class AuthNotifier extends StateNotifier<AppAuthState> {
       );
 
       // Update Supabase if online
-      if (state.mode == AuthMode.online) {
+      if (state.user != null) {
+        // Update profile table
         await SupabaseService.client
             .from('profiles')
             .update({'lichess_username': username})
             .eq('id', state.profile!.id);
+
+        // Also save to linked_chess_accounts table via RPC
+        await _saveLinkedChessAccount('lichess', username);
       }
 
       state = state.copyWith(
         profile: state.profile!.copyWith(lichessUsername: username),
       );
     } catch (e) {
+      debugPrint('Error updating Lichess username: $e');
       state = state.copyWith(error: e.toString());
+    }
+  }
+
+  /// Save linked chess account to Supabase using RPC function
+  Future<void> _saveLinkedChessAccount(String platform, String username) async {
+    try {
+      await SupabaseService.client.rpc('upsert_linked_chess_account', params: {
+        'p_platform': platform,
+        'p_username': username,
+        'p_linked_at': DateTime.now().toUtc().toIso8601String(),
+        'p_avatar_url': null,
+      });
+      debugPrint('Saved linked $platform account: $username');
+    } catch (e) {
+      // Log but don't throw - this is a secondary operation
+      debugPrint('Failed to save linked chess account: $e');
     }
   }
 

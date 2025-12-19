@@ -9,6 +9,9 @@ class StudyListState {
   final List<StudyBoard> publicBoards;
   final List<StudyBoard> myBoards;
   final bool isLoading;
+  final bool isLoadingMore;
+  final bool hasMorePublic;
+  final bool hasMoreMy;
   final String? error;
   final String searchQuery;
 
@@ -16,6 +19,9 @@ class StudyListState {
     this.publicBoards = const [],
     this.myBoards = const [],
     this.isLoading = false,
+    this.isLoadingMore = false,
+    this.hasMorePublic = true,
+    this.hasMoreMy = true,
     this.error,
     this.searchQuery = '',
   });
@@ -24,6 +30,9 @@ class StudyListState {
     List<StudyBoard>? publicBoards,
     List<StudyBoard>? myBoards,
     bool? isLoading,
+    bool? isLoadingMore,
+    bool? hasMorePublic,
+    bool? hasMoreMy,
     String? error,
     String? searchQuery,
   }) {
@@ -31,6 +40,9 @@ class StudyListState {
       publicBoards: publicBoards ?? this.publicBoards,
       myBoards: myBoards ?? this.myBoards,
       isLoading: isLoading ?? this.isLoading,
+      isLoadingMore: isLoadingMore ?? this.isLoadingMore,
+      hasMorePublic: hasMorePublic ?? this.hasMorePublic,
+      hasMoreMy: hasMoreMy ?? this.hasMoreMy,
       error: error,
       searchQuery: searchQuery ?? this.searchQuery,
     );
@@ -42,6 +54,7 @@ class StudyListState {
 /// Provider for study list
 class StudyListNotifier extends StateNotifier<StudyListState> {
   final String? _userId;
+  static const int _pageSize = 20;
 
   StudyListNotifier(this._userId) : super(const StudyListState()) {
     loadBoards();
@@ -49,12 +62,18 @@ class StudyListNotifier extends StateNotifier<StudyListState> {
 
   Future<void> loadBoards() async {
     if (!mounted) return;
-    state = state.copyWith(isLoading: true, error: null);
+    state = state.copyWith(
+      isLoading: true,
+      error: null,
+      hasMorePublic: true,
+      hasMoreMy: true,
+    );
 
     try {
       // Pass userId for progress tracking
       final publicBoards = await StudyService.getPublicBoards(
         userId: _userId,
+        limit: _pageSize,
       );
       if (!mounted) return;
 
@@ -69,6 +88,8 @@ class StudyListNotifier extends StateNotifier<StudyListState> {
         publicBoards: publicBoards,
         myBoards: myBoards,
         isLoading: false,
+        hasMorePublic: publicBoards.length >= _pageSize,
+        hasMoreMy: false, // My boards typically don't need pagination
       );
     } catch (e) {
       if (!mounted) return;
@@ -79,9 +100,44 @@ class StudyListNotifier extends StateNotifier<StudyListState> {
     }
   }
 
+  /// Load more public boards (pagination)
+  Future<void> loadMorePublic() async {
+    if (!mounted || state.isLoadingMore || !state.hasMorePublic) return;
+
+    state = state.copyWith(isLoadingMore: true);
+
+    try {
+      final lastBoard = state.publicBoards.isNotEmpty
+          ? state.publicBoards.last
+          : null;
+
+      final moreBoards = await StudyService.getPublicBoards(
+        userId: _userId,
+        limit: _pageSize,
+        lastBoardId: lastBoard?.id,
+        lastViewsCount: lastBoard?.viewsCount,
+      );
+
+      if (!mounted) return;
+
+      state = state.copyWith(
+        publicBoards: [...state.publicBoards, ...moreBoards],
+        isLoadingMore: false,
+        hasMorePublic: moreBoards.length >= _pageSize,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      state = state.copyWith(isLoadingMore: false);
+    }
+  }
+
   Future<void> search(String query) async {
     if (!mounted) return;
-    state = state.copyWith(searchQuery: query, isLoading: true);
+    state = state.copyWith(
+      searchQuery: query,
+      isLoading: true,
+      hasMorePublic: false,
+    );
 
     if (query.isEmpty) {
       await loadBoards();
@@ -94,6 +150,7 @@ class StudyListNotifier extends StateNotifier<StudyListState> {
       state = state.copyWith(
         publicBoards: results,
         isLoading: false,
+        hasMorePublic: false, // Search results don't paginate
       );
     } catch (e) {
       if (!mounted) return;

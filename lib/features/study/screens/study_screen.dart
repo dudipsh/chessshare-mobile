@@ -82,7 +82,7 @@ class _StudyScreenState extends ConsumerState<StudyScreen>
   }
 }
 
-class _BoardGrid extends ConsumerWidget {
+class _BoardGrid extends ConsumerStatefulWidget {
   final List<StudyBoard> boards;
   final bool isLoading;
   final bool isMine;
@@ -94,26 +94,61 @@ class _BoardGrid extends ConsumerWidget {
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    if (isLoading && boards.isEmpty) {
+  ConsumerState<_BoardGrid> createState() => _BoardGridState();
+}
+
+class _BoardGridState extends ConsumerState<_BoardGrid> {
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (widget.isMine) return; // No pagination for my boards
+
+    final state = ref.read(studyListProvider);
+    if (state.isLoadingMore || !state.hasMorePublic) return;
+
+    // Load more when near the bottom
+    if (_scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - 200) {
+      ref.read(studyListProvider.notifier).loadMorePublic();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = ref.watch(studyListProvider);
+
+    if (widget.isLoading && widget.boards.isEmpty) {
       return const Center(child: CircularProgressIndicator());
     }
 
-    if (boards.isEmpty) {
+    if (widget.boards.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              isMine ? Icons.folder_outlined : Icons.library_books_outlined,
+              widget.isMine ? Icons.folder_outlined : Icons.library_books_outlined,
               size: 64,
               color: Colors.grey,
             ),
             const SizedBox(height: 16),
-            Text(isMine ? 'No studies yet' : 'No studies found'),
+            Text(widget.isMine ? 'No studies yet' : 'No studies found'),
             const SizedBox(height: 8),
             Text(
-              isMine ? 'Create studies on chessshare.com' : 'Try a search',
+              widget.isMine ? 'Create studies on chessshare.com' : 'Try a search',
               style: TextStyle(color: Colors.grey[600], fontSize: 13),
             ),
           ],
@@ -121,9 +156,13 @@ class _BoardGrid extends ConsumerWidget {
       );
     }
 
+    // Calculate item count including loading indicator
+    final itemCount = widget.boards.length + (state.hasMorePublic && !widget.isMine ? 1 : 0);
+
     return RefreshIndicator(
       onRefresh: () => ref.read(studyListProvider.notifier).refresh(),
       child: GridView.builder(
+        controller: _scrollController,
         padding: const EdgeInsets.all(12),
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 2,
@@ -131,8 +170,19 @@ class _BoardGrid extends ConsumerWidget {
           crossAxisSpacing: 12,
           mainAxisSpacing: 16,
         ),
-        itemCount: boards.length,
-        itemBuilder: (ctx, i) => StudyBoardCard(board: boards[i]),
+        itemCount: itemCount,
+        itemBuilder: (ctx, i) {
+          // Loading indicator at the end
+          if (i >= widget.boards.length) {
+            return const Center(
+              child: Padding(
+                padding: EdgeInsets.all(16),
+                child: CircularProgressIndicator(),
+              ),
+            );
+          }
+          return StudyBoardCard(board: widget.boards[i]);
+        },
       ),
     );
   }

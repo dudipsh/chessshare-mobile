@@ -12,6 +12,7 @@ class GamesStatsBar extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final stats = ref.watch(gamesStatsProvider);
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -27,7 +28,7 @@ class GamesStatsBar extends ConsumerWidget {
           _StatItem(
             value: '${stats['total']}',
             label: 'Games',
-            color: Colors.white70,
+            color: isDark ? Colors.white70 : Colors.black87,
           ),
           _StatItem(
             value: '${stats['wins']}',

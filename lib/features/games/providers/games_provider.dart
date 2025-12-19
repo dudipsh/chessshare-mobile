@@ -1,7 +1,10 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/api/chess_com_api.dart';
 import '../../../core/api/lichess_api.dart';
+import '../../../core/api/supabase_service.dart';
+import '../../auth/providers/auth_provider.dart';
 import '../models/chess_game.dart';
 
 // Games state
@@ -78,7 +81,79 @@ class GamesFilter {
 
 // Games notifier
 class GamesNotifier extends StateNotifier<GamesState> {
-  GamesNotifier() : super(GamesState());
+  final String? _userId;
+  Map<String, _GameReviewInfo> _reviewsCache = {};
+
+  GamesNotifier(this._userId) : super(GamesState()) {
+    _loadGameReviewsFromServer();
+  }
+
+  /// Load game reviews from the server to know which games are analyzed
+  Future<void> _loadGameReviewsFromServer() async {
+    if (_userId == null || _userId.startsWith('guest_')) return;
+
+    try {
+      final response = await SupabaseService.client
+          .from('game_reviews')
+          .select('id, external_game_id, accuracy_white, accuracy_black, reviewed_at')
+          .eq('user_id', _userId);
+
+      if (response != null && response is List) {
+        for (final review in response) {
+          final externalGameId = review['external_game_id'] as String?;
+          if (externalGameId != null) {
+            _reviewsCache[externalGameId] = _GameReviewInfo(
+              id: review['id'] as String,
+              accuracyWhite: (review['accuracy_white'] as num?)?.toDouble(),
+              accuracyBlack: (review['accuracy_black'] as num?)?.toDouble(),
+              reviewedAt: review['reviewed_at'] != null
+                  ? DateTime.parse(review['reviewed_at'] as String)
+                  : null,
+            );
+          }
+        }
+        debugPrint('Loaded ${_reviewsCache.length} game reviews from server');
+
+        // Update any existing games with their analysis status
+        if (state.games.isNotEmpty) {
+          _updateGamesWithAnalysisStatus();
+        }
+      }
+    } catch (e) {
+      debugPrint('Error loading game reviews: $e');
+    }
+  }
+
+  /// Update games with their analysis status from the cache
+  void _updateGamesWithAnalysisStatus() {
+    final updatedGames = state.games.map((game) {
+      final review = _reviewsCache[game.externalId];
+      if (review != null) {
+        return ChessGame(
+          id: game.id,
+          externalId: game.externalId,
+          platform: game.platform,
+          pgn: game.pgn,
+          playerColor: game.playerColor,
+          result: game.result,
+          speed: game.speed,
+          timeControl: game.timeControl,
+          playedAt: game.playedAt,
+          opponentUsername: game.opponentUsername,
+          opponentRating: game.opponentRating,
+          playerRating: game.playerRating,
+          openingName: game.openingName,
+          openingEco: game.openingEco,
+          accuracyWhite: review.accuracyWhite,
+          accuracyBlack: review.accuracyBlack,
+          isAnalyzed: true,
+        );
+      }
+      return game;
+    }).toList();
+
+    state = state.copyWith(games: updatedGames);
+  }
 
   Future<void> importFromChessCom(String username) async {
     state = state.copyWith(
@@ -136,6 +211,9 @@ class GamesNotifier extends StateNotifier<GamesState> {
         importProgress: 0,
         importTotal: 0,
       );
+
+      // Update games with analysis status from cache
+      _updateGamesWithAnalysisStatus();
     } catch (e) {
       state = state.copyWith(
         isImporting: false,
@@ -183,6 +261,9 @@ class GamesNotifier extends StateNotifier<GamesState> {
         importProgress: 0,
         importTotal: 0,
       );
+
+      // Update games with analysis status from cache
+      _updateGamesWithAnalysisStatus();
     } catch (e) {
       state = state.copyWith(
         isImporting: false,
@@ -202,9 +283,25 @@ class GamesNotifier extends StateNotifier<GamesState> {
   }
 }
 
+/// Helper class for caching game review info
+class _GameReviewInfo {
+  final String id;
+  final double? accuracyWhite;
+  final double? accuracyBlack;
+  final DateTime? reviewedAt;
+
+  _GameReviewInfo({
+    required this.id,
+    this.accuracyWhite,
+    this.accuracyBlack,
+    this.reviewedAt,
+  });
+}
+
 // Providers
 final gamesProvider = StateNotifierProvider<GamesNotifier, GamesState>((ref) {
-  return GamesNotifier();
+  final userId = ref.watch(authProvider).profile?.id;
+  return GamesNotifier(userId);
 });
 
 final gamesFilterProvider = StateProvider<GamesFilter>((ref) {

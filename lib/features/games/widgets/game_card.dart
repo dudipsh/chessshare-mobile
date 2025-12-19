@@ -18,6 +18,10 @@ class GameCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final resultColor = _getResultColor(game.result);
     final resultText = _getResultText(game.result);
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final subtleColor = isDark ? Colors.white.withOpacity(0.5) : Colors.black54;
+    final fadedColor = isDark ? Colors.white.withOpacity(0.4) : Colors.black45;
 
     return Card(
       child: InkWell(
@@ -99,7 +103,7 @@ class GameCard extends StatelessWidget {
                         Icon(
                           _getSpeedIcon(game.speed),
                           size: 14,
-                          color: Colors.white.withOpacity(0.5),
+                          color: subtleColor,
                         ),
                         const SizedBox(width: 4),
                         // Opening name
@@ -107,7 +111,7 @@ class GameCard extends StatelessWidget {
                           child: Text(
                             game.openingName ?? 'Unknown opening',
                             style: TextStyle(
-                              color: Colors.white.withOpacity(0.6),
+                              color: subtleColor,
                               fontSize: 14,
                             ),
                             overflow: TextOverflow.ellipsis,
@@ -119,14 +123,14 @@ class GameCard extends StatelessWidget {
                     Row(
                       children: [
                         // Platform icon
-                        _buildPlatformChip(),
+                        _buildPlatformChip(isDark),
                         const SizedBox(width: 8),
                         // Ratings
                         if (game.playerRating != null || game.opponentRating != null)
                           Text(
                             '${game.playerRating ?? '?'} vs ${game.opponentRating ?? '?'}',
                             style: TextStyle(
-                              color: Colors.white.withOpacity(0.5),
+                              color: subtleColor,
                               fontSize: 12,
                             ),
                           ),
@@ -135,7 +139,7 @@ class GameCard extends StatelessWidget {
                         Text(
                           DateFormat('MMM d, yyyy').format(game.playedAt),
                           style: TextStyle(
-                            color: Colors.white.withOpacity(0.4),
+                            color: fadedColor,
                             fontSize: 12,
                           ),
                         ),
@@ -163,7 +167,7 @@ class GameCard extends StatelessWidget {
                     Text(
                       'Accuracy',
                       style: TextStyle(
-                        color: Colors.white.withOpacity(0.4),
+                        color: fadedColor,
                         fontSize: 12,
                       ),
                     ),
@@ -193,7 +197,7 @@ class GameCard extends StatelessWidget {
               const SizedBox(width: 4),
               Icon(
                 Icons.chevron_right,
-                color: Colors.white.withOpacity(0.3),
+                color: fadedColor,
               ),
             ],
           ),
@@ -202,18 +206,18 @@ class GameCard extends StatelessWidget {
     );
   }
 
-  Widget _buildPlatformChip() {
+  Widget _buildPlatformChip(bool isDark) {
     final isChessCom = game.platform == GamePlatform.chesscom;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: (isChessCom ? Colors.green : Colors.white).withOpacity(0.1),
+        color: (isChessCom ? Colors.green : (isDark ? Colors.white : Colors.grey)).withOpacity(0.1),
         borderRadius: BorderRadius.circular(4),
       ),
       child: Text(
         isChessCom ? 'Chess.com' : 'Lichess',
         style: TextStyle(
-          color: isChessCom ? Colors.green.shade300 : Colors.white70,
+          color: isChessCom ? Colors.green.shade300 : (isDark ? Colors.white70 : Colors.grey.shade700),
           fontSize: 10,
           fontWeight: FontWeight.w500,
         ),

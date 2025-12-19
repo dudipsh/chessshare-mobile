@@ -18,6 +18,7 @@ class ImportScreen extends ConsumerStatefulWidget {
 class _ImportScreenState extends ConsumerState<ImportScreen> {
   final _usernameController = TextEditingController();
   bool _saveUsername = true;
+  bool _hasText = false;
 
   @override
   void initState() {
@@ -26,13 +27,28 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
     final profile = ref.read(authProvider).profile;
     if (widget.platform == 'chesscom' && profile?.chessComUsername != null) {
       _usernameController.text = profile!.chessComUsername!;
+      _hasText = true;
     } else if (widget.platform == 'lichess' && profile?.lichessUsername != null) {
       _usernameController.text = profile!.lichessUsername!;
+      _hasText = true;
+    }
+
+    // Listen to text changes to enable/disable button
+    _usernameController.addListener(_onTextChanged);
+  }
+
+  void _onTextChanged() {
+    final hasText = _usernameController.text.trim().isNotEmpty;
+    if (hasText != _hasText) {
+      setState(() {
+        _hasText = hasText;
+      });
     }
   }
 
   @override
   void dispose() {
+    _usernameController.removeListener(_onTextChanged);
     _usernameController.dispose();
     super.dispose();
   }
@@ -148,9 +164,7 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: _usernameController.text.isNotEmpty
-                      ? _startImport
-                      : null,
+                  onPressed: _hasText ? _startImport : null,
                   child: const Text('Import Games'),
                 ),
               ),
