@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../app/theme/colors.dart';
+import '../../auth/providers/auth_provider.dart';
 import '../models/chess_game.dart';
 import '../providers/games_provider.dart';
 import '../widgets/filter_sheet.dart';
@@ -30,9 +32,15 @@ class _GamesListScreenState extends ConsumerState<GamesListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final authState = ref.watch(authProvider);
     final gamesState = ref.watch(gamesProvider);
     final filteredGames = ref.watch(filteredGamesProvider);
     final filter = ref.watch(gamesFilterProvider);
+
+    // Show login required screen for non-authenticated users
+    if (!authState.isAuthenticated || authState.isGuest) {
+      return _buildLoginRequiredScreen(context);
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -228,6 +236,74 @@ class _GamesListScreenState extends ConsumerState<GamesListScreen> {
             onTap: () => setState(() => _selectedPlatform = GamePlatform.lichess),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildLoginRequiredScreen(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('My Games'),
+      ),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 100,
+                height: 100,
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.login,
+                  size: 48,
+                  color: AppColors.primary,
+                ),
+              ),
+              const SizedBox(height: 24),
+              Text(
+                'Sign in to view your games',
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Import and analyze your Chess.com and Lichess games.\nTrack your progress and improve your play.',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: isDark ? Colors.white60 : Colors.grey.shade600,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 32),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () => context.goNamed('login'),
+                  icon: const Icon(Icons.g_mobiledata, size: 24),
+                  label: const Text('Sign in with Google'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

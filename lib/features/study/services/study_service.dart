@@ -104,23 +104,12 @@ class StudyService {
     }
   }
 
-  /// Fallback method for getting public boards with retry logic
-  static Future<List<StudyBoard>> _getPublicBoardsFallback({int limit = 20, int retryCount = 0}) async {
-    const maxRetries = 3;
-
-    // Wait for Supabase to be ready before querying
-    if (!SupabaseService.isReady) {
-      debugPrint('StudyService: Waiting for Supabase to be ready...');
-      final isReady = await SupabaseService.waitUntilReady();
-      if (!isReady) {
-        debugPrint('StudyService: Supabase not ready after timeout');
-        return [];
-      }
-    }
-
+  /// Fallback method for getting public boards using direct URL
+  static Future<List<StudyBoard>> _getPublicBoardsFallback({int limit = 20}) async {
     try {
-      debugPrint('StudyService: Fetching public boards via fallback (attempt ${retryCount + 1})...');
-      final response = await SupabaseService.client
+      debugPrint('StudyService: Fetching public boards via publicClient...');
+      // Use publicClient (direct URL) for anonymous queries
+      final response = await SupabaseService.publicClient
           .from('boards')
           .select('''
             id, title, description, owner_id, cover_image_url,
@@ -134,18 +123,10 @@ class StudyService {
           .limit(limit);
 
       final boards = (response as List).map((j) => StudyBoard.fromJson(j)).toList();
-      debugPrint('StudyService: Fallback successfully fetched ${boards.length} boards');
+      debugPrint('StudyService: Successfully fetched ${boards.length} boards via publicClient');
       return boards;
     } catch (e) {
-      debugPrint('StudyService: Error in fallback (attempt ${retryCount + 1}): $e');
-
-      // Retry on 401 errors (might be timing issue)
-      if (retryCount < maxRetries && e.toString().contains('401')) {
-        debugPrint('StudyService: Retrying after 401 error...');
-        await Future.delayed(Duration(milliseconds: 500 * (retryCount + 1)));
-        return _getPublicBoardsFallback(limit: limit, retryCount: retryCount + 1);
-      }
-
+      debugPrint('StudyService: Error fetching public boards: $e');
       return [];
     }
   }
@@ -208,20 +189,11 @@ class StudyService {
     }
   }
 
-  /// Fallback method for getting a single board
+  /// Fallback method for getting a single board (uses publicClient for anonymous access)
   static Future<StudyBoard?> _getBoardFallback(String boardId) async {
-    // Wait for Supabase to be ready before querying
-    if (!SupabaseService.isReady) {
-      debugPrint('StudyService: Waiting for Supabase to be ready (single board)...');
-      final isReady = await SupabaseService.waitUntilReady();
-      if (!isReady) {
-        debugPrint('StudyService: Supabase not ready after timeout');
-        return null;
-      }
-    }
-
     try {
-      final response = await SupabaseService.client
+      // Use publicClient for anonymous access
+      final response = await SupabaseService.publicClient
           .from('boards')
           .select('''
             id, title, description, owner_id, cover_image_url,
@@ -240,20 +212,11 @@ class StudyService {
     }
   }
 
-  /// Search boards
+  /// Search boards (uses publicClient for public board searches)
   static Future<List<StudyBoard>> searchBoards(String query) async {
-    // Wait for Supabase to be ready before querying
-    if (!SupabaseService.isReady) {
-      debugPrint('StudyService: Waiting for Supabase to be ready (search)...');
-      final isReady = await SupabaseService.waitUntilReady();
-      if (!isReady) {
-        debugPrint('StudyService: Supabase not ready after timeout');
-        return [];
-      }
-    }
-
     try {
-      final response = await SupabaseService.client
+      // Use publicClient for searching public boards (works for anonymous users)
+      final response = await SupabaseService.publicClient
           .from('boards')
           .select('''
             id, title, description, owner_id, cover_image_url,

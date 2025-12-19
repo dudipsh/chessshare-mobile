@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -78,14 +76,14 @@ class LoginScreen extends ConsumerWidget {
                 ),
               ],
 
-              // Primary action: Get Started / Continue as Guest
+              // Google Sign In Button (Primary action)
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
                   onPressed: authState.isLoading
                       ? null
                       : () {
-                          ref.read(authProvider.notifier).continueAsGuest();
+                          ref.read(authProvider.notifier).signInWithGoogle();
                         },
                   icon: authState.isLoading
                       ? const SizedBox(
@@ -93,8 +91,8 @@ class LoginScreen extends ConsumerWidget {
                           height: 20,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : const Icon(Icons.play_arrow),
-                  label: const Text('Get Started'),
+                      : const Icon(Icons.g_mobiledata, size: 24),
+                  label: const Text('Continue with Google'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
                     foregroundColor: Colors.white,
@@ -105,63 +103,12 @@ class LoginScreen extends ConsumerWidget {
                   ),
                 ),
               ),
-              const SizedBox(height: 24),
-
-              // Divider with text
-              Row(
-                children: [
-                  Expanded(
-                    child: Divider(
-                      color: isDark ? Colors.white24 : Colors.grey.shade300,
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Text(
-                      'or sign in with',
-                      style: TextStyle(
-                        color: isDark ? Colors.white54 : Colors.grey.shade600,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: Divider(
-                      color: isDark ? Colors.white24 : Colors.grey.shade300,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 24),
-
-              // Google Sign In Button (uses Supabase OAuth)
-              _SocialLoginButton(
-                icon: Icons.g_mobiledata,
-                label: 'Continue with Google',
-                isLoading: authState.isLoading,
-                onPressed: () {
-                  ref.read(authProvider.notifier).signInWithGoogle();
-                },
-              ),
-              const SizedBox(height: 16),
-
-              // Apple Sign In Button (iOS only)
-              if (Platform.isIOS) ...[
-                _SocialLoginButton(
-                  icon: Icons.apple,
-                  label: 'Continue with Apple',
-                  isLoading: authState.isLoading,
-                  onPressed: () {
-                    ref.read(authProvider.notifier).signInWithApple();
-                  },
-                ),
-              ],
 
               const SizedBox(height: 32),
 
               // Info text
               Text(
-                'Your games are stored locally on your device.\nNo account required to get started.',
+                'Sign in to sync your games and analysis\nacross all your devices.',
                 style: TextStyle(
                   fontSize: 12,
                   color: isDark ? Colors.white38 : Colors.grey.shade500,
@@ -169,54 +116,6 @@ class LoginScreen extends ConsumerWidget {
                 textAlign: TextAlign.center,
               ),
             ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _SocialLoginButton extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final VoidCallback onPressed;
-  final bool isLoading;
-
-  const _SocialLoginButton({
-    required this.icon,
-    required this.label,
-    required this.onPressed,
-    this.isLoading = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
-    return SizedBox(
-      width: double.infinity,
-      child: OutlinedButton.icon(
-        onPressed: isLoading ? null : onPressed,
-        icon: isLoading
-            ? SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: isDark ? Colors.white : Colors.grey.shade600,
-                ),
-              )
-            : Icon(icon, size: 24),
-        label: Text(label),
-        style: OutlinedButton.styleFrom(
-          foregroundColor: isDark ? Colors.white : Colors.black87,
-          side: BorderSide(
-            color: isDark ? Colors.white.withValues(alpha: 0.3) : Colors.grey.shade300,
-          ),
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
           ),
         ),
       ),

@@ -23,10 +23,9 @@ void main() async {
 }
 
 Future<void> _initializeSupabase() async {
-  // Production Supabase credentials (fallback if not provided via dart-define)
-  // NOTE: Using direct Supabase URL instead of custom domain (api.chessshare.com)
-  // because custom domains may have different CORS/auth settings for mobile vs web
-  const productionUrl = 'https://xnczyeqqgkzlbqrplsdg.supabase.co';
+  // Production Supabase credentials
+  // Using custom domain for auth (Google OAuth is configured with it)
+  const productionUrl = 'https://api.chessshare.com';
   const productionKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhuY3p5ZXFxZ2t6bGJxcnBsc2RnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDI0NzQ3NDYsImV4cCI6MjA1ODA1MDc0Nn0.pZZJ9QT-LKtzAM2d1K3-LqqKS18GrFlbhH62Bt9rL_k';
 
   // Use dart-define values if provided, otherwise use production defaults
