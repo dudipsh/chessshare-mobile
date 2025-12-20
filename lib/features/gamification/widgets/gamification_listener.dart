@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -22,13 +23,17 @@ class _GamificationListenerState extends ConsumerState<GamificationListener> {
   @override
   Widget build(BuildContext context) {
     ref.listen<GamificationState>(gamificationProvider, (previous, next) {
+      debugPrint('[GamificationListener] State changed: hasPendingXp=${next.hasPendingXp}, hasPendingStreak=${next.hasPendingStreak}, _hasShownXp=$_hasShownXp');
+
       // Show streak modal first (more important UX for daily login)
       if (next.hasPendingStreak && !_hasShownStreak) {
+        debugPrint('[GamificationListener] Showing streak modal');
         _hasShownStreak = true;
         _showStreakModal(context, next);
       }
       // Then show XP popup if there's pending XP (and not from streak bonus)
       else if (next.hasPendingXp && !_hasShownXp && !next.hasPendingStreak) {
+        debugPrint('[GamificationListener] Showing XP popup');
         _hasShownXp = true;
         _showXpPopup(context, next);
       }

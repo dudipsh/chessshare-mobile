@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -154,7 +155,12 @@ class GamificationNotifier extends StateNotifier<GamificationState> {
     String? relatedId,
     int? customXp,
   }) async {
-    if (_userId == null) return null;
+    debugPrint('[Gamification] awardXp called: eventType=${eventType.code}, userId=$_userId');
+
+    if (_userId == null) {
+      debugPrint('[Gamification] ERROR: userId is null, cannot award XP');
+      return null;
+    }
 
     try {
       final result = await _service.awardXp(
@@ -164,8 +170,11 @@ class GamificationNotifier extends StateNotifier<GamificationState> {
         customXp: customXp,
       );
 
+      debugPrint('[Gamification] Service returned: xpAwarded=${result.xpAwarded}');
+
       if (result.xpAwarded > 0) {
         // Update state with new XP
+        debugPrint('[Gamification] Setting pendingXpAward with ${result.xpAwarded} XP');
         state = state.copyWith(
           profile: UserXpProfile(
             userId: _userId!,
@@ -175,10 +184,12 @@ class GamificationNotifier extends StateNotifier<GamificationState> {
           ),
           pendingXpAward: result,
         );
+        debugPrint('[Gamification] State updated. hasPendingXp=${state.hasPendingXp}');
       }
 
       return result;
     } catch (e) {
+      debugPrint('[Gamification] ERROR in awardXp: $e');
       return null;
     }
   }

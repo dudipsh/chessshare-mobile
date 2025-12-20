@@ -211,6 +211,39 @@ class ChessGame {
     return buffer.toString().trim();
   }
 
+  /// Create from JSON (for cache deserialization)
+  factory ChessGame.fromJson(Map<String, dynamic> json) {
+    return ChessGame(
+      id: json['id'] as String,
+      externalId: json['external_id'] as String,
+      platform: GamePlatform.values.firstWhere(
+        (e) => e.name == json['platform'],
+        orElse: () => GamePlatform.chesscom,
+      ),
+      pgn: json['pgn'] as String,
+      playerColor: json['player_color'] as String,
+      result: GameResult.values.firstWhere(
+        (e) => e.name == json['result'],
+        orElse: () => GameResult.draw,
+      ),
+      speed: GameSpeed.values.firstWhere(
+        (e) => e.name == json['speed'],
+        orElse: () => GameSpeed.rapid,
+      ),
+      timeControl: json['time_control'] as String?,
+      playedAt: DateTime.parse(json['played_at'] as String),
+      opponentUsername: json['opponent_username'] as String,
+      opponentRating: json['opponent_rating'] as int?,
+      playerRating: json['player_rating'] as int?,
+      openingName: json['opening_name'] as String?,
+      openingEco: json['opening_eco'] as String?,
+      accuracyWhite: (json['accuracy_white'] as num?)?.toDouble(),
+      accuracyBlack: (json['accuracy_black'] as num?)?.toDouble(),
+      isAnalyzed: json['is_analyzed'] as bool? ?? false,
+      puzzleCount: json['puzzle_count'] as int? ?? 0,
+    );
+  }
+
   Map<String, dynamic> toJson() {
     return {
       'id': id,

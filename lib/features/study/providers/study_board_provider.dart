@@ -318,10 +318,17 @@ class StudyBoardNotifier extends StateNotifier<StudyBoardState> {
       );
 
       // Award XP for completing a study line
-      _gamificationNotifier?.awardXp(
-        XpEventType.studyLineComplete,
-        relatedId: state.currentVariation?.id,
-      );
+      debugPrint('[StudyBoard] Line completed! Awarding XP...');
+      if (_gamificationNotifier != null) {
+        _gamificationNotifier!.awardXp(
+          XpEventType.studyLineComplete,
+          relatedId: state.currentVariation?.id,
+        ).then((result) {
+          debugPrint('[StudyBoard] XP awarded: ${result?.xpAwarded ?? 0}, leveledUp: ${result?.leveledUp ?? false}');
+        });
+      } else {
+        debugPrint('[StudyBoard] WARNING: _gamificationNotifier is null!');
+      }
     } else {
       // Show correct marker
       state = state.copyWith(

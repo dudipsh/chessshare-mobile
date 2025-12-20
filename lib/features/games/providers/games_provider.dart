@@ -6,6 +6,7 @@ import '../../../core/api/lichess_api.dart';
 import '../../../core/repositories/games_repository.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../models/chess_game.dart';
+import '../services/games_cache_service.dart';
 
 // Games state
 class GamesState {
@@ -121,9 +122,26 @@ class GamesNotifier extends StateNotifier<GamesState> {
   }
 
   Future<void> _initialize() async {
+    // Load cached games first for instant UI
+    await _loadFromCache();
     await _loadGameReviewsFromServer();
-    // Auto-import if we have saved profiles
+    // Auto-import if we have saved profiles (this will update the cache)
     await _autoImportIfNeeded();
+  }
+
+  /// Load games from local cache for instant display
+  Future<void> _loadFromCache() async {
+    if (!mounted) return;
+
+    try {
+      final cachedGames = await GamesCacheService.getCachedGames();
+      if (cachedGames.isNotEmpty && mounted) {
+        debugPrint('Loaded ${cachedGames.length} games from cache');
+        state = state.copyWith(games: cachedGames);
+      }
+    } catch (e) {
+      debugPrint('Error loading games from cache: $e');
+    }
   }
 
   /// Auto-import games from saved profiles
@@ -317,6 +335,9 @@ class GamesNotifier extends StateNotifier<GamesState> {
 
       // Update games with analysis status from cache
       _updateGamesWithAnalysisStatus();
+
+      // Cache games for offline access
+      await GamesCacheService.cacheGames(state.games);
     } catch (e) {
       if (mounted) {
         state = state.copyWith(
@@ -374,6 +395,9 @@ class GamesNotifier extends StateNotifier<GamesState> {
 
       // Update games with analysis status from cache
       _updateGamesWithAnalysisStatus();
+
+      // Cache games for offline access
+      await GamesCacheService.cacheGames(state.games);
     } catch (e) {
       if (mounted) {
         state = state.copyWith(

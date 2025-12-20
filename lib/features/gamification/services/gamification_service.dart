@@ -51,7 +51,8 @@ class GamificationService {
 
   // ============ Award XP ============
 
-  /// Award XP for an event (calls server Edge Function)
+  /// Award XP for an event
+  /// Tries server first, falls back to local XP calculation
   Future<XpAwardResult> awardXp(
     String userId,
     XpEventType eventType, {
@@ -61,8 +62,11 @@ class GamificationService {
     final profile = await getUserProfile(userId);
     final oldTotalXp = profile.totalXp;
 
+    // Determine XP to award (use custom or event type default)
+    final xpToAward = customXp ?? eventType.defaultXp;
+
     try {
-      // Call the add-xp-event Edge Function
+      // Try to call the add-xp-event Edge Function
       final response = await _client.functions.invoke(
         'add-xp-event',
         body: {
@@ -75,7 +79,6 @@ class GamificationService {
       if (response.data != null) {
         final data = response.data as Map<String, dynamic>;
         final xpGained = data['xpGained'] as int? ?? 0;
-        final levelUpInfo = data['levelUpInfo'] as Map<String, dynamic>?;
 
         if (xpGained > 0) {
           final newTotalXp = oldTotalXp + xpGained;
@@ -101,7 +104,31 @@ class GamificationService {
         }
       }
     } catch (e) {
-      // Edge function might not exist - use fallback
+      // Edge function might not exist - continue to local fallback
+    }
+
+    // Fallback: Award XP locally when server is unavailable
+    if (xpToAward > 0) {
+      final newTotalXp = oldTotalXp + xpToAward;
+      final oldLevel = LevelInfo.levelFromXp(oldTotalXp);
+      final newLevel = LevelInfo.levelFromXp(newTotalXp);
+
+      // Update cache
+      _cachedProfile = UserXpProfile(
+        userId: userId,
+        totalXp: newTotalXp,
+        levelInfo: LevelInfo.fromXp(newTotalXp),
+        lastUpdated: DateTime.now(),
+      );
+
+      return XpAwardResult(
+        xpAwarded: xpToAward,
+        newTotalXp: newTotalXp,
+        oldLevel: oldLevel,
+        newLevel: newLevel,
+        leveledUp: newLevel > oldLevel,
+        newTitle: newLevel > oldLevel ? LevelInfo.titleForLevel(newLevel) : null,
+      );
     }
 
     return XpAwardResult.local(xpAwarded: 0, oldTotalXp: oldTotalXp);
