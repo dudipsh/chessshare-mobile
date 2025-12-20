@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:haptic_feedback/haptic_feedback.dart';
 
 import '../../../core/services/audio_service.dart';
+import '../../gamification/models/xp_models.dart';
+import '../../gamification/providers/gamification_provider.dart';
 import '../models/study_board.dart';
 
 /// State for study board (playing a variation)
@@ -125,9 +127,10 @@ class StudyBoardState {
 
 class StudyBoardNotifier extends StateNotifier<StudyBoardState> {
   final AudioService _audioService;
+  final GamificationNotifier? _gamificationNotifier;
   Chess _position = Chess.initial;
 
-  StudyBoardNotifier(this._audioService) : super(const StudyBoardState());
+  StudyBoardNotifier(this._audioService, this._gamificationNotifier) : super(const StudyBoardState());
 
   /// Load a board and start with the first variation
   void loadBoard(StudyBoard board) {
@@ -312,6 +315,12 @@ class StudyBoardNotifier extends StateNotifier<StudyBoardState> {
         markerType: MarkerType.valid,
         markerSquare: move.to,
         completedMoves: state.completedMoves + 1,
+      );
+
+      // Award XP for completing a study line
+      _gamificationNotifier?.awardXp(
+        XpEventType.studyLineComplete,
+        relatedId: state.currentVariation?.id,
       );
     } else {
       // Show correct marker
@@ -638,5 +647,6 @@ class MoveInfo {
 final studyBoardProvider =
     StateNotifierProvider<StudyBoardNotifier, StudyBoardState>((ref) {
   final audioService = ref.watch(audioServiceProvider);
-  return StudyBoardNotifier(audioService);
+  final gamificationNotifier = ref.read(gamificationProvider.notifier);
+  return StudyBoardNotifier(audioService, gamificationNotifier);
 });

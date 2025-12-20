@@ -3,6 +3,8 @@ import 'package:chessground/chessground.dart' show ValidMoves;
 import 'package:fast_immutable_collections/fast_immutable_collections.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../gamification/models/xp_models.dart';
+import '../../gamification/providers/gamification_provider.dart';
 import '../models/puzzle.dart';
 
 /// Marker types for visual feedback (shared with Study mode)
@@ -79,9 +81,10 @@ class PuzzleSolveState {
 }
 
 class PuzzleSolveNotifier extends StateNotifier<PuzzleSolveState> {
+  final GamificationNotifier? _gamificationNotifier;
   Chess _position = Chess.initial;
 
-  PuzzleSolveNotifier() : super(const PuzzleSolveState());
+  PuzzleSolveNotifier(this._gamificationNotifier) : super(const PuzzleSolveState());
 
   void loadPuzzle(Puzzle puzzle) {
     try {
@@ -128,6 +131,12 @@ class PuzzleSolveNotifier extends StateNotifier<PuzzleSolveState> {
           state: PuzzleState.completed,
           validMoves: IMap(),
           feedback: 'Excellent!',
+        );
+
+        // Award XP for solving the puzzle
+        _gamificationNotifier?.awardXp(
+          XpEventType.dailyPuzzleSolve,
+          relatedId: puzzle.id,
         );
       } else {
         // Make opponent's response automatically
@@ -286,5 +295,6 @@ class PuzzleSolveNotifier extends StateNotifier<PuzzleSolveState> {
 // Provider
 final puzzleSolveProvider =
     StateNotifierProvider<PuzzleSolveNotifier, PuzzleSolveState>((ref) {
-  return PuzzleSolveNotifier();
+  final gamificationNotifier = ref.read(gamificationProvider.notifier);
+  return PuzzleSolveNotifier(gamificationNotifier);
 });

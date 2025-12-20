@@ -171,7 +171,7 @@ class StreakBadge extends ConsumerWidget {
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(
+      padding: EdgeInsets.symmetric(
         horizontal: compact ? 8 : 12,
         vertical: compact ? 4 : 6,
       ),

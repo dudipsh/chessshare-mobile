@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'app/app.dart';
 import 'core/api/supabase_service.dart';
+import 'core/notifications/local_notification_service.dart';
 import 'core/services/app_init_service.dart';
 
 void main() async {
@@ -15,11 +16,23 @@ void main() async {
   // Initialize app services (database, auth, etc.)
   await AppInitService.initialize();
 
+  // Initialize local notifications
+  await _initializeNotifications();
+
   runApp(
     const ProviderScope(
       child: ChessShareApp(),
     ),
   );
+}
+
+Future<void> _initializeNotifications() async {
+  try {
+    await LocalNotificationService().initialize();
+    debugPrint('Local notifications initialized');
+  } catch (e) {
+    debugPrint('Failed to initialize notifications: $e');
+  }
 }
 
 Future<void> _initializeSupabase() async {

@@ -119,8 +119,6 @@ class _GamesListScreenState extends ConsumerState<GamesListScreen> {
       );
     }
 
-    final hasMultiplePlatforms =
-        gamesState.activeChessComUsername != null && gamesState.activeLichessUsername != null;
     final filteredByPlatform = _selectedPlatform != null
         ? games.where((g) => g.platform == _selectedPlatform).toList()
         : games;
@@ -128,13 +126,13 @@ class _GamesListScreenState extends ConsumerState<GamesListScreen> {
     return Column(
       children: [
         const GamesStatsBar(),
-        if (hasMultiplePlatforms)
-          PlatformSwitcher(
-            chessComUsername: gamesState.activeChessComUsername,
-            lichessUsername: gamesState.activeLichessUsername,
-            selectedPlatform: _selectedPlatform,
-            onPlatformSelected: (platform) => setState(() => _selectedPlatform = platform),
-          ),
+        // Platform switcher for filtering between accounts
+        PlatformSwitcher(
+          chessComUsername: gamesState.activeChessComUsername,
+          lichessUsername: gamesState.activeLichessUsername,
+          selectedPlatform: _selectedPlatform,
+          onPlatformSelected: (platform) => setState(() => _selectedPlatform = platform),
+        ),
         const QuickAccessButtons(),
         Expanded(
           child: RefreshIndicator(

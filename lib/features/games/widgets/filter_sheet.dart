@@ -29,7 +29,7 @@ class _FilterSheetState extends ConsumerState<FilterSheet> {
   Widget build(BuildContext context) {
     final filter = ref.watch(gamesFilterProvider);
 
-    return Padding(
+    return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
         mainAxisSize: MainAxisSize.min,

@@ -67,6 +67,12 @@ class GamificationState {
 
   /// Current streak
   int get currentStreak => streak?.currentStreak ?? 0;
+
+  /// Has pending XP to show
+  bool get hasPendingXp => pendingXpAward != null && pendingXpAward!.xpAwarded > 0;
+
+  /// Has pending streak to show
+  bool get hasPendingStreak => pendingStreakResult != null && pendingStreakResult!.isNewDay;
 }
 
 /// Notifier for managing gamification state
@@ -78,31 +84,67 @@ class GamificationNotifier extends StateNotifier<GamificationState> {
 
   /// Initialize with user ID
   Future<void> initialize(String userId) async {
-    _userId = userId;
-    await _load();
-    // Check daily login on initialization
-    await checkDailyLogin();
-  }
+    if (_userId == userId && state.profile != null) return; // Already initialized
 
-  Future<void> _load() async {
-    if (_userId == null) return;
+    _userId = userId;
+    state = state.copyWith(isLoading: true);
 
     try {
-      state = state.copyWith(isLoading: true, error: null);
+      // Load profile and streak in parallel
+      final results = await Future.wait([
+        _service.getUserProfile(userId),
+        _service.getStreak(userId),
+      ]);
 
-      final profile = await _service.getUserProfile(_userId!);
-      final streak = await _service.getStreak(_userId!);
+      final profile = results[0] as UserXpProfile;
+      final streak = results[1] as LoginStreak;
 
       state = GamificationState(
         profile: profile,
         streak: streak,
         isLoading: false,
       );
+
+      // Check daily login after loading
+      await _checkDailyLogin();
     } catch (e) {
       state = state.copyWith(
         isLoading: false,
         error: e.toString(),
       );
+    }
+  }
+
+  /// Check daily login and trigger streak popup if needed
+  Future<void> _checkDailyLogin() async {
+    if (_userId == null) return;
+
+    try {
+      final result = await _service.checkDailyLogin(_userId!);
+
+      if (result.isNewDay) {
+        // Refresh profile to get updated XP
+        final profile = await _service.getUserProfile(_userId!);
+
+        state = state.copyWith(
+          profile: profile,
+          streak: LoginStreak(
+            userId: _userId!,
+            currentStreak: result.newStreak,
+            longestStreak: state.streak?.longestStreak ?? result.newStreak,
+            lastLoginDate: DateTime.now(),
+          ),
+          pendingStreakResult: result,
+          pendingXpAward: result.xpBonus > 0
+              ? XpAwardResult.local(
+                  xpAwarded: result.xpBonus,
+                  oldTotalXp: profile.totalXp - result.xpBonus,
+                )
+              : null,
+        );
+      }
+    } catch (e) {
+      // Ignore errors - daily login is optional
     }
   }
 
@@ -122,50 +164,21 @@ class GamificationNotifier extends StateNotifier<GamificationState> {
         customXp: customXp,
       );
 
-      // Update state
-      state = state.copyWith(
-        profile: UserXpProfile(
-          userId: _userId!,
-          totalXp: result.newTotalXp,
-          levelInfo: LevelInfo.fromXp(result.newTotalXp),
-          lastUpdated: DateTime.now(),
-        ),
-        pendingXpAward: result,
-      );
-
-      return result;
-    } catch (e) {
-      print('GamificationNotifier: Error awarding XP: $e');
-      return null;
-    }
-  }
-
-  /// Check daily login
-  Future<StreakCheckResult?> checkDailyLogin() async {
-    if (_userId == null) return null;
-
-    try {
-      final result = await _service.checkDailyLogin(_userId!);
-
-      if (result.isNewDay) {
-        // Refresh profile to get updated XP
-        final profile = await _service.getUserProfile(_userId!);
-
+      if (result.xpAwarded > 0) {
+        // Update state with new XP
         state = state.copyWith(
-          profile: profile,
-          streak: LoginStreak(
+          profile: UserXpProfile(
             userId: _userId!,
-            currentStreak: result.newStreak,
-            longestStreak: state.streak?.longestStreak ?? result.newStreak,
-            lastLoginDate: DateTime.now(),
+            totalXp: result.newTotalXp,
+            levelInfo: LevelInfo.fromXp(result.newTotalXp),
+            lastUpdated: DateTime.now(),
           ),
-          pendingStreakResult: result,
+          pendingXpAward: result,
         );
       }
 
       return result;
     } catch (e) {
-      print('GamificationNotifier: Error checking daily login: $e');
       return null;
     }
   }
@@ -182,8 +195,19 @@ class GamificationNotifier extends StateNotifier<GamificationState> {
 
   /// Refresh all gamification data
   Future<void> refresh() async {
-    _service.clearCache();
-    await _load();
+    if (_userId == null) return;
+
+    state = state.copyWith(isLoading: true);
+    await _service.refresh(_userId!);
+
+    final profile = await _service.getUserProfile(_userId!);
+    final streak = await _service.getStreak(_userId!);
+
+    state = GamificationState(
+      profile: profile,
+      streak: streak,
+      isLoading: false,
+    );
   }
 
   /// Clear on logout

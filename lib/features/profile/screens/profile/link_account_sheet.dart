@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../auth/providers/auth_provider.dart';
+import '../../../games/providers/games_provider.dart';
+import '../../providers/profile_provider.dart';
 
 void showLinkAccountSheet(BuildContext context, WidgetRef ref, {String platform = 'chesscom'}) {
   final controller = TextEditingController();
@@ -46,16 +48,22 @@ void showLinkAccountSheet(BuildContext context, WidgetRef ref, {String platform 
               const SizedBox(width: 12),
               Expanded(
                 child: ElevatedButton(
-                  onPressed: () {
+                  onPressed: () async {
                     final username = controller.text.trim();
                     if (username.isNotEmpty) {
                       if (platform == 'chesscom') {
-                        ref.read(authProvider.notifier).updateChessComUsername(username);
+                        await ref.read(authProvider.notifier).updateChessComUsername(username);
                       } else {
-                        ref.read(authProvider.notifier).updateLichessUsername(username);
+                        await ref.read(authProvider.notifier).updateLichessUsername(username);
+                      }
+                      // Invalidate games provider to refresh with new account
+                      ref.invalidate(gamesProvider);
+                      // Also refresh profile provider if available
+                      if (profile != null) {
+                        ref.read(profileProvider(profile.id).notifier).refresh();
                       }
                     }
-                    Navigator.pop(context);
+                    if (context.mounted) Navigator.pop(context);
                   },
                   child: const Text('Save'),
                 ),

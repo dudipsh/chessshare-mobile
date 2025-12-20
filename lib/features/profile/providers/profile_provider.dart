@@ -185,12 +185,13 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
       final gameReviews = results[3] as List<GameReviewSummary>;
 
       // Also check local database for linked usernames if not from server
-      if (linkedAccounts.isEmpty && profile != null) {
+      if (linkedAccounts.isEmpty) {
         final localProfile = await LocalDatabase.getUserProfile(userId);
+        final localAccounts = <LinkedChessAccount>[];
+
+        // Check local database first
         if (localProfile != null) {
-          // Create LinkedChessAccount objects from local data
-          final localAccounts = <LinkedChessAccount>[];
-          if (localProfile.chessComUsername != null) {
+          if (localProfile.chessComUsername != null && localProfile.chessComUsername!.isNotEmpty) {
             localAccounts.add(LinkedChessAccount(
               id: 'local_chesscom',
               platform: 'chesscom',
@@ -198,7 +199,7 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
               linkedAt: DateTime.now(),
             ));
           }
-          if (localProfile.lichessUsername != null) {
+          if (localProfile.lichessUsername != null && localProfile.lichessUsername!.isNotEmpty) {
             localAccounts.add(LinkedChessAccount(
               id: 'local_lichess',
               platform: 'lichess',
@@ -206,8 +207,29 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
               linkedAt: DateTime.now(),
             ));
           }
-          linkedAccounts = localAccounts;
         }
+
+        // Also check profile data if still empty
+        if (localAccounts.isEmpty && profile != null) {
+          if (profile.chessComUsername != null && profile.chessComUsername!.isNotEmpty) {
+            localAccounts.add(LinkedChessAccount(
+              id: 'profile_chesscom',
+              platform: 'chesscom',
+              username: profile.chessComUsername!,
+              linkedAt: DateTime.now(),
+            ));
+          }
+          if (profile.lichessUsername != null && profile.lichessUsername!.isNotEmpty) {
+            localAccounts.add(LinkedChessAccount(
+              id: 'profile_lichess',
+              platform: 'lichess',
+              username: profile.lichessUsername!,
+              linkedAt: DateTime.now(),
+            ));
+          }
+        }
+
+        linkedAccounts = localAccounts;
       }
 
       // Update state with fresh data

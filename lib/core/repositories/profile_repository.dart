@@ -36,10 +36,11 @@ class ProfileRepository {
   }
 
   /// Get linked chess accounts
+  /// Note: The RPC function uses auth.uid() internally, no user_id parameter needed
   static Future<List<LinkedChessAccount>> getLinkedAccounts(String userId) async {
     final result = await BaseRepository.executeRpc<List<LinkedChessAccount>>(
       functionName: 'get_linked_chess_accounts',
-      params: {'p_user_id': userId},
+      params: {}, // Web project calls this without parameters - it uses auth.uid() internally
       parser: (response) {
         if (response == null) return <LinkedChessAccount>[];
         final list = response as List;

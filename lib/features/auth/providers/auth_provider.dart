@@ -243,10 +243,44 @@ class AuthNotifier extends StateNotifier<AppAuthState> {
   }
 
   /// Load linked chess accounts from Supabase and update the profile
-  /// Note: Usernames are already stored in the profile table, so we just return the profile
   Future<UserProfile> _loadLinkedChessAccounts(String userId, UserProfile profile) async {
-    // The usernames are already in the profile from the profiles table
-    // No need for a separate RPC call - just log and return
+    try {
+      // Get linked accounts from the linked_chess_accounts table via RPC
+      final response = await SupabaseService.client.rpc('get_linked_chess_accounts');
+
+      if (response != null && response is List && response.isNotEmpty) {
+        String? chessComUsername = profile.chessComUsername;
+        String? lichessUsername = profile.lichessUsername;
+
+        for (final account in response) {
+          final platform = account['platform'] as String?;
+          final username = account['username'] as String?;
+          if (platform == 'chesscom' && username != null) {
+            chessComUsername = username;
+          } else if (platform == 'lichess' && username != null) {
+            lichessUsername = username;
+          }
+        }
+
+        debugPrint('Loaded linked accounts from RPC: Chess.com=$chessComUsername, Lichess=$lichessUsername');
+
+        // Update local database with the linked usernames
+        if (chessComUsername != null || lichessUsername != null) {
+          await LocalDatabase.updateUserProfile(userId, {
+            if (chessComUsername != null) 'chess_com_username': chessComUsername,
+            if (lichessUsername != null) 'lichess_username': lichessUsername,
+          });
+        }
+
+        return profile.copyWith(
+          chessComUsername: chessComUsername,
+          lichessUsername: lichessUsername,
+        );
+      }
+    } catch (e) {
+      debugPrint('Error loading linked accounts: $e');
+    }
+
     debugPrint('Using linked accounts from profile: Chess.com=${profile.chessComUsername}, Lichess=${profile.lichessUsername}');
     return profile;
   }
@@ -400,15 +434,8 @@ class AuthNotifier extends StateNotifier<AppAuthState> {
         {'chess_com_username': username},
       );
 
-      // Update Supabase if online
+      // Save to linked_chess_accounts table via RPC (the correct table)
       if (state.user != null) {
-        // Update profile table
-        await SupabaseService.client
-            .from('profiles')
-            .update({'chess_com_username': username})
-            .eq('id', state.profile!.id);
-
-        // Also save to linked_chess_accounts table via RPC
         await _saveLinkedChessAccount('chesscom', username);
       }
 
@@ -431,15 +458,8 @@ class AuthNotifier extends StateNotifier<AppAuthState> {
         {'lichess_username': username},
       );
 
-      // Update Supabase if online
+      // Save to linked_chess_accounts table via RPC (the correct table)
       if (state.user != null) {
-        // Update profile table
-        await SupabaseService.client
-            .from('profiles')
-            .update({'lichess_username': username})
-            .eq('id', state.profile!.id);
-
-        // Also save to linked_chess_accounts table via RPC
         await _saveLinkedChessAccount('lichess', username);
       }
 

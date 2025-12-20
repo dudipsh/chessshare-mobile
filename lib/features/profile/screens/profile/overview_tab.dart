@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../gamification/widgets/level_badge.dart';
 import '../../models/profile_data.dart';
 import '../../providers/profile_provider.dart';
 import '../../widgets/chess_stats_card.dart';
@@ -25,6 +26,10 @@ class OverviewTab extends ConsumerWidget {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        // Gamification stats (Level, Streak, XP)
+        const GamificationStatsRow(),
+        const SizedBox(height: 16),
+
         // Quick stats
         SectionCard(
           title: 'Quick Stats',

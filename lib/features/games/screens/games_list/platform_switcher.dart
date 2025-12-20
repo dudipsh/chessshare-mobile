@@ -19,34 +19,59 @@ class PlatformSwitcher extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final hasChessCom = chessComUsername != null && chessComUsername!.isNotEmpty;
+    final hasLichess = lichessUsername != null && lichessUsername!.isNotEmpty;
+    final hasBoth = hasChessCom && hasLichess;
+
+    // Don't show if no accounts
+    if (!hasChessCom && !hasLichess) {
+      return const SizedBox.shrink();
+    }
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Row(
-        children: [
-          _PlatformChip(
-            label: 'All',
-            isSelected: selectedPlatform == null,
-            isDark: isDark,
-            onTap: () => onPlatformSelected(null),
-          ),
-          const SizedBox(width: 8),
-          _PlatformChip(
-            label: chessComUsername ?? 'Chess.com',
-            icon: '\u265f',
-            isSelected: selectedPlatform == GamePlatform.chesscom,
-            isDark: isDark,
-            onTap: () => onPlatformSelected(GamePlatform.chesscom),
-          ),
-          const SizedBox(width: 8),
-          _PlatformChip(
-            label: lichessUsername ?? 'Lichess',
-            icon: '\u265e',
-            isSelected: selectedPlatform == GamePlatform.lichess,
-            isDark: isDark,
-            onTap: () => onPlatformSelected(GamePlatform.lichess),
-          ),
-        ],
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            // All filter - only show if both platforms are linked
+            if (hasBoth) ...[
+              _PlatformChip(
+                label: 'All',
+                isSelected: selectedPlatform == null,
+                isDark: isDark,
+                onTap: () => onPlatformSelected(null),
+              ),
+              const SizedBox(width: 8),
+            ],
+
+            // Chess.com chip
+            if (hasChessCom) ...[
+              _PlatformChip(
+                label: chessComUsername!,
+                icon: '♟',
+                platformColor: const Color(0xFF769656),
+                isSelected: !hasBoth || selectedPlatform == GamePlatform.chesscom,
+                isDark: isDark,
+                onTap: () => onPlatformSelected(GamePlatform.chesscom),
+              ),
+            ],
+
+            if (hasChessCom && hasLichess) const SizedBox(width: 8),
+
+            // Lichess chip
+            if (hasLichess) ...[
+              _PlatformChip(
+                label: lichessUsername!,
+                icon: '♞',
+                platformColor: Colors.white,
+                isSelected: !hasBoth || selectedPlatform == GamePlatform.lichess,
+                isDark: isDark,
+                onTap: () => onPlatformSelected(GamePlatform.lichess),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -55,6 +80,7 @@ class PlatformSwitcher extends StatelessWidget {
 class _PlatformChip extends StatelessWidget {
   final String label;
   final String? icon;
+  final Color? platformColor;
   final bool isSelected;
   final bool isDark;
   final VoidCallback onTap;
@@ -62,6 +88,7 @@ class _PlatformChip extends StatelessWidget {
   const _PlatformChip({
     required this.label,
     this.icon,
+    this.platformColor,
     required this.isSelected,
     required this.isDark,
     required this.onTap,
@@ -70,10 +97,11 @@ class _PlatformChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final primaryColor = Theme.of(context).colorScheme.primary;
+    final activeColor = platformColor ?? primaryColor;
 
     return Material(
       color: isSelected
-          ? primaryColor.withValues(alpha: 0.2)
+          ? activeColor.withValues(alpha: 0.2)
           : (isDark ? Colors.white10 : Colors.grey.shade200),
       borderRadius: BorderRadius.circular(20),
       child: InkWell(
@@ -89,7 +117,7 @@ class _PlatformChip extends StatelessWidget {
                   icon!,
                   style: TextStyle(
                     fontSize: 14,
-                    color: isSelected ? primaryColor : (isDark ? Colors.white70 : Colors.black54),
+                    color: isSelected ? activeColor : (isDark ? Colors.white70 : Colors.black54),
                   ),
                 ),
                 const SizedBox(width: 4),
@@ -99,7 +127,7 @@ class _PlatformChip extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                  color: isSelected ? primaryColor : (isDark ? Colors.white70 : Colors.black54),
+                  color: isSelected ? activeColor : (isDark ? Colors.white70 : Colors.black54),
                 ),
               ),
             ],
