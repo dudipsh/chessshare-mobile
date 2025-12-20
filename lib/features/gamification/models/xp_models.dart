@@ -2,6 +2,7 @@
 enum XpEventType {
   studyLineComplete('study_line_complete', 50),
   dailyPuzzleSolve('daily_puzzle_solve', 25),
+  puzzleSolve('puzzle_solve', 15), // Regular puzzle solve (from game review)
   gameAnalysisComplete('game_analysis_complete', 30),
   dailyLoginStreak('daily_login_streak', 0), // Variable based on streak
   practiceMistakeCorrect('practice_mistake_correct', 15),

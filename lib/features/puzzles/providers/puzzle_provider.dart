@@ -224,9 +224,9 @@ class PuzzleSolveNotifier extends StateNotifier<PuzzleSolveState> {
           markerSquare: move.to,
         );
 
-        // Award XP for solving the puzzle
+        // Award XP for solving the puzzle (regular puzzle, not daily)
         _gamificationNotifier?.awardXp(
-          XpEventType.dailyPuzzleSolve,
+          XpEventType.puzzleSolve,
           relatedId: puzzle.id,
         );
       } else {

@@ -20,6 +20,7 @@ class DailyPuzzleScreen extends ConsumerStatefulWidget {
 
 class _DailyPuzzleScreenState extends ConsumerState<DailyPuzzleScreen> {
   bool _puzzleLoaded = false;
+  String? _loadedDateKey;
 
   @override
   Widget build(BuildContext context) {
@@ -27,20 +28,34 @@ class _DailyPuzzleScreenState extends ConsumerState<DailyPuzzleScreen> {
     final puzzleState = ref.watch(puzzleSolveProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    // Load puzzle when available
-    if (dailyState.puzzle != null && !_puzzleLoaded && !dailyState.isSolved) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!_puzzleLoaded) {
-          _puzzleLoaded = true;
-          ref.read(puzzleSolveProvider.notifier).loadPuzzle(dailyState.puzzle!);
-        }
-      });
+    // Load puzzle when available - reset if date changed
+    final currentDateKey = dailyState.dateKey;
+    if (dailyState.puzzle != null && !dailyState.isSolved) {
+      if (!_puzzleLoaded || _loadedDateKey != currentDateKey) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!_puzzleLoaded || _loadedDateKey != currentDateKey) {
+            _puzzleLoaded = true;
+            _loadedDateKey = currentDateKey;
+            ref.read(puzzleSolveProvider.notifier).loadPuzzle(dailyState.puzzle!);
+          }
+        });
+      }
     }
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Daily Puzzle'),
         actions: [
+          // Go to Today button (when not viewing today)
+          if (!dailyState.isToday)
+            IconButton(
+              icon: const Icon(Icons.today),
+              onPressed: () {
+                _puzzleLoaded = false;
+                ref.read(dailyPuzzleProvider.notifier).goToToday();
+              },
+              tooltip: 'Go to Today',
+            ),
           // Streak indicator
           if (dailyState.streak > 0)
             Padding(
@@ -95,49 +110,108 @@ class _DailyPuzzleScreenState extends ConsumerState<DailyPuzzleScreen> {
     return SingleChildScrollView(
       child: Column(
         children: [
-          // Date and rating header
+          // Date navigation header
           Container(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _formatDate(DateTime.now()),
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: isDark ? Colors.white : Colors.black87,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      dailyState.puzzle!.theme.displayName,
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: isDark ? Colors.white70 : Colors.grey.shade600,
-                      ),
-                    ),
-                  ],
+                // Previous day button
+                IconButton(
+                  onPressed: () {
+                    _puzzleLoaded = false;
+                    ref.read(dailyPuzzleProvider.notifier).previousDay();
+                  },
+                  icon: const Icon(Icons.chevron_left, size: 28),
+                  tooltip: 'Previous day',
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: isDark ? Colors.white12 : Colors.grey.shade200,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
+                // Date and puzzle info
+                Expanded(
+                  child: Column(
                     children: [
-                      Icon(Icons.star, size: 16, color: Colors.amber.shade600),
-                      const SizedBox(width: 4),
-                      Text(
-                        '${dailyState.puzzle!.rating}',
-                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            _formatDate(dailyState.selectedDate),
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: isDark ? Colors.white : Colors.black87,
+                            ),
+                          ),
+                          if (dailyState.isToday)
+                            Container(
+                              margin: const EdgeInsets.only(left: 8),
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: AppColors.primary.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                'Today',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.primary,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            dailyState.puzzle!.theme.displayName,
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: isDark ? Colors.white70 : Colors.grey.shade600,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: isDark ? Colors.white12 : Colors.grey.shade200,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.star, size: 14, color: Colors.amber.shade600),
+                                const SizedBox(width: 4),
+                                Text(
+                                  '${dailyState.puzzle!.rating}',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
+                ),
+                // Next day button (disabled if today)
+                IconButton(
+                  onPressed: dailyState.isToday
+                      ? null
+                      : () {
+                          _puzzleLoaded = false;
+                          ref.read(dailyPuzzleProvider.notifier).nextDay();
+                        },
+                  icon: Icon(
+                    Icons.chevron_right,
+                    size: 28,
+                    color: dailyState.isToday
+                        ? (isDark ? Colors.white24 : Colors.grey.shade300)
+                        : null,
+                  ),
+                  tooltip: 'Next day',
                 ),
               ],
             ),
@@ -264,106 +338,247 @@ class _DailyPuzzleScreenState extends ConsumerState<DailyPuzzleScreen> {
   }
 
   Widget _buildSolvedView(BuildContext context, DailyPuzzleState state, bool isDark) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: AppColors.success.withValues(alpha: 0.1),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.check_circle,
-                size: 80,
-                color: AppColors.success,
-              ),
-            ),
-            const SizedBox(height: 24),
-            const Text(
-              "Today's Puzzle Complete!",
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 16),
-            if (state.streak > 0) ...[
+    return SingleChildScrollView(
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // Date navigation for solved view too
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.local_fire_department, color: Colors.orange, size: 28),
-                  const SizedBox(width: 8),
+                  IconButton(
+                    onPressed: () {
+                      _puzzleLoaded = false;
+                      ref.read(dailyPuzzleProvider.notifier).previousDay();
+                    },
+                    icon: const Icon(Icons.chevron_left, size: 28),
+                  ),
                   Text(
-                    '${state.streak} day streak!',
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.orange,
+                    _formatDate(state.selectedDate),
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? Colors.white : Colors.black87,
+                    ),
+                  ),
+                  if (state.isToday)
+                    Container(
+                      margin: const EdgeInsets.only(left: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        'Today',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                    ),
+                  IconButton(
+                    onPressed: state.isToday
+                        ? null
+                        : () {
+                            _puzzleLoaded = false;
+                            ref.read(dailyPuzzleProvider.notifier).nextDay();
+                          },
+                    icon: Icon(
+                      Icons.chevron_right,
+                      size: 28,
+                      color: state.isToday
+                          ? (isDark ? Colors.white24 : Colors.grey.shade300)
+                          : null,
                     ),
                   ),
                 ],
               ),
+              const SizedBox(height: 24),
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: AppColors.success.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.check_circle,
+                  size: 80,
+                  color: AppColors.success,
+                ),
+              ),
+              const SizedBox(height: 24),
+              Text(
+                state.isToday ? "Today's Puzzle Complete!" : "Puzzle Solved!",
+                style: const TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                ),
+                textAlign: TextAlign.center,
+              ),
               const SizedBox(height: 16),
+              if (state.streak > 0 && state.isToday) ...[
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.local_fire_department, color: Colors.orange, size: 28),
+                    const SizedBox(width: 8),
+                    Text(
+                      '${state.streak} day streak!',
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.orange,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+              ],
+              Text(
+                state.isToday
+                    ? 'Come back tomorrow for a new challenge'
+                    : 'You solved this puzzle',
+                style: TextStyle(
+                  fontSize: 16,
+                  color: isDark ? Colors.white70 : Colors.grey.shade600,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              // Show "Go to Today" button if not viewing today
+              if (!state.isToday)
+                ElevatedButton.icon(
+                  onPressed: () {
+                    _puzzleLoaded = false;
+                    ref.read(dailyPuzzleProvider.notifier).goToToday();
+                  },
+                  icon: const Icon(Icons.today),
+                  label: const Text("Go to Today's Puzzle"),
+                  style: ElevatedButton.styleFrom(
+                    minimumSize: const Size(200, 48),
+                  ),
+                ),
+              if (!state.isToday) const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: () => context.goNamed('puzzles'),
+                icon: const Icon(Icons.extension),
+                label: const Text('Practice More Puzzles'),
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(200, 48),
+                ),
+              ),
             ],
-            Text(
-              'Come back tomorrow for a new challenge',
-              style: TextStyle(
-                fontSize: 16,
-                color: isDark ? Colors.white70 : Colors.grey.shade600,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 32),
-            OutlinedButton.icon(
-              onPressed: () => context.goNamed('puzzles'),
-              icon: const Icon(Icons.extension),
-              label: const Text('Practice More Puzzles'),
-              style: OutlinedButton.styleFrom(
-                minimumSize: const Size(200, 48),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
   }
 
   Widget _buildNoPuzzleView(BuildContext context, bool isDark) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.extension_off,
-              size: 80,
-              color: isDark ? Colors.white38 : Colors.grey.shade400,
-            ),
-            const SizedBox(height: 24),
-            const Text(
-              'No Daily Puzzle Available',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Import games to generate personalized puzzles',
-              style: TextStyle(
-                color: isDark ? Colors.white70 : Colors.grey.shade600,
+    final dailyState = ref.watch(dailyPuzzleProvider);
+
+    return SingleChildScrollView(
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // Date navigation
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  IconButton(
+                    onPressed: () {
+                      _puzzleLoaded = false;
+                      ref.read(dailyPuzzleProvider.notifier).previousDay();
+                    },
+                    icon: const Icon(Icons.chevron_left, size: 28),
+                  ),
+                  Text(
+                    _formatDate(dailyState.selectedDate),
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? Colors.white : Colors.black87,
+                    ),
+                  ),
+                  if (dailyState.isToday)
+                    Container(
+                      margin: const EdgeInsets.only(left: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        'Today',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                    ),
+                  IconButton(
+                    onPressed: dailyState.isToday
+                        ? null
+                        : () {
+                            _puzzleLoaded = false;
+                            ref.read(dailyPuzzleProvider.notifier).nextDay();
+                          },
+                    icon: Icon(
+                      Icons.chevron_right,
+                      size: 28,
+                      color: dailyState.isToday
+                          ? (isDark ? Colors.white24 : Colors.grey.shade300)
+                          : null,
+                    ),
+                  ),
+                ],
               ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: () => context.goNamed('games'),
-              child: const Text('Import Games'),
-            ),
-          ],
+              const SizedBox(height: 32),
+              Icon(
+                Icons.extension_off,
+                size: 80,
+                color: isDark ? Colors.white38 : Colors.grey.shade400,
+              ),
+              const SizedBox(height: 24),
+              const Text(
+                'No Puzzle Available',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Import games to generate personalized puzzles',
+                style: TextStyle(
+                  color: isDark ? Colors.white70 : Colors.grey.shade600,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              if (!dailyState.isToday) ...[
+                ElevatedButton.icon(
+                  onPressed: () {
+                    _puzzleLoaded = false;
+                    ref.read(dailyPuzzleProvider.notifier).goToToday();
+                  },
+                  icon: const Icon(Icons.today),
+                  label: const Text("Go to Today's Puzzle"),
+                ),
+                const SizedBox(height: 12),
+              ],
+              OutlinedButton(
+                onPressed: () => context.goNamed('games'),
+                child: const Text('Import Games'),
+              ),
+            ],
+          ),
         ),
       ),
     );

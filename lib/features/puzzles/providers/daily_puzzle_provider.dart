@@ -16,15 +16,19 @@ class DailyPuzzleState {
   final DateTime? solvedAt;
   final int streak; // Days in a row solving daily puzzle
   final String? error;
+  final DateTime selectedDate; // Currently viewing this date's puzzle
+  final Map<String, bool> solvedDates; // Track which dates are solved
 
-  const DailyPuzzleState({
+  DailyPuzzleState({
     this.puzzle,
     this.isLoading = false,
     this.isSolved = false,
     this.solvedAt,
     this.streak = 0,
     this.error,
-  });
+    DateTime? selectedDate,
+    this.solvedDates = const {},
+  }) : selectedDate = selectedDate ?? DateTime.now();
 
   DailyPuzzleState copyWith({
     Puzzle? puzzle,
@@ -33,6 +37,8 @@ class DailyPuzzleState {
     DateTime? solvedAt,
     int? streak,
     String? error,
+    DateTime? selectedDate,
+    Map<String, bool>? solvedDates,
     bool clearError = false,
   }) {
     return DailyPuzzleState(
@@ -42,8 +48,19 @@ class DailyPuzzleState {
       solvedAt: solvedAt ?? this.solvedAt,
       streak: streak ?? this.streak,
       error: clearError ? null : (error ?? this.error),
+      selectedDate: selectedDate ?? this.selectedDate,
+      solvedDates: solvedDates ?? this.solvedDates,
     );
   }
+
+  bool get isToday {
+    final now = DateTime.now();
+    return selectedDate.year == now.year &&
+        selectedDate.month == now.month &&
+        selectedDate.day == now.day;
+  }
+
+  String get dateKey => '${selectedDate.year}-${selectedDate.month}-${selectedDate.day}';
 }
 
 /// Notifier for daily puzzle
@@ -53,16 +70,32 @@ class DailyPuzzleNotifier extends StateNotifier<DailyPuzzleState> {
 
   static const _prefsKeyLastSolvedDate = 'daily_puzzle_last_solved';
   static const _prefsKeyStreak = 'daily_puzzle_streak';
-  static const _prefsKeyPuzzleId = 'daily_puzzle_id';
+  static const _prefsKeySolvedDates = 'daily_puzzle_solved_dates';
 
   DailyPuzzleNotifier(this._userId, this._gamificationNotifier)
-      : super(const DailyPuzzleState()) {
+      : super(DailyPuzzleState()) {
     _initialize();
   }
 
   Future<void> _initialize() async {
+    await _loadSolvedDates();
     await _loadStreak();
-    await _loadDailyPuzzle();
+    await _loadPuzzleForDate(state.selectedDate);
+  }
+
+  /// Load solved dates from preferences
+  Future<void> _loadSolvedDates() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final solvedList = prefs.getStringList(_prefsKeySolvedDates) ?? [];
+      final solvedMap = <String, bool>{};
+      for (final dateKey in solvedList) {
+        solvedMap[dateKey] = true;
+      }
+      state = state.copyWith(solvedDates: solvedMap);
+    } catch (e) {
+      debugPrint('Error loading solved dates: $e');
+    }
   }
 
   /// Load the current streak from preferences
@@ -78,126 +111,138 @@ class DailyPuzzleNotifier extends StateNotifier<DailyPuzzleState> {
         final todayDate = DateTime(today.year, today.month, today.day);
         final lastSolvedDate = DateTime(lastSolved.year, lastSolved.month, lastSolved.day);
 
-        // Check if solved today
-        final isSolvedToday = todayDate.isAtSameMomentAs(lastSolvedDate);
-
         // Check if streak is still valid (solved yesterday or today)
         final daysDiff = todayDate.difference(lastSolvedDate).inDays;
         final validStreak = daysDiff <= 1 ? streak : 0;
 
-        state = state.copyWith(
-          streak: validStreak,
-          isSolved: isSolvedToday,
-          solvedAt: isSolvedToday ? lastSolved : null,
-        );
+        state = state.copyWith(streak: validStreak);
       }
     } catch (e) {
       debugPrint('Error loading daily puzzle streak: $e');
     }
   }
 
-  /// Load today's daily puzzle
-  Future<void> _loadDailyPuzzle() async {
-    if (_userId == null || _userId!.startsWith('guest_')) return;
-
-    state = state.copyWith(isLoading: true, clearError: true);
-
-    try {
-      // Try to get daily puzzle from server
-      final response = await SupabaseService.client.rpc(
-        'get_daily_puzzle',
-        params: {'p_user_id': _userId},
-      );
-
-      if (response != null) {
-        final puzzle = _parsePuzzle(response);
-        if (puzzle != null) {
-          state = state.copyWith(
-            puzzle: puzzle,
-            isLoading: false,
-          );
-          return;
-        }
-      }
-
-      // Fallback: Get a random puzzle from user's puzzles
-      await _loadRandomPuzzle();
-    } catch (e) {
-      debugPrint('Error loading daily puzzle: $e');
-      // Fallback to random puzzle
-      await _loadRandomPuzzle();
+  /// Navigate to previous day
+  void previousDay() {
+    final newDate = state.selectedDate.subtract(const Duration(days: 1));
+    // Don't go more than 30 days back
+    final minDate = DateTime.now().subtract(const Duration(days: 30));
+    if (newDate.isAfter(minDate)) {
+      _loadPuzzleForDate(newDate);
     }
   }
 
-  /// Load a random puzzle as fallback
-  Future<void> _loadRandomPuzzle() async {
+  /// Navigate to next day
+  void nextDay() {
+    final newDate = state.selectedDate.add(const Duration(days: 1));
+    final today = DateTime.now();
+    // Don't go past today
+    if (newDate.year <= today.year &&
+        newDate.month <= today.month &&
+        newDate.day <= today.day) {
+      _loadPuzzleForDate(newDate);
+    }
+  }
+
+  /// Go to today
+  void goToToday() {
+    _loadPuzzleForDate(DateTime.now());
+  }
+
+  /// Load puzzle for a specific date
+  Future<void> _loadPuzzleForDate(DateTime date) async {
+    final dateKey = '${date.year}-${date.month}-${date.day}';
+    final isSolved = state.solvedDates[dateKey] ?? false;
+
+    state = state.copyWith(
+      selectedDate: date,
+      isLoading: true,
+      isSolved: isSolved,
+      puzzle: null,
+      clearError: true,
+    );
+
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final today = DateTime.now();
-      final todayKey = '${today.year}-${today.month}-${today.day}';
-      final savedPuzzleId = prefs.getString(_prefsKeyPuzzleId);
-
-      // Check if we already have a puzzle for today
-      if (savedPuzzleId != null && savedPuzzleId.startsWith(todayKey)) {
-        final puzzleId = savedPuzzleId.split(':').last;
-        // Try to load this specific puzzle
-        final response = await SupabaseService.client
-            .from('user_puzzles')
-            .select()
-            .eq('id', puzzleId)
-            .maybeSingle();
-
-        if (response != null) {
-          final puzzle = _parsePuzzle(response);
-          if (puzzle != null) {
-            state = state.copyWith(puzzle: puzzle, isLoading: false);
-            return;
-          }
-        }
-      }
-
-      // Get a random unsolved puzzle
-      final response = await SupabaseService.client
-          .from('user_puzzles')
-          .select()
-          .eq('profile_id', _userId!)
-          .eq('completed', false)
-          .limit(1);
-
-      if (response != null && (response as List).isNotEmpty) {
-        final puzzle = _parsePuzzle(response.first);
-        if (puzzle != null) {
-          // Save puzzle ID for today
-          await prefs.setString(_prefsKeyPuzzleId, '$todayKey:${puzzle.id}');
-          state = state.copyWith(puzzle: puzzle, isLoading: false);
-          return;
-        }
-      }
-
-      // No puzzles available - create a default one
+      // Generate a deterministic puzzle based on the date
+      final puzzle = await _fetchPuzzleForDate(date);
       state = state.copyWith(
-        puzzle: _createDefaultPuzzle(),
+        puzzle: puzzle,
         isLoading: false,
       );
     } catch (e) {
-      debugPrint('Error loading random puzzle: $e');
+      debugPrint('Error loading puzzle for date $dateKey: $e');
       state = state.copyWith(
-        puzzle: _createDefaultPuzzle(),
+        puzzle: _createDefaultPuzzle(date),
         isLoading: false,
+        error: 'Failed to load puzzle',
       );
     }
+  }
+
+  /// Fetch puzzle for a specific date (uses date as seed for consistent puzzle)
+  Future<Puzzle> _fetchPuzzleForDate(DateTime date) async {
+    final dateKey = '${date.year}-${date.month}-${date.day}';
+
+    // Try to get from server first
+    if (_userId != null && !_userId!.startsWith('guest_')) {
+      try {
+        final response = await SupabaseService.client.rpc(
+          'get_daily_puzzle_for_date',
+          params: {
+            'p_user_id': _userId,
+            'p_date': dateKey,
+          },
+        );
+
+        if (response != null) {
+          final puzzle = _parsePuzzle(response);
+          if (puzzle != null) return puzzle;
+        }
+      } catch (e) {
+        debugPrint('Server daily puzzle not available: $e');
+      }
+
+      // Fallback: Get a puzzle from user's puzzles using date as seed
+      try {
+        final seed = date.year * 10000 + date.month * 100 + date.day;
+        final response = await SupabaseService.client
+            .from('user_puzzles')
+            .select()
+            .eq('profile_id', _userId!)
+            .order('created_at')
+            .limit(100);
+
+        if (response != null && (response as List).isNotEmpty) {
+          // Use seed to pick consistent puzzle for this date
+          final index = seed % response.length;
+          final puzzle = _parsePuzzle(response[index]);
+          if (puzzle != null) return puzzle;
+        }
+      } catch (e) {
+        debugPrint('Error loading user puzzle: $e');
+      }
+    }
+
+    return _createDefaultPuzzle(date);
   }
 
   /// Mark the daily puzzle as solved
   Future<void> markSolved() async {
-    if (state.isSolved) return;
+    if (state.isSolved || !state.isToday) return;
 
     final now = DateTime.now();
     final prefs = await SharedPreferences.getInstance();
+    final dateKey = state.dateKey;
+
+    // Update solved dates
+    final newSolvedDates = Map<String, bool>.from(state.solvedDates);
+    newSolvedDates[dateKey] = true;
+
+    // Save solved dates
+    await prefs.setStringList(_prefsKeySolvedDates, newSolvedDates.keys.toList());
 
     // Update streak
     int newStreak = state.streak + 1;
-
     await prefs.setString(_prefsKeyLastSolvedDate, now.toIso8601String());
     await prefs.setInt(_prefsKeyStreak, newStreak);
 
@@ -205,9 +250,10 @@ class DailyPuzzleNotifier extends StateNotifier<DailyPuzzleState> {
       isSolved: true,
       solvedAt: now,
       streak: newStreak,
+      solvedDates: newSolvedDates,
     );
 
-    // Award XP
+    // Award XP only for today's puzzle
     _gamificationNotifier?.awardXp(
       XpEventType.dailyPuzzleSolve,
       relatedId: state.puzzle?.id,
@@ -225,9 +271,9 @@ class DailyPuzzleNotifier extends StateNotifier<DailyPuzzleState> {
     }
   }
 
-  /// Refresh the daily puzzle
+  /// Refresh the current puzzle
   Future<void> refresh() async {
-    await _loadDailyPuzzle();
+    await _loadPuzzleForDate(state.selectedDate);
   }
 
   Puzzle? _parsePuzzle(Map<String, dynamic> data) {
@@ -270,18 +316,42 @@ class DailyPuzzleNotifier extends StateNotifier<DailyPuzzleState> {
     }
   }
 
-  /// Create a default puzzle if none available
-  Puzzle _createDefaultPuzzle() {
-    // Famous "Opera Game" position - Paul Morphy's brilliant finish
-    return const Puzzle(
-      id: 'default_daily',
-      fen: 'r1b1kb1r/pppp1ppp/2n2n2/4p2Q/2B1P3/8/PPPP1PPP/RNB1K1NR w KQkq - 4 4',
-      solution: ['h5f7'], // Qxf7#
-      solutionSan: ['Qxf7#'],
-      rating: 1200,
-      theme: PuzzleTheme.mateIn1,
-      description: 'Find the checkmate!',
-    );
+  /// Create a default puzzle if none available (varies by date)
+  Puzzle _createDefaultPuzzle(DateTime date) {
+    // Collection of famous puzzles
+    final puzzles = [
+      const Puzzle(
+        id: 'default_1',
+        fen: 'r1b1kb1r/pppp1ppp/2n2n2/4p2Q/2B1P3/8/PPPP1PPP/RNB1K1NR w KQkq - 4 4',
+        solution: ['h5f7'],
+        solutionSan: ['Qxf7#'],
+        rating: 1200,
+        theme: PuzzleTheme.mateIn1,
+        description: 'Find the checkmate!',
+      ),
+      const Puzzle(
+        id: 'default_2',
+        fen: 'r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/5Q2/PPPP1PPP/RNB1K1NR w KQkq - 4 4',
+        solution: ['f3f7'],
+        solutionSan: ['Qxf7#'],
+        rating: 1100,
+        theme: PuzzleTheme.mateIn1,
+        description: 'Scholar\'s Mate',
+      ),
+      const Puzzle(
+        id: 'default_3',
+        fen: '6k1/5ppp/8/8/8/8/5PPP/4R1K1 w - - 0 1',
+        solution: ['e1e8'],
+        solutionSan: ['Re8#'],
+        rating: 1000,
+        theme: PuzzleTheme.mateIn1,
+        description: 'Back rank mate',
+      ),
+    ];
+
+    // Pick puzzle based on date
+    final seed = date.year * 10000 + date.month * 100 + date.day;
+    return puzzles[seed % puzzles.length];
   }
 }
 
