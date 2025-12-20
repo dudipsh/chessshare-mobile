@@ -8,6 +8,7 @@ import '../features/games/screens/import_screen.dart';
 import '../features/analysis/screens/analysis_screen.dart';
 import '../features/games/models/chess_game.dart';
 import '../features/games/screens/game_review_screen.dart';
+import '../features/insights/screens/insights_screen.dart';
 import '../features/puzzles/models/puzzle.dart';
 import '../features/puzzles/screens/puzzle_screen.dart';
 import '../features/puzzles/screens/puzzles_list_screen.dart';
@@ -88,7 +89,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/insights',
         name: 'insights',
-        builder: (context, state) => const _PlaceholderScreen(title: 'Insights'),
+        builder: (context, state) => const InsightsScreen(),
       ),
 
       // Main app routes with bottom navigation
@@ -172,22 +173,3 @@ class MainShell extends StatelessWidget {
   }
 }
 
-class _PlaceholderScreen extends StatelessWidget {
-  final String title;
-
-  const _PlaceholderScreen({required this.title});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text(title)),
-      body: Center(
-        child: Text(
-          '$title\nComing Soon',
-          textAlign: TextAlign.center,
-          style: Theme.of(context).textTheme.headlineMedium,
-        ),
-      ),
-    );
-  }
-}

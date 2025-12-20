@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/api/chess_com_api.dart';
 import '../../../core/api/lichess_api.dart';
-import '../../../core/api/supabase_service.dart';
+import '../../../core/repositories/games_repository.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../models/chess_game.dart';
 
@@ -186,46 +186,28 @@ class GamesNotifier extends StateNotifier<GamesState> {
     final userId = _userId;
     if (userId == null || userId.startsWith('guest_')) return;
 
-    try {
-      // Fetch game reviews with personal_mistakes count
-      final response = await SupabaseService.client
-          .from('game_reviews')
-          .select('id, external_game_id, accuracy_white, accuracy_black, reviewed_at, personal_mistakes(count)')
-          .eq('user_id', userId);
+    // Use repository with centralized error handling
+    final reviews = await GamesRepository.getUserGameReviews();
 
-      if (!mounted) return;
+    if (!mounted) return;
 
-      for (final review in response) {
-        final externalGameId = review['external_game_id'] as String?;
-        if (externalGameId != null) {
-          // Extract puzzle count from personal_mistakes aggregate
-          int puzzleCount = 0;
-          if (review['personal_mistakes'] != null) {
-            final mistakes = review['personal_mistakes'];
-            if (mistakes is List && mistakes.isNotEmpty) {
-              puzzleCount = (mistakes[0]['count'] as num?)?.toInt() ?? 0;
-            }
-          }
+    for (final review in reviews) {
+      _reviewsCache[review.externalGameId] = _GameReviewInfo(
+        id: review.id,
+        accuracyWhite: review.accuracyWhite,
+        accuracyBlack: review.accuracyBlack,
+        reviewedAt: review.reviewedAt,
+        puzzleCount: review.puzzleCount,
+      );
+    }
 
-          _reviewsCache[externalGameId] = _GameReviewInfo(
-            id: review['id'] as String,
-            accuracyWhite: (review['accuracy_white'] as num?)?.toDouble(),
-            accuracyBlack: (review['accuracy_black'] as num?)?.toDouble(),
-            reviewedAt: review['reviewed_at'] != null
-                ? DateTime.parse(review['reviewed_at'] as String)
-                : null,
-            puzzleCount: puzzleCount,
-          );
-        }
-      }
+    if (reviews.isNotEmpty) {
       debugPrint('Loaded ${_reviewsCache.length} game reviews from server');
+    }
 
-      // Update any existing games with their analysis status
-      if (mounted && state.games.isNotEmpty) {
-        _updateGamesWithAnalysisStatus();
-      }
-    } catch (e) {
-      debugPrint('Error loading game reviews: $e');
+    // Update any existing games with their analysis status
+    if (mounted && state.games.isNotEmpty) {
+      _updateGamesWithAnalysisStatus();
     }
   }
 

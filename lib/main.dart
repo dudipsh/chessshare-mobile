@@ -24,11 +24,10 @@ void main() async {
 
 Future<void> _initializeSupabase() async {
   // Production Supabase credentials
-  // Using custom domain for auth (Google OAuth is configured with it)
-  const productionUrl = 'https://api.chessshare.com';
+  // Using direct Supabase URL (custom domain api.chessshare.com has issues)
+  const productionUrl = 'https://xnczyeqqgkzlbqrplsdg.supabase.co';
   const productionKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhuY3p5ZXFxZ2t6bGJxcnBsc2RnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDI0NzQ3NDYsImV4cCI6MjA1ODA1MDc0Nn0.pZZJ9QT-LKtzAM2d1K3-LqqKS18GrFlbhH62Bt9rL_k';
 
-  // Use dart-define values if provided, otherwise use production defaults
   const supabaseUrl = String.fromEnvironment(
     'SUPABASE_URL',
     defaultValue: productionUrl,
@@ -49,6 +48,10 @@ Future<void> _initializeSupabase() async {
       await Supabase.initialize(
         url: supabaseUrl,
         anonKey: supabaseKey,
+        authOptions: const FlutterAuthClientOptions(
+          authFlowType: AuthFlowType.pkce,
+          autoRefreshToken: true,
+        ),
       );
       // Mark Supabase as ready for queries
       SupabaseService.markReady();

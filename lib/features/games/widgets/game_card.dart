@@ -156,47 +156,76 @@ class GameCard extends StatelessWidget {
 
               // Analysis indicator or accuracy
               if (game.isAnalyzed && game.playerAccuracy != null) ...[
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
+                Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      '${game.playerAccuracy!.toStringAsFixed(1)}%',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 18,
-                        color: _getAccuracyColor(game.playerAccuracy!),
-                      ),
-                    ),
-                    Text(
-                      'Accuracy',
-                      style: TextStyle(
-                        color: fadedColor,
-                        fontSize: 12,
-                      ),
-                    ),
-                    // Show puzzle count if there are puzzles
-                    if (game.puzzleCount > 0) ...[
-                      const SizedBox(height: 2),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.extension,
-                            size: 12,
-                            color: AppColors.accent,
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          '${game.playerAccuracy!.toStringAsFixed(1)}%',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 18,
+                            color: _getAccuracyColor(game.playerAccuracy!),
                           ),
-                          const SizedBox(width: 2),
-                          Text(
-                            '${game.puzzleCount}',
-                            style: TextStyle(
-                              color: AppColors.accent,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                            ),
+                        ),
+                        const SizedBox(height: 2),
+                        // "Analyzed" badge
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.success.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.check_circle,
+                                size: 12,
+                                color: AppColors.success,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Analyzed',
+                                style: TextStyle(
+                                  color: AppColors.success,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        // Show puzzle count if there are puzzles
+                        if (game.puzzleCount > 0) ...[
+                          const SizedBox(height: 4),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.extension,
+                                size: 12,
+                                color: AppColors.accent,
+                              ),
+                              const SizedBox(width: 2),
+                              Text(
+                                '${game.puzzleCount}',
+                                style: TextStyle(
+                                  color: AppColors.accent,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
                           ),
                         ],
-                      ),
-                    ],
+                      ],
+                    ),
                   ],
                 ),
               ] else ...[

@@ -69,14 +69,28 @@ class AuthNotifier extends StateNotifier<AppAuthState> {
 
     // Then, try online auth if available
     try {
+      // Try to recover existing session first
+      await _tryRecoverSession();
+
       _authSubscription = SupabaseService.authStateChanges.listen((data) {
+        final event = data.event;
         final user = data.session?.user;
-        if (user != null) {
+
+        debugPrint('Auth state change: $event, user: ${user?.id}');
+
+        if (event == supabase.AuthChangeEvent.signedIn && user != null) {
           _loadProfile(user);
+        } else if (event == supabase.AuthChangeEvent.signedOut) {
+          // User signed out, clear state but keep local profile for offline access
+          state = state.copyWith(clearUser: true, mode: AuthMode.offline);
+        } else if (event == supabase.AuthChangeEvent.tokenRefreshed && user != null) {
+          // Token was refreshed, update user
+          debugPrint('Token refreshed for user: ${user.id}');
+          state = state.copyWith(user: user);
         }
       });
 
-      // Check current session
+      // Check current session after recovery
       final user = SupabaseService.currentUser;
       if (user != null) {
         _loadProfile(user);
@@ -84,6 +98,87 @@ class AuthNotifier extends StateNotifier<AppAuthState> {
     } catch (e) {
       // Supabase not available, continue with offline mode
       debugPrint('Supabase not available, using offline mode: $e');
+    }
+  }
+
+  /// Try to recover session from stored tokens
+  Future<void> _tryRecoverSession() async {
+    try {
+      if (!SupabaseService.isReady) {
+        debugPrint('Session recovery: Supabase not ready');
+        return;
+      }
+
+      // Get the current session - this will automatically try to refresh if expired
+      final session = SupabaseService.currentSession;
+      if (session != null) {
+        debugPrint('Session recovery: Found existing session, expires at ${session.expiresAt}');
+
+        // Check if session is expired or about to expire (within 60 seconds)
+        final expiresAt = session.expiresAt;
+        if (expiresAt != null) {
+          final expiryTime = DateTime.fromMillisecondsSinceEpoch(expiresAt * 1000);
+          final now = DateTime.now();
+
+          if (expiryTime.isBefore(now.add(const Duration(seconds: 60)))) {
+            debugPrint('Session recovery: Session expired or expiring soon, refreshing...');
+            await SupabaseService.client.auth.refreshSession();
+            debugPrint('Session recovery: Session refreshed successfully');
+          }
+        }
+      } else {
+        debugPrint('Session recovery: No existing session found');
+        // Try to re-authenticate using stored Google credentials
+        await _tryReauthenticateWithGoogle();
+      }
+    } catch (e) {
+      debugPrint('Session recovery error: $e');
+      // Don't throw - session recovery failure is not fatal
+    }
+  }
+
+  /// Try to re-authenticate with Supabase using stored Google credentials
+  Future<void> _tryReauthenticateWithGoogle() async {
+    try {
+      debugPrint('Re-auth: Trying to get Google credentials silently...');
+
+      // Try to get Google account silently (user already signed in before)
+      final googleUser = await GoogleAuthService.getCredentialsSilently();
+      if (googleUser == null) {
+        debugPrint('Re-auth: No Google credentials available');
+        return;
+      }
+
+      debugPrint('Re-auth: Got Google user ${googleUser.email}');
+
+      // Get tokens
+      final googleAuth = await googleUser.authentication;
+      final idToken = googleAuth.idToken;
+      final accessToken = googleAuth.accessToken;
+
+      if (idToken == null) {
+        debugPrint('Re-auth: No ID token available');
+        return;
+      }
+
+      debugPrint('Re-auth: Re-authenticating with Supabase...');
+
+      // Sign in to Supabase with Google token
+      final response = await SupabaseService.client.auth.signInWithIdToken(
+        provider: supabase.OAuthProvider.google,
+        idToken: idToken,
+        accessToken: accessToken,
+      );
+
+      if (response.user != null) {
+        debugPrint('Re-auth: Success! User=${response.user!.id}');
+        // The auth state listener will handle updating the profile
+      } else {
+        debugPrint('Re-auth: Failed - no user returned');
+      }
+    } catch (e) {
+      debugPrint('Re-auth error: $e');
+      // Don't throw - re-auth failure is not fatal, we'll continue in offline mode
     }
   }
 
@@ -218,13 +313,13 @@ class AuthNotifier extends StateNotifier<AppAuthState> {
 
       debugPrint('Google Sign-In: Supabase response user=${response.user?.id}');
 
-      if (response.user != null && response.session != null) {
-        // Set the session on the main client as well
-        debugPrint('Google Sign-In: Setting session on main client...');
-        await SupabaseService.client.auth.setSession(response.session!.refreshToken!);
-
-        await _loadProfile(response.user!);
-      } else if (response.user != null) {
+      if (response.user != null) {
+        // Since authClient returns Supabase.instance.client when ready,
+        // the session is already on the main client - no sync needed
+        debugPrint('Google Sign-In: Success! User=${response.user!.id}');
+        if (response.session != null) {
+          debugPrint('Google Sign-In: Session expires=${response.session!.expiresAt}');
+        }
         await _loadProfile(response.user!);
       } else {
         state = state.copyWith(isLoading: false, error: 'Supabase returned no user');

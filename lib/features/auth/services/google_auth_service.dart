@@ -111,6 +111,30 @@ class GoogleAuthService {
     }
   }
 
+  /// Try to get Google credentials silently (for re-authentication)
+  /// Returns null if user needs to sign in interactively
+  static Future<GoogleSignInAccount?> getCredentialsSilently() async {
+    // Create GoogleSignIn with serverClientId for ID token
+    _googleSignIn ??= GoogleSignIn(
+      scopes: ['email', 'profile'],
+      serverClientId: _webClientId,
+    );
+
+    try {
+      // Only try silent sign in - don't show UI
+      final account = await _googleSignIn!.signInSilently();
+      if (account != null) {
+        debugPrint('Google silent sign-in succeeded: ${account.email}');
+      } else {
+        debugPrint('Google silent sign-in: No stored credentials');
+      }
+      return account;
+    } catch (e) {
+      debugPrint('Google silent sign-in error: $e');
+      return null;
+    }
+  }
+
   /// Sign in with Google
   static Future<UserProfile?> signIn() async {
     if (!isAvailable) {
