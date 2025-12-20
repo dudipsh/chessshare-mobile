@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../../../core/api/supabase_service.dart';
+import '../../../core/database/local_database.dart';
 import '../models/study_board.dart';
 
 /// Service for study/board operations
@@ -31,6 +32,7 @@ class StudyService {
     if (cached == null) return false;
     return DateTime.now().difference(cached.cachedAt) < _boardCacheDuration;
   }
+
   /// Get public boards with progress using RPC
   static Future<List<StudyBoard>> getPublicBoards({
     int limit = 20,
@@ -153,18 +155,41 @@ class StudyService {
   }
 
   /// Get a single board with progress using RPC
+  /// Uses local-first pattern: returns cached data immediately, refreshes in background
   static Future<StudyBoard?> getBoard(
     String boardId, {
     String? userId,
     bool forceRefresh = false,
   }) async {
-    // Check cache first
+    // Step 1: Check memory cache first (fastest)
     if (!forceRefresh && _isBoardCacheValid(boardId)) {
       final cached = _boardCache[boardId]!;
-      debugPrint('Using cached board: $boardId');
+      debugPrint('Using memory cached board: $boardId');
       return cached.board;
     }
 
+    // Step 2: Check local SQLite cache
+    final localBoard = await LocalDatabase.getStudyBoard(boardId);
+    if (localBoard != null && !forceRefresh) {
+      debugPrint('Using local SQLite cached board: $boardId');
+      // Update memory cache
+      _boardCache[boardId] = _CachedBoard(board: localBoard, cachedAt: DateTime.now());
+
+      // Trigger background refresh if cache is getting old (> 1 hour)
+      final cacheTime = await LocalDatabase.getStudyBoardCacheTime(boardId);
+      if (cacheTime != null && DateTime.now().difference(cacheTime) > const Duration(hours: 1)) {
+        _refreshBoardInBackground(boardId, userId);
+      }
+
+      return localBoard;
+    }
+
+    // Step 3: Fetch from server
+    return await _fetchBoardFromServer(boardId, userId);
+  }
+
+  /// Fetch board from server and cache it
+  static Future<StudyBoard?> _fetchBoardFromServer(String boardId, String? userId) async {
     try {
       // Use RPC to get board with progress
       final response = await SupabaseService.client
@@ -175,9 +200,11 @@ class StudyService {
 
       if (response != null) {
         final board = StudyBoard.fromRpcJson(response as Map<String, dynamic>);
-        // Cache the board
+        // Cache in memory
         _boardCache[boardId] = _CachedBoard(board: board, cachedAt: DateTime.now());
-        debugPrint('Cached board: $boardId');
+        // Cache in SQLite for offline access
+        await LocalDatabase.saveStudyBoard(board);
+        debugPrint('Fetched and cached board: $boardId');
         return board;
       }
 
@@ -187,6 +214,18 @@ class StudyService {
       // Fallback: get board without progress
       return _getBoardFallback(boardId);
     }
+  }
+
+  /// Refresh board data in background (fire and forget)
+  static void _refreshBoardInBackground(String boardId, String? userId) {
+    debugPrint('Background refresh for board: $boardId');
+    _fetchBoardFromServer(boardId, userId).then((board) {
+      if (board != null) {
+        debugPrint('Background refresh completed for board: $boardId');
+      }
+    }).catchError((e) {
+      debugPrint('Background refresh failed for board: $boardId - $e');
+    });
   }
 
   /// Fallback method for getting a single board (uses publicClient for anonymous access)
@@ -205,10 +244,17 @@ class StudyService {
           .eq('id', boardId)
           .maybeSingle();
 
-      return response != null ? StudyBoard.fromJson(response) : null;
+      if (response != null) {
+        final board = StudyBoard.fromJson(response);
+        // Cache in SQLite for offline access
+        await LocalDatabase.saveStudyBoard(board);
+        return board;
+      }
+      return null;
     } catch (e) {
       debugPrint('Error in fallback: $e');
-      return null;
+      // Last resort: try local cache even if expired
+      return await LocalDatabase.getStudyBoard(boardId);
     }
   }
 

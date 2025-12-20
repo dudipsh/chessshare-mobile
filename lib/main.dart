@@ -49,10 +49,29 @@ void _preInitializeStockfish() {
 Future<void> _initializeNotifications() async {
   try {
     await LocalNotificationService().initialize();
+
+    // Set up notification tap handler
+    LocalNotificationService.onNotificationTap = (payload) {
+      debugPrint('Handling notification tap: $payload');
+      // Navigation will be handled by the app when it gets the payload
+      // The router will read this and navigate accordingly
+      _pendingNotificationPayload = payload;
+    };
+
     debugPrint('Local notifications initialized');
   } catch (e) {
     debugPrint('Failed to initialize notifications: $e');
   }
+}
+
+/// Pending notification payload for navigation
+String? _pendingNotificationPayload;
+
+/// Get and clear pending notification payload
+String? consumePendingNotificationPayload() {
+  final payload = _pendingNotificationPayload;
+  _pendingNotificationPayload = null;
+  return payload;
 }
 
 Future<void> _initializeSupabase() async {

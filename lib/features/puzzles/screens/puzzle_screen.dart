@@ -11,27 +11,39 @@ import 'puzzle/puzzle_feedback.dart';
 import 'puzzle/puzzle_info_bar.dart';
 import 'puzzle/puzzle_marker_painter.dart';
 
-class PuzzleScreen extends ConsumerWidget {
+class PuzzleScreen extends ConsumerStatefulWidget {
   final Puzzle puzzle;
 
   const PuzzleScreen({super.key, required this.puzzle});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<PuzzleScreen> createState() => _PuzzleScreenState();
+}
+
+class _PuzzleScreenState extends ConsumerState<PuzzleScreen> {
+  bool _loadAttempted = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Load puzzle once on init
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_loadAttempted) {
+        _loadAttempted = true;
+        ref.read(puzzleSolveProvider.notifier).loadPuzzle(widget.puzzle);
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final puzzleState = ref.watch(puzzleSolveProvider);
     final screenWidth = MediaQuery.of(context).size.width;
     final boardSize = screenWidth - 16;
 
-    // Load puzzle on first build
-    if (puzzleState.puzzle?.id != puzzle.id) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        ref.read(puzzleSolveProvider.notifier).loadPuzzle(puzzle);
-      });
-    }
-
     return Scaffold(
       appBar: AppBar(
-        title: Text(puzzle.theme.displayName),
+        title: Text(widget.puzzle.theme.displayName),
         actions: [
           IconButton(
             icon: const Icon(Icons.lightbulb_outline),
@@ -47,7 +59,7 @@ class PuzzleScreen extends ConsumerWidget {
       ),
       body: Column(
         children: [
-          PuzzleInfoBar(sideToMove: puzzle.sideToMove, rating: puzzle.rating),
+          PuzzleInfoBar(sideToMove: widget.puzzle.sideToMove, rating: widget.puzzle.rating),
           Padding(
             padding: const EdgeInsets.all(8.0),
             child: Stack(

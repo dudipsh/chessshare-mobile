@@ -199,19 +199,34 @@ class PuzzleGeneratorNotifier extends StateNotifier<PuzzleGeneratorState> {
 
   /// Parse puzzle data from API response
   List<Puzzle> _parsePuzzles(List<dynamic> data) {
+    debugPrint('=== PARSING ${data.length} PUZZLES ===');
+
     return data.map<Puzzle>((item) {
+      debugPrint('--- Parsing puzzle ---');
+      debugPrint('Raw item keys: ${item.keys.toList()}');
+      debugPrint('FEN: ${item['fen']}');
+      debugPrint('solution_uci: ${item['solution_uci']}');
+      debugPrint('solution_san: ${item['solution_san']}');
+      debugPrint('solution_sequence: ${item['solution_sequence']}');
+      debugPrint('marker_type: ${item['marker_type']}');
+
       // Handle solution_sequence if available
       List<String> solution = _parseSolution(item['solution_uci'] as String?);
       List<String> solutionSan = _parseSolution(item['solution_san'] as String?);
 
       // If solution_sequence is available, use that for better puzzle experience
+      // Include ALL moves (user + opponent) for proper puzzle solving
       if (item['solution_sequence'] != null && item['solution_sequence'] is List) {
         final sequence = item['solution_sequence'] as List;
+        debugPrint('solution_sequence items: $sequence');
         solution = sequence
-            .where((s) => s['isUserMove'] == true)
             .map<String>((s) => s['move'] as String)
+            .where((move) => move.isNotEmpty)
             .toList();
+        debugPrint('Parsed solution from sequence: $solution');
       }
+
+      debugPrint('Final solution: $solution');
 
       return Puzzle(
         id: item['id']?.toString() ?? '',
@@ -223,7 +238,13 @@ class PuzzleGeneratorNotifier extends StateNotifier<PuzzleGeneratorState> {
         description: item['marker_type'] as String? ?? item['classification'] as String?,
         isPositive: item['is_positive_puzzle'] as bool? ?? false,
       );
-    }).where((p) => p.fen.isNotEmpty && p.solution.isNotEmpty).toList();
+    }).where((p) {
+      final valid = p.fen.isNotEmpty && p.solution.isNotEmpty;
+      if (!valid) {
+        debugPrint('Filtering out puzzle ${p.id}: fen empty=${p.fen.isEmpty}, solution empty=${p.solution.isEmpty}');
+      }
+      return valid;
+    }).toList();
   }
 
   List<String> _parseSolution(String? solution) {
@@ -260,6 +281,33 @@ class PuzzleGeneratorNotifier extends StateNotifier<PuzzleGeneratorState> {
   /// Refresh puzzles from server
   Future<void> refresh() async {
     await _loadAllPuzzles();
+  }
+
+  /// Clear cache and reload puzzles from server
+  Future<void> clearCacheAndRefresh() async {
+    final userId = _userId;
+    if (userId == null) return;
+
+    debugPrint('Clearing puzzle cache and reloading from server...');
+    state = state.copyWith(isLoading: true, puzzles: []);
+
+    try {
+      // Clear local cache
+      await LocalDatabase.clearPuzzlesCache(userId);
+      debugPrint('Puzzle cache cleared');
+
+      // Reload from server
+      await Future.wait([
+        _loadPuzzlesFromServer(),
+        _loadDifficultPuzzles(),
+      ]);
+
+      debugPrint('Puzzles reloaded from server: ${state.puzzles.length} puzzles');
+    } catch (e) {
+      debugPrint('Error clearing cache and refreshing: $e');
+    }
+
+    state = state.copyWith(isLoading: false);
   }
 
   /// Generate puzzles from a PGN game

@@ -6,11 +6,12 @@ import 'package:flutter/foundation.dart';
 import '../../features/auth/models/user_profile.dart';
 import '../../features/games/models/linked_account.dart';
 import '../../features/games/models/chess_game.dart';
+import '../../features/study/models/study_board.dart';
 
 class LocalDatabase {
   static Database? _database;
   static const String _databaseName = 'chessshare.db';
-  static const int _databaseVersion = 3;
+  static const int _databaseVersion = 5;
 
   // Table names
   static const String userProfileTable = 'user_profile';
@@ -20,6 +21,8 @@ class LocalDatabase {
   static const String gameReviewsTable = 'game_reviews';
   static const String gameReviewMovesTable = 'game_review_moves';
   static const String personalMistakesTable = 'personal_mistakes';
+  static const String studyBoardsTable = 'study_boards';
+  static const String studyVariationsTable = 'study_variations';
 
   static Future<Database> get database async {
     _database ??= await _initDatabase();
@@ -89,6 +92,9 @@ class LocalDatabase {
 
     // Version 2 tables
     await _createV2Tables(db);
+
+    // Version 4 tables (study boards)
+    await _createV4Tables(db);
   }
 
   static Future<void> _createV2Tables(Database db) async {
@@ -182,6 +188,29 @@ class LocalDatabase {
     await db.execute('CREATE INDEX IF NOT EXISTS idx_personal_mistakes_next_review ON $personalMistakesTable(next_review)');
   }
 
+  /// Helper to add column only if it doesn't exist
+  static Future<void> _addColumnIfNotExists(
+    Database db,
+    String table,
+    String column,
+    String definition,
+  ) async {
+    try {
+      // Check if column exists by querying table info
+      final result = await db.rawQuery("PRAGMA table_info($table)");
+      final columnExists = result.any((col) => col['name'] == column);
+
+      if (!columnExists) {
+        await db.execute('ALTER TABLE $table ADD COLUMN $column $definition');
+        debugPrint('Added column $column to $table');
+      } else {
+        debugPrint('Column $column already exists in $table');
+      }
+    } catch (e) {
+      debugPrint('Error checking/adding column $column: $e');
+    }
+  }
+
   static Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     debugPrint('Upgrading database from v$oldVersion to v$newVersion');
 
@@ -191,12 +220,63 @@ class LocalDatabase {
 
     if (oldVersion < 3) {
       // Add is_positive column to puzzles table
-      try {
-        await db.execute('ALTER TABLE $puzzlesTable ADD COLUMN is_positive INTEGER DEFAULT 0');
-      } catch (e) {
-        debugPrint('Column is_positive may already exist: $e');
-      }
+      await _addColumnIfNotExists(db, puzzlesTable, 'is_positive', 'INTEGER DEFAULT 0');
     }
+
+    if (oldVersion < 4) {
+      await _createV4Tables(db);
+    }
+
+    if (oldVersion < 5) {
+      // Ensure is_positive column exists (may have been missed in v3 migration)
+      await _addColumnIfNotExists(db, puzzlesTable, 'is_positive', 'INTEGER DEFAULT 0');
+    }
+  }
+
+  /// Create V4 tables (study boards)
+  static Future<void> _createV4Tables(Database db) async {
+    // Study boards table for local caching
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $studyBoardsTable (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        description TEXT,
+        owner_id TEXT NOT NULL,
+        owner_name TEXT,
+        owner_avatar_url TEXT,
+        cover_image_url TEXT,
+        is_public INTEGER DEFAULT 1,
+        views_count INTEGER DEFAULT 0,
+        likes_count INTEGER DEFAULT 0,
+        user_liked INTEGER DEFAULT 0,
+        starting_fen TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        cached_at TEXT NOT NULL
+      )
+    ''');
+
+    // Study variations table
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $studyVariationsTable (
+        id TEXT PRIMARY KEY,
+        board_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        pgn TEXT NOT NULL,
+        starting_fen TEXT,
+        player_color TEXT,
+        position INTEGER DEFAULT 0,
+        moves_completed INTEGER DEFAULT 0,
+        total_moves INTEGER DEFAULT 0,
+        is_completed INTEGER DEFAULT 0,
+        completion_percentage REAL DEFAULT 0,
+        FOREIGN KEY (board_id) REFERENCES $studyBoardsTable(id) ON DELETE CASCADE
+      )
+    ''');
+
+    // Create indexes
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_study_boards_owner ON $studyBoardsTable(owner_id)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_study_variations_board ON $studyVariationsTable(board_id)');
   }
 
   // User Profile operations
@@ -623,5 +703,203 @@ class LocalDatabase {
     if (results.isEmpty) return null;
     final createdAt = results.first['created_at'] as String?;
     return createdAt != null ? DateTime.tryParse(createdAt) : null;
+  }
+
+  // ========== Study Boards Cache ==========
+
+  /// Save a study board with its variations to local cache
+  static Future<void> saveStudyBoard(StudyBoard board) async {
+    final db = await database;
+    final now = DateTime.now().toIso8601String();
+
+    // Save the board
+    await db.insert(
+      studyBoardsTable,
+      {
+        'id': board.id,
+        'title': board.title,
+        'description': board.description,
+        'owner_id': board.ownerId,
+        'owner_name': board.ownerName,
+        'owner_avatar_url': board.ownerAvatarUrl,
+        'cover_image_url': board.coverImageUrl,
+        'is_public': board.isPublic ? 1 : 0,
+        'views_count': board.viewsCount,
+        'likes_count': board.likesCount,
+        'user_liked': board.userLiked ? 1 : 0,
+        'starting_fen': board.startingFen,
+        'created_at': board.createdAt.toIso8601String(),
+        'updated_at': board.updatedAt.toIso8601String(),
+        'cached_at': now,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+
+    // Save variations
+    for (final variation in board.variations) {
+      await db.insert(
+        studyVariationsTable,
+        {
+          'id': variation.id,
+          'board_id': board.id,
+          'name': variation.name,
+          'pgn': variation.pgn,
+          'starting_fen': variation.startingFen,
+          'player_color': variation.playerColor,
+          'position': variation.position,
+          'moves_completed': variation.movesCompleted,
+          'total_moves': variation.totalMoves,
+          'is_completed': variation.isCompleted ? 1 : 0,
+          'completion_percentage': variation.completionPercentage,
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    }
+
+    debugPrint('Cached study board: ${board.title} with ${board.variations.length} variations');
+  }
+
+  /// Get a study board from local cache
+  static Future<StudyBoard?> getStudyBoard(String boardId) async {
+    final db = await database;
+
+    final boardResults = await db.query(
+      studyBoardsTable,
+      where: 'id = ?',
+      whereArgs: [boardId],
+      limit: 1,
+    );
+
+    if (boardResults.isEmpty) return null;
+
+    final boardRow = boardResults.first;
+
+    // Get variations
+    final variationResults = await db.query(
+      studyVariationsTable,
+      where: 'board_id = ?',
+      whereArgs: [boardId],
+      orderBy: 'position ASC',
+    );
+
+    final variations = variationResults.map((v) => StudyVariation(
+      id: v['id'] as String,
+      boardId: v['board_id'] as String,
+      name: v['name'] as String,
+      pgn: v['pgn'] as String,
+      startingFen: v['starting_fen'] as String?,
+      playerColor: v['player_color'] as String?,
+      position: v['position'] as int? ?? 0,
+      movesCompleted: v['moves_completed'] as int? ?? 0,
+      totalMoves: v['total_moves'] as int? ?? 0,
+      isCompleted: v['is_completed'] == 1,
+      completionPercentage: (v['completion_percentage'] as num?)?.toDouble() ?? 0,
+    )).toList();
+
+    return StudyBoard(
+      id: boardRow['id'] as String,
+      title: boardRow['title'] as String,
+      description: boardRow['description'] as String?,
+      ownerId: boardRow['owner_id'] as String,
+      ownerName: boardRow['owner_name'] as String?,
+      ownerAvatarUrl: boardRow['owner_avatar_url'] as String?,
+      coverImageUrl: boardRow['cover_image_url'] as String?,
+      isPublic: boardRow['is_public'] == 1,
+      viewsCount: boardRow['views_count'] as int? ?? 0,
+      likesCount: boardRow['likes_count'] as int? ?? 0,
+      userLiked: boardRow['user_liked'] == 1,
+      startingFen: boardRow['starting_fen'] as String?,
+      variations: variations,
+      createdAt: DateTime.parse(boardRow['created_at'] as String),
+      updatedAt: DateTime.parse(boardRow['updated_at'] as String),
+    );
+  }
+
+  /// Get all cached study boards for a user (their own boards)
+  static Future<List<StudyBoard>> getUserStudyBoards(String userId) async {
+    final db = await database;
+
+    final boardResults = await db.query(
+      studyBoardsTable,
+      where: 'owner_id = ?',
+      whereArgs: [userId],
+      orderBy: 'updated_at DESC',
+    );
+
+    final boards = <StudyBoard>[];
+    for (final row in boardResults) {
+      final board = await getStudyBoard(row['id'] as String);
+      if (board != null) boards.add(board);
+    }
+
+    return boards;
+  }
+
+  /// Get all cached public study boards
+  static Future<List<StudyBoard>> getCachedPublicBoards() async {
+    final db = await database;
+
+    final boardResults = await db.query(
+      studyBoardsTable,
+      where: 'is_public = 1',
+      orderBy: 'views_count DESC',
+      limit: 50,
+    );
+
+    final boards = <StudyBoard>[];
+    for (final row in boardResults) {
+      final board = await getStudyBoard(row['id'] as String);
+      if (board != null) boards.add(board);
+    }
+
+    return boards;
+  }
+
+  /// Delete a study board from cache
+  static Future<void> deleteStudyBoard(String boardId) async {
+    final db = await database;
+
+    // Delete variations first (foreign key)
+    await db.delete(
+      studyVariationsTable,
+      where: 'board_id = ?',
+      whereArgs: [boardId],
+    );
+
+    // Delete board
+    await db.delete(
+      studyBoardsTable,
+      where: 'id = ?',
+      whereArgs: [boardId],
+    );
+  }
+
+  /// Check if a study board is cached
+  static Future<bool> isStudyBoardCached(String boardId) async {
+    final db = await database;
+    final results = await db.query(
+      studyBoardsTable,
+      columns: ['id'],
+      where: 'id = ?',
+      whereArgs: [boardId],
+      limit: 1,
+    );
+    return results.isNotEmpty;
+  }
+
+  /// Get cache timestamp for a study board
+  static Future<DateTime?> getStudyBoardCacheTime(String boardId) async {
+    final db = await database;
+    final results = await db.query(
+      studyBoardsTable,
+      columns: ['cached_at'],
+      where: 'id = ?',
+      whereArgs: [boardId],
+      limit: 1,
+    );
+
+    if (results.isEmpty) return null;
+    final cachedAt = results.first['cached_at'] as String?;
+    return cachedAt != null ? DateTime.tryParse(cachedAt) : null;
   }
 }

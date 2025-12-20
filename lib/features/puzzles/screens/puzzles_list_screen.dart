@@ -19,7 +19,7 @@ class PuzzlesListScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Puzzles'),
         actions: [
-          if (generatorState.isGenerating)
+          if (generatorState.isGenerating || generatorState.isLoading)
             const Padding(
               padding: EdgeInsets.all(16),
               child: SizedBox(
@@ -27,6 +27,26 @@ class PuzzlesListScreen extends ConsumerWidget {
                 height: 20,
                 child: CircularProgressIndicator(strokeWidth: 2),
               ),
+            )
+          else
+            PopupMenuButton<String>(
+              onSelected: (value) {
+                if (value == 'refresh') {
+                  ref.read(puzzleGeneratorProvider.notifier).clearCacheAndRefresh();
+                }
+              },
+              itemBuilder: (context) => [
+                const PopupMenuItem(
+                  value: 'refresh',
+                  child: Row(
+                    children: [
+                      Icon(Icons.refresh),
+                      SizedBox(width: 8),
+                      Text('Reload from server'),
+                    ],
+                  ),
+                ),
+              ],
             ),
         ],
       ),

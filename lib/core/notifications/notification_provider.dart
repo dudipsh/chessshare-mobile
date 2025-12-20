@@ -20,12 +20,16 @@ class NotificationState {
   final bool isLoading;
   final bool permissionGranted;
   final String? error;
+  final bool showSmartDismissalDialog;
+  final NotificationType? dismissedNotificationType;
 
   const NotificationState({
     this.settings = const NotificationSettings(),
     this.isLoading = false,
     this.permissionGranted = false,
     this.error,
+    this.showSmartDismissalDialog = false,
+    this.dismissedNotificationType,
   });
 
   NotificationState copyWith({
@@ -33,12 +37,16 @@ class NotificationState {
     bool? isLoading,
     bool? permissionGranted,
     String? error,
+    bool? showSmartDismissalDialog,
+    NotificationType? dismissedNotificationType,
   }) {
     return NotificationState(
       settings: settings ?? this.settings,
       isLoading: isLoading ?? this.isLoading,
       permissionGranted: permissionGranted ?? this.permissionGranted,
       error: error,
+      showSmartDismissalDialog: showSmartDismissalDialog ?? this.showSmartDismissalDialog,
+      dismissedNotificationType: dismissedNotificationType ?? this.dismissedNotificationType,
     );
   }
 }
@@ -47,6 +55,9 @@ class NotificationState {
 class NotificationNotifier extends StateNotifier<NotificationState> {
   final NotificationSettingsRepository _repository;
   final LocalNotificationService _service;
+
+  /// Max ignores before we disable notifications
+  static const int _maxIgnoreCount = 3;
 
   NotificationNotifier(this._repository, this._service)
       : super(const NotificationState(isLoading: true)) {
@@ -59,10 +70,13 @@ class NotificationNotifier extends StateNotifier<NotificationState> {
       await _service.initialize();
 
       // Load settings
-      final settings = await _repository.loadSettings();
+      var settings = await _repository.loadSettings();
 
       // Request permissions
       final permissionGranted = await _service.requestPermissions();
+
+      // Check for ignored notifications (smart dismissal)
+      settings = await _checkSmartDismissal(settings);
 
       state = NotificationState(
         settings: settings,
@@ -80,6 +94,127 @@ class NotificationNotifier extends StateNotifier<NotificationState> {
         error: e.toString(),
       );
     }
+  }
+
+  /// Check if user has been ignoring notifications and handle smart dismissal
+  Future<NotificationSettings> _checkSmartDismissal(NotificationSettings settings) async {
+    if (!settings.smartDismissalEnabled) return settings;
+
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final lastOpen = settings.lastAppOpenDate;
+    final lastNotification = settings.lastNotificationDate;
+
+    // Update last app open date
+    var newSettings = settings.copyWith(lastAppOpenDate: now);
+
+    // If there was a notification sent and user didn't open the app that day
+    if (lastNotification != null && lastOpen != null) {
+      final notificationDate = DateTime(
+        lastNotification.year,
+        lastNotification.month,
+        lastNotification.day,
+      );
+      final lastOpenDate = DateTime(
+        lastOpen.year,
+        lastOpen.month,
+        lastOpen.day,
+      );
+
+      // If notification was sent on a day before user opened the app
+      // and they're opening the app now (not on the notification day)
+      if (notificationDate.isBefore(today) && lastOpenDate.isBefore(notificationDate)) {
+        // User ignored the notification - increment ignore count
+        final newDailyIgnoreCount = newSettings.dailyPuzzleEnabled
+            ? newSettings.dailyPuzzleIgnoreCount + 1
+            : newSettings.dailyPuzzleIgnoreCount;
+
+        newSettings = newSettings.copyWith(
+          dailyPuzzleIgnoreCount: newDailyIgnoreCount,
+        );
+
+        // Check if we've hit the limit
+        if (newDailyIgnoreCount >= _maxIgnoreCount && !newSettings.shownDismissalMessage) {
+          // Show the dismissal dialog and disable notifications
+          newSettings = newSettings.copyWith(
+            dailyPuzzleEnabled: false,
+            shownDismissalMessage: true,
+          );
+
+          state = state.copyWith(
+            showSmartDismissalDialog: true,
+            dismissedNotificationType: NotificationType.dailyPuzzle,
+          );
+        }
+      }
+    }
+
+    // Save updated settings
+    await _repository.saveSettings(newSettings);
+    return newSettings;
+  }
+
+  /// Record that a notification was sent today
+  Future<void> recordNotificationSent() async {
+    final newSettings = state.settings.copyWith(
+      lastNotificationDate: DateTime.now(),
+    );
+    await updateSettings(newSettings);
+  }
+
+  /// Dismiss the smart dismissal dialog
+  void dismissSmartDismissalDialog() {
+    state = state.copyWith(showSmartDismissalDialog: false);
+  }
+
+  /// Re-enable notifications after smart dismissal
+  Future<void> reEnableNotifications(NotificationType type) async {
+    NotificationSettings newSettings;
+    switch (type) {
+      case NotificationType.dailyPuzzle:
+        newSettings = state.settings.copyWith(
+          dailyPuzzleEnabled: true,
+          dailyPuzzleIgnoreCount: 0,
+          shownDismissalMessage: false,
+        );
+        break;
+      case NotificationType.studyReminder:
+        newSettings = state.settings.copyWith(
+          studyReminderEnabled: true,
+          studyReminderIgnoreCount: 0,
+        );
+        break;
+      case NotificationType.streakWarning:
+        newSettings = state.settings.copyWith(
+          streakWarningEnabled: true,
+          streakWarningIgnoreCount: 0,
+        );
+        break;
+      case NotificationType.weeklyDigest:
+        newSettings = state.settings.copyWith(weeklyDigestEnabled: true);
+        break;
+    }
+    await updateSettings(newSettings);
+  }
+
+  /// Reset ignore count when user opens via notification
+  Future<void> resetIgnoreCount(NotificationType type) async {
+    NotificationSettings newSettings;
+    switch (type) {
+      case NotificationType.dailyPuzzle:
+        newSettings = state.settings.copyWith(dailyPuzzleIgnoreCount: 0);
+        break;
+      case NotificationType.studyReminder:
+        newSettings = state.settings.copyWith(studyReminderIgnoreCount: 0);
+        break;
+      case NotificationType.streakWarning:
+        newSettings = state.settings.copyWith(streakWarningIgnoreCount: 0);
+        break;
+      case NotificationType.weeklyDigest:
+        newSettings = state.settings;
+        break;
+    }
+    await updateSettings(newSettings);
   }
 
   /// Update notification settings

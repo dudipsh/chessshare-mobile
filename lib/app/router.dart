@@ -12,6 +12,8 @@ import '../features/games/models/chess_game.dart';
 import '../features/games/screens/game_review_screen.dart';
 import '../features/insights/screens/insights_screen.dart';
 import '../features/puzzles/models/puzzle.dart';
+import '../features/puzzles/providers/daily_puzzle_provider.dart';
+import '../features/puzzles/screens/daily_puzzle_screen.dart';
 import '../features/puzzles/screens/puzzle_screen.dart';
 import '../features/puzzles/screens/puzzles_list_screen.dart';
 import '../features/profile/screens/profile_screen.dart';
@@ -173,6 +175,11 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const GamesListScreen(),
           ),
           GoRoute(
+            path: '/daily-puzzle',
+            name: 'daily-puzzle',
+            builder: (context, state) => const DailyPuzzleScreen(),
+          ),
+          GoRoute(
             path: '/study',
             name: 'study',
             builder: (context, state) => const StudyScreen(),
@@ -188,30 +195,44 @@ final routerProvider = Provider<GoRouter>((ref) {
   );
 });
 
-class MainShell extends StatelessWidget {
+class MainShell extends ConsumerWidget {
   final Widget child;
 
   const MainShell({super.key, required this.child});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Watch daily puzzle state for badge indicator
+    final dailyPuzzleAvailable = ref.watch(isDailyPuzzleAvailableProvider);
+
     return Scaffold(
       body: child,
       bottomNavigationBar: NavigationBar(
         selectedIndex: _calculateSelectedIndex(context),
         onDestinationSelected: (index) => _onItemTapped(index, context),
-        destinations: const [
-          NavigationDestination(
+        destinations: [
+          const NavigationDestination(
             icon: Icon(Icons.sports_esports_outlined),
             selectedIcon: Icon(Icons.sports_esports),
             label: 'My Games',
           ),
           NavigationDestination(
+            icon: Badge(
+              isLabelVisible: dailyPuzzleAvailable,
+              child: const Icon(Icons.extension_outlined),
+            ),
+            selectedIcon: Badge(
+              isLabelVisible: dailyPuzzleAvailable,
+              child: const Icon(Icons.extension),
+            ),
+            label: 'Daily',
+          ),
+          const NavigationDestination(
             icon: Icon(Icons.menu_book_outlined),
             selectedIcon: Icon(Icons.menu_book),
             label: 'Study',
           ),
-          NavigationDestination(
+          const NavigationDestination(
             icon: Icon(Icons.person_outline),
             selectedIcon: Icon(Icons.person),
             label: 'Profile',
@@ -224,8 +245,9 @@ class MainShell extends StatelessWidget {
   int _calculateSelectedIndex(BuildContext context) {
     final location = GoRouterState.of(context).uri.path;
     if (location.startsWith('/games')) return 0;
-    if (location.startsWith('/study')) return 1;
-    if (location.startsWith('/profile')) return 2;
+    if (location.startsWith('/daily-puzzle')) return 1;
+    if (location.startsWith('/study')) return 2;
+    if (location.startsWith('/profile')) return 3;
     return 0;
   }
 
@@ -235,9 +257,12 @@ class MainShell extends StatelessWidget {
         context.goNamed('games');
         break;
       case 1:
-        context.goNamed('study');
+        context.goNamed('daily-puzzle');
         break;
       case 2:
+        context.goNamed('study');
+        break;
+      case 3:
         context.goNamed('profile');
         break;
     }

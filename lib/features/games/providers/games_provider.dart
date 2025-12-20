@@ -20,6 +20,7 @@ class GamesState {
   final String? activeChessComUsername;
   final String? activeLichessUsername;
   final bool hasAutoImported;
+  final bool isSyncingInBackground; // Background sync indicator
 
   GamesState({
     this.games = const [],
@@ -32,6 +33,7 @@ class GamesState {
     this.activeChessComUsername,
     this.activeLichessUsername,
     this.hasAutoImported = false,
+    this.isSyncingInBackground = false,
   });
 
   GamesState copyWith({
@@ -45,6 +47,7 @@ class GamesState {
     String? activeChessComUsername,
     String? activeLichessUsername,
     bool? hasAutoImported,
+    bool? isSyncingInBackground,
   }) {
     return GamesState(
       games: games ?? this.games,
@@ -57,6 +60,7 @@ class GamesState {
       activeChessComUsername: activeChessComUsername ?? this.activeChessComUsername,
       activeLichessUsername: activeLichessUsername ?? this.activeLichessUsername,
       hasAutoImported: hasAutoImported ?? this.hasAutoImported,
+      isSyncingInBackground: isSyncingInBackground ?? this.isSyncingInBackground,
     );
   }
 
@@ -105,9 +109,8 @@ class GamesNotifier extends StateNotifier<GamesState> {
       : super(GamesState(
           activeChessComUsername: _chessComUsername,
           activeLichessUsername: _lichessUsername,
-          // Start with loading if we have saved profiles to import from
-          isLoading: (_chessComUsername?.isNotEmpty ?? false) ||
-              (_lichessUsername?.isNotEmpty ?? false),
+          // Don't show loading - we'll load from cache first for instant UI
+          isLoading: false,
         )) {
     _initialize();
   }
@@ -122,11 +125,14 @@ class GamesNotifier extends StateNotifier<GamesState> {
   }
 
   Future<void> _initialize() async {
-    // Load cached games first for instant UI
+    // Step 1: Load cached games FIRST for instant UI display
     await _loadFromCache();
-    await _loadGameReviewsFromServer();
-    // Auto-import if we have saved profiles (this will update the cache)
-    await _autoImportIfNeeded();
+
+    // Step 2: Load game reviews from server (metadata only, quick)
+    _loadGameReviewsFromServer(); // Don't await - run in background
+
+    // Step 3: Auto-import new games in background (won't block UI)
+    _autoImportInBackground();
   }
 
   /// Load games from local cache for instant display
@@ -144,41 +150,115 @@ class GamesNotifier extends StateNotifier<GamesState> {
     }
   }
 
-  /// Auto-import games from saved profiles
-  Future<void> _autoImportIfNeeded() async {
+  /// Auto-import games from saved profiles in background
+  /// This runs silently without blocking the UI
+  Future<void> _autoImportInBackground() async {
     if (!mounted) return;
 
-    if (state.hasAutoImported) {
-      // Clear loading state if already imported
-      if (state.isLoading && mounted) {
-        state = state.copyWith(isLoading: false);
-      }
-      return;
-    }
+    if (state.hasAutoImported) return;
 
     final hasChessCom = _chessComUsername?.isNotEmpty ?? false;
     final hasLichess = _lichessUsername?.isNotEmpty ?? false;
 
-    // If no profiles to import from, clear loading state
+    // If no profiles to import from, mark as done
     if (!hasChessCom && !hasLichess) {
       if (mounted) {
-        state = state.copyWith(isLoading: false, hasAutoImported: true);
+        state = state.copyWith(hasAutoImported: true);
       }
       return;
     }
 
-    // Import from Chess.com first if available
-    if (hasChessCom && mounted) {
-      await importFromChessCom(_chessComUsername!);
-    }
-
-    // Then import from Lichess if available
-    if (hasLichess && mounted) {
-      await importFromLichess(_lichessUsername!);
-    }
-
+    // Show background sync indicator (small, non-blocking)
     if (mounted) {
-      state = state.copyWith(isLoading: false, hasAutoImported: true);
+      state = state.copyWith(isSyncingInBackground: true);
+    }
+
+    try {
+      // Import from Chess.com first if available
+      if (hasChessCom && mounted) {
+        await _importFromChessComSilent(_chessComUsername!);
+      }
+
+      // Then import from Lichess if available
+      if (hasLichess && mounted) {
+        await _importFromLichessSilent(_lichessUsername!);
+      }
+    } finally {
+      if (mounted) {
+        state = state.copyWith(
+          isSyncingInBackground: false,
+          hasAutoImported: true,
+        );
+      }
+    }
+  }
+
+  /// Silent import from Chess.com (no loading UI, for background sync)
+  Future<void> _importFromChessComSilent(String username) async {
+    if (!mounted) return;
+
+    try {
+      final isValid = await ChessComApi.validateUsername(username);
+      if (!mounted || !isValid) return;
+
+      final archives = await ChessComApi.getArchives(username);
+      if (!mounted || archives.isEmpty) return;
+
+      final maxArchives = archives.take(3).toList();
+      final allGames = <ChessGame>[];
+
+      for (final archive in maxArchives) {
+        if (!mounted) return;
+        final archiveGames = await ChessComApi.getGamesFromArchive(archive, username);
+        allGames.addAll(archiveGames);
+      }
+
+      if (!mounted) return;
+
+      // Merge with existing games
+      final existingIds = state.games.map((g) => g.externalId).toSet();
+      final newGames = allGames.where((g) => !existingIds.contains(g.externalId)).toList();
+
+      if (newGames.isNotEmpty) {
+        final mergedGames = [...state.games, ...newGames]
+          ..sort((a, b) => b.playedAt.compareTo(a.playedAt));
+
+        state = state.copyWith(games: mergedGames);
+        _updateGamesWithAnalysisStatus();
+        await GamesCacheService.cacheGames(state.games);
+        debugPrint('Background sync: Added ${newGames.length} new Chess.com games');
+      }
+    } catch (e) {
+      debugPrint('Background Chess.com sync error: $e');
+    }
+  }
+
+  /// Silent import from Lichess (no loading UI, for background sync)
+  Future<void> _importFromLichessSilent(String username) async {
+    if (!mounted) return;
+
+    try {
+      final isValid = await LichessApi.validateUsername(username);
+      if (!mounted || !isValid) return;
+
+      final games = await LichessApi.getGames(username, max: 100);
+      if (!mounted) return;
+
+      // Merge with existing games
+      final existingIds = state.games.map((g) => g.externalId).toSet();
+      final newGames = games.where((g) => !existingIds.contains(g.externalId)).toList();
+
+      if (newGames.isNotEmpty) {
+        final mergedGames = [...state.games, ...newGames]
+          ..sort((a, b) => b.playedAt.compareTo(a.playedAt));
+
+        state = state.copyWith(games: mergedGames);
+        _updateGamesWithAnalysisStatus();
+        await GamesCacheService.cacheGames(state.games);
+        debugPrint('Background sync: Added ${newGames.length} new Lichess games');
+      }
+    } catch (e) {
+      debugPrint('Background Lichess sync error: $e');
     }
   }
 

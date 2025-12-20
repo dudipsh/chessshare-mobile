@@ -60,7 +60,21 @@ class _GamesListScreenState extends ConsumerState<GamesListScreen> {
                       filter.copyWith(search: value);
                 },
               )
-            : const Text('My Games'),
+            : Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('My Games'),
+                  // Small sync indicator when syncing in background
+                  if (gamesState.isSyncingInBackground) ...[
+                    const SizedBox(width: 8),
+                    const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  ],
+                ],
+              ),
         actions: [
           IconButton(
             icon: Icon(_showSearch ? Icons.close : Icons.search),

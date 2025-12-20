@@ -36,6 +36,17 @@ class NotificationSettings {
   /// Master switch
   final bool notificationsEnabled;
 
+  /// Smart dismissal tracking
+  final int dailyPuzzleIgnoreCount;
+  final int studyReminderIgnoreCount;
+  final int streakWarningIgnoreCount;
+  final bool smartDismissalEnabled;
+  final DateTime? lastNotificationDate;
+  final DateTime? lastAppOpenDate;
+
+  /// Whether user has been shown the "we understand" message
+  final bool shownDismissalMessage;
+
   const NotificationSettings({
     this.dailyPuzzleEnabled = true,
     this.dailyPuzzleTime = const TimeOfDay(hour: 9, minute: 0),
@@ -45,6 +56,13 @@ class NotificationSettings {
     this.streakWarningTime = const TimeOfDay(hour: 20, minute: 0),
     this.weeklyDigestEnabled = true,
     this.notificationsEnabled = true,
+    this.dailyPuzzleIgnoreCount = 0,
+    this.studyReminderIgnoreCount = 0,
+    this.streakWarningIgnoreCount = 0,
+    this.smartDismissalEnabled = true,
+    this.lastNotificationDate,
+    this.lastAppOpenDate,
+    this.shownDismissalMessage = false,
   });
 
   NotificationSettings copyWith({
@@ -56,6 +74,13 @@ class NotificationSettings {
     TimeOfDay? streakWarningTime,
     bool? weeklyDigestEnabled,
     bool? notificationsEnabled,
+    int? dailyPuzzleIgnoreCount,
+    int? studyReminderIgnoreCount,
+    int? streakWarningIgnoreCount,
+    bool? smartDismissalEnabled,
+    DateTime? lastNotificationDate,
+    DateTime? lastAppOpenDate,
+    bool? shownDismissalMessage,
   }) {
     return NotificationSettings(
       dailyPuzzleEnabled: dailyPuzzleEnabled ?? this.dailyPuzzleEnabled,
@@ -66,6 +91,13 @@ class NotificationSettings {
       streakWarningTime: streakWarningTime ?? this.streakWarningTime,
       weeklyDigestEnabled: weeklyDigestEnabled ?? this.weeklyDigestEnabled,
       notificationsEnabled: notificationsEnabled ?? this.notificationsEnabled,
+      dailyPuzzleIgnoreCount: dailyPuzzleIgnoreCount ?? this.dailyPuzzleIgnoreCount,
+      studyReminderIgnoreCount: studyReminderIgnoreCount ?? this.studyReminderIgnoreCount,
+      streakWarningIgnoreCount: streakWarningIgnoreCount ?? this.streakWarningIgnoreCount,
+      smartDismissalEnabled: smartDismissalEnabled ?? this.smartDismissalEnabled,
+      lastNotificationDate: lastNotificationDate ?? this.lastNotificationDate,
+      lastAppOpenDate: lastAppOpenDate ?? this.lastAppOpenDate,
+      shownDismissalMessage: shownDismissalMessage ?? this.shownDismissalMessage,
     );
   }
 
@@ -80,6 +112,13 @@ class NotificationSettings {
       'streakWarningTime': {'hour': streakWarningTime.hour, 'minute': streakWarningTime.minute},
       'weeklyDigestEnabled': weeklyDigestEnabled,
       'notificationsEnabled': notificationsEnabled,
+      'dailyPuzzleIgnoreCount': dailyPuzzleIgnoreCount,
+      'studyReminderIgnoreCount': studyReminderIgnoreCount,
+      'streakWarningIgnoreCount': streakWarningIgnoreCount,
+      'smartDismissalEnabled': smartDismissalEnabled,
+      'lastNotificationDate': lastNotificationDate?.toIso8601String(),
+      'lastAppOpenDate': lastAppOpenDate?.toIso8601String(),
+      'shownDismissalMessage': shownDismissalMessage,
     };
   }
 
@@ -94,7 +133,21 @@ class NotificationSettings {
       streakWarningTime: _parseTimeOfDay(json['streakWarningTime']) ?? const TimeOfDay(hour: 20, minute: 0),
       weeklyDigestEnabled: json['weeklyDigestEnabled'] as bool? ?? true,
       notificationsEnabled: json['notificationsEnabled'] as bool? ?? true,
+      dailyPuzzleIgnoreCount: json['dailyPuzzleIgnoreCount'] as int? ?? 0,
+      studyReminderIgnoreCount: json['studyReminderIgnoreCount'] as int? ?? 0,
+      streakWarningIgnoreCount: json['streakWarningIgnoreCount'] as int? ?? 0,
+      smartDismissalEnabled: json['smartDismissalEnabled'] as bool? ?? true,
+      lastNotificationDate: _parseDateTime(json['lastNotificationDate']),
+      lastAppOpenDate: _parseDateTime(json['lastAppOpenDate']),
+      shownDismissalMessage: json['shownDismissalMessage'] as bool? ?? false,
     );
+  }
+
+  static DateTime? _parseDateTime(dynamic value) {
+    if (value is String) {
+      return DateTime.tryParse(value);
+    }
+    return null;
   }
 
   static TimeOfDay? _parseTimeOfDay(dynamic value) {

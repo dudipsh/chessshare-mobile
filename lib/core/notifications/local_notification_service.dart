@@ -69,13 +69,15 @@ class LocalNotificationService {
     _initialized = true;
   }
 
+  /// Callback for notification taps - set by the app
+  static void Function(String payload)? onNotificationTap;
+
   /// Handle notification tap
   void _onNotificationTapped(NotificationResponse response) {
     final payload = response.payload;
     if (payload != null) {
-      // Handle navigation based on payload
-      // e.g., 'daily_puzzle' -> navigate to puzzle screen
       debugPrint('Notification tapped with payload: $payload');
+      onNotificationTap?.call(payload);
     }
   }
 
