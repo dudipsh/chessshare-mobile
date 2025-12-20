@@ -92,6 +92,22 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const InsightsScreen(),
       ),
 
+      // User profile route (view another user's profile)
+      GoRoute(
+        path: '/user/:userId',
+        name: 'user-profile',
+        builder: (context, state) {
+          final userId = state.pathParameters['userId'] ?? '';
+          final userName = state.uri.queryParameters['name'];
+          final userAvatar = state.uri.queryParameters['avatar'];
+          return ProfileScreen(
+            viewUserId: userId,
+            viewUserName: userName,
+            viewUserAvatar: userAvatar,
+          );
+        },
+      ),
+
       // Main app routes with bottom navigation
       ShellRoute(
         builder: (context, state, child) => MainShell(child: child),

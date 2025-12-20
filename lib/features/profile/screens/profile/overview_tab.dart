@@ -4,7 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../models/profile_data.dart';
 import '../../providers/profile_provider.dart';
-import 'widgets/account_card.dart';
+import '../../widgets/chess_stats_card.dart';
 import 'widgets/section_card.dart';
 import 'widgets/stat_box.dart';
 
@@ -25,22 +25,7 @@ class OverviewTab extends ConsumerWidget {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        // Linked accounts
-        SectionCard(
-          title: 'Chess Accounts',
-          isDark: isDark,
-          child: Column(
-            children: [
-              if (state.linkedAccounts.isNotEmpty)
-                ...state.linkedAccounts.map((a) => AccountCard(account: a, isDark: isDark))
-              else
-                _buildEmptyAccounts(context),
-            ],
-          ),
-        ),
-
         // Quick stats
-        const SizedBox(height: 16),
         SectionCard(
           title: 'Quick Stats',
           isDark: isDark,
@@ -54,6 +39,21 @@ class OverviewTab extends ConsumerWidget {
             ],
           ),
         ),
+
+        // Linked Chess Accounts with full stats
+        const SizedBox(height: 16),
+        if (state.linkedAccounts.isNotEmpty) ...[
+          ...state.linkedAccounts.map((account) => ChessStatsCard(
+            account: account,
+            isDark: isDark,
+          )),
+        ] else ...[
+          SectionCard(
+            title: 'Chess Accounts',
+            isDark: isDark,
+            child: _buildEmptyAccounts(context),
+          ),
+        ],
 
         // Bio
         if (state.profile?.bio != null && state.profile!.bio!.isNotEmpty) ...[
