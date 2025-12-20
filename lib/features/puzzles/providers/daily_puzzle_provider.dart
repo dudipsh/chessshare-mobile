@@ -184,12 +184,13 @@ class DailyPuzzleNotifier extends StateNotifier<DailyPuzzleState> {
     final dateKey = '${date.year}-${date.month}-${date.day}';
 
     // Try to get from server first
-    if (_userId != null && !_userId!.startsWith('guest_')) {
+    final userId = _userId;
+    if (userId != null && !userId.startsWith('guest_')) {
       try {
+        // Try the daily puzzle with context function
         final response = await SupabaseService.client.rpc(
-          'get_daily_puzzle_for_date',
+          'get_daily_puzzle_with_context',
           params: {
-            'p_user_id': _userId,
             'p_date': dateKey,
           },
         );
@@ -205,14 +206,13 @@ class DailyPuzzleNotifier extends StateNotifier<DailyPuzzleState> {
       // Fallback: Get a puzzle from user's puzzles using date as seed
       try {
         final seed = date.year * 10000 + date.month * 100 + date.day;
-        final response = await SupabaseService.client
-            .from('user_puzzles')
-            .select()
-            .eq('profile_id', _userId!)
-            .order('created_at')
-            .limit(100);
+        // Use the get_all_user_puzzles RPC instead of direct table access
+        final response = await SupabaseService.client.rpc(
+          'get_all_user_puzzles',
+          params: {'p_limit': 100},
+        );
 
-        if (response != null && (response as List).isNotEmpty) {
+        if (response != null && response is List && response.isNotEmpty) {
           // Use seed to pick consistent puzzle for this date
           final index = seed % response.length;
           final puzzle = _parsePuzzle(response[index]);
@@ -279,21 +279,46 @@ class DailyPuzzleNotifier extends StateNotifier<DailyPuzzleState> {
   Puzzle? _parsePuzzle(Map<String, dynamic> data) {
     try {
       final fen = data['fen'] as String?;
-      final solutionUci = data['solution_uci'] as String? ?? data['solution'] as String?;
+      if (fen == null || fen.isEmpty) return null;
 
-      if (fen == null || solutionUci == null) return null;
+      // Parse solution - handle different formats
+      List<String> solution = [];
+      List<String> solutionSan = [];
 
-      final solution = solutionUci.split(' ').where((s) => s.isNotEmpty).toList();
+      // First, check for solution_sequence (includes all moves with opponent responses)
+      if (data['solution_sequence'] != null && data['solution_sequence'] is List) {
+        final sequence = data['solution_sequence'] as List;
+        solution = sequence
+            .map<String>((s) => s['move'] as String)
+            .where((move) => move.isNotEmpty)
+            .toList();
+      }
+
+      // Fallback to solution_uci or solution
+      if (solution.isEmpty) {
+        final solutionUci = data['solution_uci'] as String? ?? data['solution'] as String?;
+        if (solutionUci != null && solutionUci.isNotEmpty) {
+          solution = solutionUci.split(' ').where((s) => s.isNotEmpty).toList();
+        }
+      }
+
+      // Parse solution_san
+      final sanStr = data['solution_san'] as String?;
+      if (sanStr != null && sanStr.isNotEmpty) {
+        solutionSan = sanStr.split(' ').where((s) => s.isNotEmpty).toList();
+      }
+
       if (solution.isEmpty) return null;
 
       return Puzzle(
         id: data['id']?.toString() ?? '',
         fen: fen,
         solution: solution,
-        solutionSan: (data['solution_san'] as String?)?.split(' ').where((s) => s.isNotEmpty).toList() ?? [],
+        solutionSan: solutionSan,
         rating: data['rating'] as int? ?? data['puzzle_rating'] as int? ?? 1500,
         theme: _parseTheme(data['theme'] as String? ?? data['marker_type'] as String?),
-        description: data['description'] as String?,
+        description: data['description'] as String? ?? data['marker_type'] as String?,
+        isPositive: data['is_positive_puzzle'] as bool? ?? false,
       );
     } catch (e) {
       debugPrint('Error parsing puzzle: $e');

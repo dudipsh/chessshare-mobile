@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -10,6 +11,9 @@ import 'core/services/global_stockfish_manager.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Load environment variables from .env file
+  await dotenv.load(fileName: '.env');
 
   // Initialize Supabase (optional - may fail if not configured)
   await _initializeSupabase();
@@ -75,26 +79,18 @@ String? consumePendingNotificationPayload() {
 }
 
 Future<void> _initializeSupabase() async {
-  // Production Supabase credentials
-  // Using direct Supabase URL (custom domain api.chessshare.com has issues)
-  const productionUrl = 'https://xnczyeqqgkzlbqrplsdg.supabase.co';
-  const productionKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhuY3p5ZXFxZ2t6bGJxcnBsc2RnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDI0NzQ3NDYsImV4cCI6MjA1ODA1MDc0Nn0.pZZJ9QT-LKtzAM2d1K3-LqqKS18GrFlbhH62Bt9rL_k';
-
-  const supabaseUrl = String.fromEnvironment(
-    'SUPABASE_URL',
-    defaultValue: productionUrl,
-  );
-  const supabaseKey = String.fromEnvironment(
-    'SUPABASE_ANON_KEY',
-    defaultValue: productionKey,
-  );
+  // Load Supabase credentials from environment variables
+  final supabaseUrl = dotenv.env['SUPABASE_URL'] ?? '';
+  final supabaseKey = dotenv.env['SUPABASE_ANON_KEY'] ?? '';
 
   // Initialize Supabase
-  if (supabaseUrl.isNotEmpty && !supabaseUrl.contains('YOUR_')) {
+  if (supabaseUrl.isNotEmpty && supabaseKey.isNotEmpty) {
     try {
       // Debug: Log key info (first 20 chars only for security)
       debugPrint('Supabase init - URL: $supabaseUrl');
-      debugPrint('Supabase init - Key starts with: ${supabaseKey.substring(0, 20)}...');
+      if (supabaseKey.length >= 20) {
+        debugPrint('Supabase init - Key starts with: ${supabaseKey.substring(0, 20)}...');
+      }
       debugPrint('Supabase init - Key length: ${supabaseKey.length}');
 
       await Supabase.initialize(
@@ -113,5 +109,6 @@ Future<void> _initializeSupabase() async {
     }
   } else {
     debugPrint('Supabase not configured - running in offline mode');
+    debugPrint('Missing: ${supabaseUrl.isEmpty ? "SUPABASE_URL" : ""} ${supabaseKey.isEmpty ? "SUPABASE_ANON_KEY" : ""}');
   }
 }

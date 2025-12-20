@@ -5,6 +5,11 @@
 *.swp
 .DS_Store
 .atom/
+
+# Environment variables (contains API keys - DO NOT COMMIT)
+.env
+.env.*
+!.env.example
 .build/
 .buildlog/
 .history

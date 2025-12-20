@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class SupabaseService {
@@ -7,9 +8,9 @@ class SupabaseService {
   static SupabaseClient? _authClient;
   static bool _errorLoggedOnce = false;
 
-  // Direct Supabase URL (bypasses custom domain issues)
-  static const directUrl = 'https://xnczyeqqgkzlbqrplsdg.supabase.co';
-  static const anonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhuY3p5ZXFxZ2t6bGJxcnBsc2RnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDI0NzQ3NDYsImV4cCI6MjA1ODA1MDc0Nn0.pZZJ9QT-LKtzAM2d1K3-LqqKS18GrFlbhH62Bt9rL_k';
+  // Load Supabase credentials from environment variables
+  static String get directUrl => dotenv.env['SUPABASE_URL'] ?? '';
+  static String get anonKey => dotenv.env['SUPABASE_ANON_KEY'] ?? '';
 
   /// Check if Supabase is ready for queries
   static bool get isReady => _isReady;

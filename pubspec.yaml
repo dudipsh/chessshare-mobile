@@ -49,6 +49,7 @@ dependencies:
   json_annotation: ^4.8.1
   collection: ^1.18.0
   uuid: ^4.2.1
+  flutter_dotenv: ^5.1.0
 
   # Network
   http: ^1.2.0
@@ -114,6 +115,7 @@ flutter:
     - assets/sounds/
     - assets/fonts/
     - assets/animations/
+    - .env
 
   # fonts:
   #   - family: Inter
