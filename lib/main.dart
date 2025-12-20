@@ -6,6 +6,7 @@ import 'app/app.dart';
 import 'core/api/supabase_service.dart';
 import 'core/notifications/local_notification_service.dart';
 import 'core/services/app_init_service.dart';
+import 'core/services/global_stockfish_manager.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -19,11 +20,30 @@ void main() async {
   // Initialize local notifications
   await _initializeNotifications();
 
+  // Pre-initialize Stockfish in background (so it's ready when user needs it)
+  _preInitializeStockfish();
+
   runApp(
     const ProviderScope(
       child: ChessShareApp(),
     ),
   );
+}
+
+/// Pre-initialize Stockfish engine in background
+/// This makes first game analysis much faster
+void _preInitializeStockfish() {
+  // Run in background - don't await
+  Future.delayed(const Duration(seconds: 2), () async {
+    try {
+      debugPrint('Pre-initializing Stockfish engine...');
+      // Use 'shared' owner so any screen can use the pre-loaded instance
+      await GlobalStockfishManager.instance.acquire('shared');
+      debugPrint('Stockfish engine pre-initialized successfully');
+    } catch (e) {
+      debugPrint('Stockfish pre-initialization failed (will retry on first use): $e');
+    }
+  });
 }
 
 Future<void> _initializeNotifications() async {

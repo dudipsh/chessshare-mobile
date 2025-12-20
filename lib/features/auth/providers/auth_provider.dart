@@ -64,10 +64,22 @@ class AuthNotifier extends StateNotifier<AppAuthState> {
   }
 
   void _init() async {
-    // First, try to load from local database
-    await _tryLoadLocalProfile();
+    debugPrint('Auth: Starting initialization...');
+
+    // Try to load cached profile first (but don't set isLoading false yet)
+    UserProfile? localProfile;
+    try {
+      localProfile = await GoogleAuthService.signInSilently();
+      localProfile ??= await LocalDatabase.getCurrentUserProfile();
+      if (localProfile != null) {
+        debugPrint('Auth: Found local profile: ${localProfile.id}');
+      }
+    } catch (e) {
+      debugPrint('Auth: Error loading local profile: $e');
+    }
 
     // Then, try online auth if available
+    bool supabaseAuthComplete = false;
     try {
       // Try to recover existing session first
       await _tryRecoverSession();
@@ -82,7 +94,7 @@ class AuthNotifier extends StateNotifier<AppAuthState> {
           _loadProfile(user);
         } else if (event == supabase.AuthChangeEvent.signedOut) {
           // User signed out, clear state but keep local profile for offline access
-          state = state.copyWith(clearUser: true, mode: AuthMode.offline);
+          state = state.copyWith(clearUser: true, mode: AuthMode.offline, isLoading: false);
         } else if (event == supabase.AuthChangeEvent.tokenRefreshed && user != null) {
           // Token was refreshed, update user
           debugPrint('Token refreshed for user: ${user.id}');
@@ -93,12 +105,32 @@ class AuthNotifier extends StateNotifier<AppAuthState> {
       // Check current session after recovery
       final user = SupabaseService.currentUser;
       if (user != null) {
-        _loadProfile(user);
+        debugPrint('Auth: Found Supabase user, loading profile...');
+        await _loadProfile(user);
+        supabaseAuthComplete = true;
       }
     } catch (e) {
       // Supabase not available, continue with offline mode
       debugPrint('Supabase not available, using offline mode: $e');
     }
+
+    // If Supabase didn't load a profile, use local profile or mark as not authenticated
+    if (!supabaseAuthComplete) {
+      debugPrint('Auth: No Supabase session, using local profile');
+      if (localProfile != null) {
+        state = AppAuthState(
+          profile: localProfile,
+          mode: AuthMode.offline,
+          isGuest: localProfile.id.startsWith('guest_'),
+          isLoading: false,
+        );
+      } else {
+        debugPrint('Auth: No profile found, user needs to log in');
+        state = AppAuthState(isLoading: false);
+      }
+    }
+
+    debugPrint('Auth: Initialization complete. isAuthenticated=${state.isAuthenticated}');
   }
 
   /// Try to recover session from stored tokens
@@ -182,39 +214,6 @@ class AuthNotifier extends StateNotifier<AppAuthState> {
     }
   }
 
-  /// Try to load profile from local database first
-  Future<void> _tryLoadLocalProfile() async {
-    try {
-      // Try silent Google sign-in first
-      final profile = await GoogleAuthService.signInSilently();
-      if (profile != null) {
-        state = AppAuthState(
-          profile: profile,
-          mode: AuthMode.offline,
-          isGuest: profile.id.startsWith('guest_'),
-        );
-        return;
-      }
-
-      // Check for cached profile
-      final cachedProfile = await LocalDatabase.getCurrentUserProfile();
-      if (cachedProfile != null) {
-        state = AppAuthState(
-          profile: cachedProfile,
-          mode: AuthMode.offline,
-          isGuest: cachedProfile.id.startsWith('guest_'),
-        );
-        return;
-      }
-
-      // No profile found
-      state = AppAuthState();
-    } catch (e) {
-      debugPrint('Error loading local profile: $e');
-      state = AppAuthState();
-    }
-  }
-
   Future<void> _loadProfile(supabase.User user) async {
     try {
       final response = await SupabaseService.client
@@ -232,13 +231,16 @@ class AuthNotifier extends StateNotifier<AppAuthState> {
         state = AppAuthState(
           user: user,
           profile: profile,
+          mode: AuthMode.online,
+          isLoading: false,
         );
       } else {
         // Create profile if doesn't exist
         await _createProfile(user);
       }
     } catch (e) {
-      state = AppAuthState(user: user, error: e.toString());
+      debugPrint('Auth: Error loading profile: $e');
+      state = AppAuthState(user: user, error: e.toString(), isLoading: false);
     }
   }
 
@@ -300,9 +302,12 @@ class AuthNotifier extends StateNotifier<AppAuthState> {
       state = AppAuthState(
         user: user,
         profile: UserProfile.fromJson(profile),
+        mode: AuthMode.online,
+        isLoading: false,
       );
     } catch (e) {
-      state = AppAuthState(user: user, error: e.toString());
+      debugPrint('Auth: Error creating profile: $e');
+      state = AppAuthState(user: user, error: e.toString(), isLoading: false);
     }
   }
 

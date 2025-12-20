@@ -82,7 +82,14 @@ class GlobalStockfishManager {
   }
 
   /// Release Stockfish from current owner
+  /// Note: 'shared' owner is never released to allow reuse across screens
   Future<void> release(String ownerId) async {
+    // Don't release 'shared' owner - keep it alive for reuse
+    if (ownerId == 'shared') {
+      debugPrint('GlobalStockfish: Keeping shared instance alive');
+      return;
+    }
+
     if (_currentOwner != ownerId) {
       debugPrint('GlobalStockfish: $ownerId tried to release but owner is $_currentOwner');
       return;

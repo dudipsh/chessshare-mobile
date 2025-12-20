@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../app/router.dart';
 import '../../../app/theme/colors.dart';
 import '../models/xp_models.dart';
 
@@ -14,39 +15,65 @@ class XpPopup extends StatefulWidget {
     this.onDismiss,
   });
 
-  /// Show XP popup as an overlay
+  /// Show XP popup as a dialog
   static void show(
     BuildContext context, {
     required XpAwardResult result,
     VoidCallback? onDismiss,
   }) {
-    final overlay = Overlay.of(context);
-    late OverlayEntry entry;
+    // Use rootNavigatorKey's state directly to push the dialog
+    final navigatorState = rootNavigatorKey.currentState;
+    if (navigatorState == null) {
+      debugPrint('[XpPopup] No navigator state available');
+      return;
+    }
 
-    entry = OverlayEntry(
-      builder: (context) => Positioned(
-        top: MediaQuery.of(context).padding.top + 20,
-        left: 20,
-        right: 20,
-        child: Material(
-          color: Colors.transparent,
-          child: XpPopup(
-            result: result,
-            onDismiss: () {
-              entry.remove();
-              onDismiss?.call();
-            },
-          ),
-        ),
+    debugPrint('[XpPopup] Showing XP popup with ${result.xpAwarded} XP');
+
+    // Push a custom route directly using the navigator state
+    navigatorState.push(
+      PageRouteBuilder(
+        opaque: false,
+        barrierDismissible: true,
+        barrierColor: Colors.transparent,
+        transitionDuration: const Duration(milliseconds: 300),
+        reverseTransitionDuration: const Duration(milliseconds: 200),
+        pageBuilder: (dialogContext, animation, secondaryAnimation) {
+          return SafeArea(
+            child: Align(
+              alignment: Alignment.topCenter,
+              child: Padding(
+                padding: const EdgeInsets.only(top: 20, left: 20, right: 20),
+                child: Material(
+                  color: Colors.transparent,
+                  child: XpPopup(
+                    result: result,
+                    onDismiss: () {
+                      navigatorState.pop();
+                      onDismiss?.call();
+                    },
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          return SlideTransition(
+            position: Tween<Offset>(
+              begin: const Offset(0, -1),
+              end: Offset.zero,
+            ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOut)),
+            child: child,
+          );
+        },
       ),
     );
 
-    overlay.insert(entry);
-
     // Auto dismiss after 3 seconds
     Future.delayed(const Duration(seconds: 3), () {
-      if (entry.mounted) {
-        entry.remove();
+      if (navigatorState.canPop()) {
+        navigatorState.pop();
         onDismiss?.call();
       }
     });

@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../../../../app/theme/colors.dart';
 import '../../models/profile_data.dart';
 import '../../providers/profile_provider.dart';
-import '../../widgets/chess_stats_card.dart';
 import 'widgets/section_card.dart';
 import 'widgets/stat_box.dart';
 
@@ -24,24 +23,6 @@ class StatsTab extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        // Chess account stats (from Chess.com/Lichess)
-        if (state.linkedAccounts.isNotEmpty) ...[
-          Text(
-            'Chess Ratings',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: isDark ? Colors.white : Colors.black87,
-            ),
-          ),
-          const SizedBox(height: 12),
-          ...state.linkedAccounts.map((account) => ChessStatsCard(
-            account: account,
-            isDark: isDark,
-          )),
-          const SizedBox(height: 8),
-        ],
-
         // Game analysis stats
         SectionCard(
           title: 'Game Analysis',

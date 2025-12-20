@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../features/auth/providers/auth_provider.dart';
 import '../features/auth/screens/login_screen.dart';
+import '../features/auth/screens/splash_screen.dart';
 import '../features/games/screens/games_list_screen.dart';
 import '../features/games/screens/import_screen.dart';
 import '../features/analysis/screens/analysis_screen.dart';
@@ -17,10 +19,63 @@ import '../features/study/screens/study_screen.dart';
 import '../features/study/screens/study_board_screen.dart';
 import '../features/study/models/study_board.dart';
 
+/// Global navigator key for showing dialogs from anywhere
+final rootNavigatorKey = GlobalKey<NavigatorState>();
+
 final routerProvider = Provider<GoRouter>((ref) {
+  final authState = ref.watch(authProvider);
+
   return GoRouter(
-    initialLocation: '/games',
+    navigatorKey: rootNavigatorKey,
+    initialLocation: '/splash',
+    refreshListenable: _AuthStateNotifier(ref),
+    redirect: (context, state) {
+      final isLoading = authState.isLoading;
+      final isAuthenticated = authState.isAuthenticated;
+      final isGuest = authState.isGuest;
+      final location = state.matchedLocation;
+
+      // While loading, stay on splash
+      if (isLoading) {
+        if (location != '/splash') {
+          return '/splash';
+        }
+        return null;
+      }
+
+      // After loading is done
+      if (location == '/splash') {
+        // Redirect based on auth state
+        if (isAuthenticated && !isGuest) {
+          return '/games';
+        } else {
+          return '/login';
+        }
+      }
+
+      // If on login but authenticated, go to games
+      if (location == '/login' && isAuthenticated && !isGuest) {
+        return '/games';
+      }
+
+      // If trying to access protected routes without auth, go to login
+      final protectedRoutes = ['/games', '/study', '/profile', '/puzzles', '/insights'];
+      if (protectedRoutes.any((r) => location.startsWith(r))) {
+        if (!isAuthenticated || isGuest) {
+          return '/login';
+        }
+      }
+
+      return null;
+    },
     routes: [
+      // Splash screen (shown while auth state is loading)
+      GoRoute(
+        path: '/splash',
+        name: 'splash',
+        builder: (context, state) => const SplashScreen(),
+      ),
+
       // Auth routes
       GoRoute(
         path: '/login',
@@ -189,3 +244,13 @@ class MainShell extends StatelessWidget {
   }
 }
 
+/// Notifier that triggers router refresh when auth state changes
+class _AuthStateNotifier extends ChangeNotifier {
+  _AuthStateNotifier(this._ref) {
+    _ref.listen(authProvider, (_, __) {
+      notifyListeners();
+    });
+  }
+
+  final Ref _ref;
+}

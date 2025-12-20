@@ -32,7 +32,7 @@ class PlayVsStockfishScreen extends ConsumerStatefulWidget {
 }
 
 class _PlayVsStockfishScreenState extends ConsumerState<PlayVsStockfishScreen> {
-  static const _ownerId = 'PlayVsStockfishScreen';
+  static const _ownerId = 'shared'; // Use shared owner to reuse pre-loaded instance
 
   late Chess _position;
   StockfishService? _stockfish;

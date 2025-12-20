@@ -71,7 +71,7 @@ class AnalysisConfig {
 
 /// Service for analyzing chess games with Stockfish
 class GameAnalysisService {
-  static const _ownerId = 'GameAnalysisService';
+  static const _ownerId = 'shared'; // Use shared owner to reuse pre-loaded instance
 
   StockfishService? _stockfish;
   final AnalysisConfig config;
