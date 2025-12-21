@@ -97,7 +97,7 @@ class GamesRepository {
     required String playerColor,
     required String gameResult,
     required String speed,
-    required String timeControl,
+    String? timeControl,
     required DateTime playedAt,
     required String opponentUsername,
     int? opponentRating,
@@ -160,6 +160,23 @@ class GamesRepository {
       params: {
         'p_game_review_id': gameReviewId,
         'p_moves': moves,
+      },
+      parser: (_) => true,
+      defaultValue: false,
+    );
+    return result.success;
+  }
+
+  /// Save personal mistakes (puzzles generated from analysis)
+  static Future<bool> savePersonalMistakes({
+    required String gameReviewId,
+    required List<Map<String, dynamic>> mistakes,
+  }) async {
+    final result = await BaseRepository.executeRpc<bool>(
+      functionName: 'save_personal_mistakes',
+      params: {
+        'p_game_review_id': gameReviewId,
+        'p_mistakes': mistakes,
       },
       parser: (_) => true,
       defaultValue: false,

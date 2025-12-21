@@ -5,7 +5,9 @@ import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../../core/api/supabase_service.dart';
 import '../../../core/database/local_database.dart';
+import '../../../core/repositories/games_repository.dart';
 import '../../../core/services/global_stockfish_manager.dart';
 import '../../analysis/services/stockfish_service.dart';
 import '../../analysis/services/uci_parser.dart';
@@ -357,12 +359,22 @@ class GameAnalysisService {
         jsonEncode(blackSummary.toJson()),
       );
 
-      // Generate puzzles from mistakes
-      await _generatePuzzles(
+      // Generate puzzles from mistakes (locally)
+      final puzzleMoves = await _generatePuzzles(
         userId: userId,
         reviewId: reviewId,
         moves: analyzedMoves,
         game: game,
+      );
+
+      // Sync to server if authenticated
+      await _syncToServer(
+        game: game,
+        reviewId: reviewId,
+        analyzedMoves: analyzedMoves,
+        whiteSummary: whiteSummary,
+        blackSummary: blackSummary,
+        puzzleMoves: puzzleMoves,
       );
 
       _reportProgress(1.0, 'Analysis complete!', onProgress);
@@ -590,6 +602,107 @@ class GameAnalysisService {
     );
   }
 
+  /// Sync analysis results to server (if authenticated)
+  Future<void> _syncToServer({
+    required ChessGame game,
+    required String reviewId,
+    required List<AnalyzedMove> analyzedMoves,
+    required AccuracySummary whiteSummary,
+    required AccuracySummary blackSummary,
+    required List<AnalyzedMove> puzzleMoves,
+  }) async {
+    final user = SupabaseService.currentUser;
+    if (user == null) {
+      debugPrint('Server sync: No authenticated user, skipping');
+      return;
+    }
+
+    try {
+      debugPrint('Server sync: Saving game review to server...');
+
+      // 1. Save game review metadata
+      final serverReviewId = await GamesRepository.saveGameReview(
+        externalGameId: game.externalId,
+        platform: game.platform == GamePlatform.chesscom ? 'chesscom' : 'lichess',
+        pgn: game.pgn,
+        playerColor: game.playerColor,
+        gameResult: game.result.name,
+        speed: game.speed.name,
+        timeControl: game.timeControl,
+        playedAt: game.playedAt,
+        opponentUsername: game.opponentUsername,
+        opponentRating: game.opponentRating,
+        playerRating: game.playerRating,
+        openingEco: game.openingEco,
+        openingName: game.openingName,
+        accuracyWhite: whiteSummary.accuracy,
+        accuracyBlack: blackSummary.accuracy,
+        movesTotal: analyzedMoves.length,
+        movesBook: analyzedMoves.where((m) => m.classification == MoveClassification.book).length,
+        movesBrilliant: analyzedMoves.where((m) => m.classification == MoveClassification.brilliant).length,
+        movesGreat: analyzedMoves.where((m) => m.classification == MoveClassification.great).length,
+        movesBest: analyzedMoves.where((m) => m.classification == MoveClassification.best).length,
+        movesGood: analyzedMoves.where((m) => m.classification == MoveClassification.good).length,
+        movesInaccuracy: analyzedMoves.where((m) => m.classification == MoveClassification.inaccuracy).length,
+        movesMistake: analyzedMoves.where((m) => m.classification == MoveClassification.mistake).length,
+        movesBlunder: analyzedMoves.where((m) => m.classification == MoveClassification.blunder).length,
+      );
+
+      if (serverReviewId == null) {
+        debugPrint('Server sync: Failed to save game review');
+        return;
+      }
+
+      debugPrint('Server sync: Game review saved with ID: $serverReviewId');
+
+      // 2. Save move evaluations
+      final movesData = analyzedMoves.map((m) => {
+        'move_index': m.moveNumber - 1,
+        'fen': m.fen,
+        'san': m.san,
+        'evaluation_before': m.evalBefore,
+        'evaluation_after': m.evalAfter,
+        'marker_type': m.classification.name,
+        'best_move': m.bestMove,
+        'centipawn_loss': m.centipawnLoss,
+      }).toList();
+
+      final movesSaved = await GamesRepository.saveGameReviewMoves(
+        gameReviewId: serverReviewId,
+        moves: movesData,
+      );
+
+      debugPrint('Server sync: Moves saved: $movesSaved');
+
+      // 3. Save personal mistakes (puzzles)
+      if (puzzleMoves.isNotEmpty) {
+        final mistakesData = puzzleMoves
+            .where((m) => m.bestMoveUci != null)
+            .map((m) => {
+              'fen': m.fen,
+              'solution_sequence': [m.bestMoveUci],
+              'classification': m.classification.name,
+              'theme': _inferTheme(m),
+            })
+            .toList();
+
+        if (mistakesData.isNotEmpty) {
+          final mistakesSaved = await GamesRepository.savePersonalMistakes(
+            gameReviewId: serverReviewId,
+            mistakes: mistakesData,
+          );
+
+          debugPrint('Server sync: Puzzles saved: $mistakesSaved (${mistakesData.length} puzzles)');
+        }
+      }
+
+      debugPrint('Server sync: Complete!');
+    } catch (e) {
+      debugPrint('Server sync error: $e');
+      // Don't throw - server sync failure shouldn't break local analysis
+    }
+  }
+
   /// Parse UCI move string to NormalMove
   NormalMove? _parseUciMove(String uci) {
     if (uci.length < 4) return null;
@@ -622,8 +735,8 @@ class GameAnalysisService {
     }
   }
 
-  /// Generate puzzles from mistakes
-  Future<void> _generatePuzzles({
+  /// Generate puzzles from mistakes - returns the puzzle data for server sync
+  Future<List<AnalyzedMove>> _generatePuzzles({
     required String userId,
     required String reviewId,
     required List<AnalyzedMove> moves,
@@ -656,6 +769,8 @@ class GameAnalysisService {
         'created_at': DateTime.now().toIso8601String(),
       });
     }
+
+    return playerMistakes;
   }
 
   String? _inferTheme(AnalyzedMove move) {

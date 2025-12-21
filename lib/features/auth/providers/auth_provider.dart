@@ -66,8 +66,12 @@ class AuthNotifier extends StateNotifier<AppAuthState> {
   void _init() async {
     debugPrint('Auth: Starting initialization...');
 
-    // Try to load cached profile first (but don't set isLoading false yet)
+    // Keep isLoading true until ALL auth checks complete
     UserProfile? localProfile;
+    UserProfile? finalProfile;
+    AuthMode finalMode = AuthMode.offline;
+
+    // Step 1: Try to load cached profile first
     try {
       localProfile = await GoogleAuthService.signInSilently();
       localProfile ??= await LocalDatabase.getCurrentUserProfile();
@@ -78,12 +82,13 @@ class AuthNotifier extends StateNotifier<AppAuthState> {
       debugPrint('Auth: Error loading local profile: $e');
     }
 
-    // Then, try online auth if available
+    // Step 2: Try online auth if available
     bool supabaseAuthComplete = false;
     try {
       // Try to recover existing session first
       await _tryRecoverSession();
 
+      // Set up auth state listener for future changes
       _authSubscription = SupabaseService.authStateChanges.listen((data) {
         final event = data.event;
         final user = data.session?.user;
@@ -106,28 +111,54 @@ class AuthNotifier extends StateNotifier<AppAuthState> {
       final user = SupabaseService.currentUser;
       if (user != null) {
         debugPrint('Auth: Found Supabase user, loading profile...');
-        await _loadProfile(user);
-        supabaseAuthComplete = true;
+        // Load profile but don't update state yet - we'll do it at the end
+        try {
+          final response = await SupabaseService.client
+              .from('profiles')
+              .select()
+              .eq('id', user.id)
+              .maybeSingle();
+
+          if (response != null) {
+            var profile = UserProfile.fromJson(response);
+            profile = await _loadLinkedChessAccounts(user.id, profile);
+            finalProfile = profile;
+            finalMode = AuthMode.online;
+            supabaseAuthComplete = true;
+            debugPrint('Auth: Supabase profile loaded successfully');
+          }
+        } catch (e) {
+          debugPrint('Auth: Error loading Supabase profile: $e');
+        }
       }
     } catch (e) {
       // Supabase not available, continue with offline mode
       debugPrint('Supabase not available, using offline mode: $e');
     }
 
-    // If Supabase didn't load a profile, use local profile or mark as not authenticated
-    if (!supabaseAuthComplete) {
-      debugPrint('Auth: No Supabase session, using local profile');
-      if (localProfile != null) {
-        state = AppAuthState(
-          profile: localProfile,
-          mode: AuthMode.offline,
-          isGuest: localProfile.id.startsWith('guest_'),
-          isLoading: false,
-        );
-      } else {
-        debugPrint('Auth: No profile found, user needs to log in');
-        state = AppAuthState(isLoading: false);
-      }
+    // Step 3: Determine final state and set isLoading: false ONCE
+    if (supabaseAuthComplete && finalProfile != null) {
+      // Use Supabase profile
+      state = AppAuthState(
+        user: SupabaseService.currentUser,
+        profile: finalProfile,
+        mode: finalMode,
+        isGuest: false,
+        isLoading: false,
+      );
+    } else if (localProfile != null) {
+      // Fall back to local profile
+      debugPrint('Auth: Using local profile');
+      state = AppAuthState(
+        profile: localProfile,
+        mode: AuthMode.offline,
+        isGuest: localProfile.id.startsWith('guest_'),
+        isLoading: false,
+      );
+    } else {
+      // No profile found, user needs to log in
+      debugPrint('Auth: No profile found, user needs to log in');
+      state = AppAuthState(isLoading: false);
     }
 
     debugPrint('Auth: Initialization complete. isAuthenticated=${state.isAuthenticated}');
