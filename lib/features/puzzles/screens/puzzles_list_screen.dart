@@ -129,7 +129,7 @@ class PuzzlesListScreen extends ConsumerWidget {
             const SizedBox(height: 32),
             ElevatedButton.icon(
               onPressed: () {
-                context.goNamed('games');
+                context.pushNamed('games');
               },
               icon: const Icon(Icons.sports_esports),
               label: const Text('Go to Games'),

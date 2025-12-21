@@ -321,11 +321,6 @@ class _DailyPuzzleScreenState extends ConsumerState<DailyPuzzleScreen> {
                       minimumSize: const Size(double.infinity, 48),
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  TextButton(
-                    onPressed: () => context.goNamed('puzzles'),
-                    child: const Text('More Puzzles'),
-                  ),
                 ],
               ),
             ),
@@ -465,9 +460,9 @@ class _DailyPuzzleScreenState extends ConsumerState<DailyPuzzleScreen> {
                 ),
               if (!state.isToday) const SizedBox(height: 12),
               OutlinedButton.icon(
-                onPressed: () => context.goNamed('puzzles'),
+                onPressed: () => context.pushNamed('puzzles'),
                 icon: const Icon(Icons.extension),
-                label: const Text('Practice More Puzzles'),
+                label: const Text('Practice Game Puzzles'),
                 style: OutlinedButton.styleFrom(
                   minimumSize: const Size(200, 48),
                 ),
@@ -574,7 +569,7 @@ class _DailyPuzzleScreenState extends ConsumerState<DailyPuzzleScreen> {
                 const SizedBox(height: 12),
               ],
               OutlinedButton(
-                onPressed: () => context.goNamed('games'),
+                onPressed: () => context.pushNamed('games'),
                 child: const Text('Import Games'),
               ),
             ],

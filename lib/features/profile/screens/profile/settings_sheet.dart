@@ -209,6 +209,7 @@ class _SettingsSheetContent extends ConsumerWidget {
   void _showSubscriptionInfo(BuildContext context, SubscriptionTier tier) {
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -368,12 +369,15 @@ class _SubscriptionInfoSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
+    return DraggableScrollableSheet(
+      initialChildSize: 0.7,
+      minChildSize: 0.5,
+      maxChildSize: 0.9,
+      expand: false,
+      builder: (context, scrollController) => SafeArea(
+        child: ListView(
+          controller: scrollController,
+          padding: const EdgeInsets.all(24),
           children: [
             Text(
               'Subscription Plans',
