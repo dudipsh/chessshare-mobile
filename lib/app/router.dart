@@ -49,7 +49,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       if (location == '/splash') {
         // Redirect based on auth state
         if (isAuthenticated && !isGuest) {
-          return '/games';
+          return '/study';
         } else {
           return '/login';
         }

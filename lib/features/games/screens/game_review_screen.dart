@@ -19,7 +19,7 @@ import 'game_review/accuracy_summary.dart';
 import 'game_review/action_buttons.dart';
 import 'game_review/analyzing_view.dart';
 import 'game_review/move_info_panel.dart';
-import 'game_review/moves_list.dart';
+import 'game_review/move_strip.dart';
 import 'game_review/navigation_controls.dart';
 import 'game_review/static_evaluation_bar.dart';
 import 'play_vs_stockfish_screen.dart';
@@ -174,15 +174,13 @@ class _GameReviewScreenState extends ConsumerState<GameReviewScreen> {
         ),
         if (state.currentMove != null)
           MoveInfoPanel(move: state.currentMove!, isDark: isDark),
-        Expanded(
-          child: MovesList(
-            moves: state.review!.moves,
-            currentMoveIndex: state.currentMoveIndex,
-            isDark: isDark,
-            onMoveSelected: (index) {
-              ref.read(gameReviewProvider(_userId).notifier).goToMove(index);
-            },
-          ),
+        MoveStrip(
+          moves: state.review!.moves,
+          currentMoveIndex: state.currentMoveIndex,
+          isDark: isDark,
+          onMoveSelected: (index) {
+            ref.read(gameReviewProvider(_userId).notifier).goToMove(index);
+          },
         ),
         NavigationControls(
           currentMoveIndex: state.currentMoveIndex,
@@ -192,6 +190,7 @@ class _GameReviewScreenState extends ConsumerState<GameReviewScreen> {
           onNext: () => ref.read(gameReviewProvider(_userId).notifier).nextMove(),
           onLast: () => ref.read(gameReviewProvider(_userId).notifier).goToEnd(),
         ),
+        const Spacer(),
         ReviewActionButtons(
           mistakesCount: _getMistakesCount(state),
           onPractice: () => _navigateToPracticeMistakes(state),

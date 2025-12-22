@@ -133,7 +133,8 @@ class GamesNotifier extends StateNotifier<GamesState> {
     await _loadFromCache();
 
     // Step 2: Load game reviews from server (metadata only, quick)
-    _loadGameReviewsFromServer(); // Don't await - run in background
+    // Await this to ensure reviews are loaded before importing new games
+    await _loadGameReviewsFromServer();
 
     // Step 3: Auto-import new games in background (won't block UI)
     _autoImportInBackground();
@@ -326,6 +327,9 @@ class GamesNotifier extends StateNotifier<GamesState> {
     // Update any existing games with their analysis status
     if (mounted && state.games.isNotEmpty) {
       _updateGamesWithAnalysisStatus();
+      // Cache the updated games with accuracy data
+      await GamesCacheService.cacheGames(state.games);
+      debugPrint('Cached games with analysis status');
     }
   }
 
