@@ -58,7 +58,7 @@ class _StudyBoardGridState extends ConsumerState<StudyBoardGrid> {
     }
 
     if (widget.boards.isEmpty) {
-      return _EmptyState(isMine: widget.isMine);
+      return _buildEmptyState();
     }
 
     final itemCount = widget.boards.length + (state.hasMorePublic && !widget.isMine ? 1 : 0);
@@ -89,29 +89,22 @@ class _StudyBoardGridState extends ConsumerState<StudyBoardGrid> {
       ),
     );
   }
-}
 
-class _EmptyState extends StatelessWidget {
-  final bool isMine;
-
-  const _EmptyState({required this.isMine});
-
-  @override
-  Widget build(BuildContext context) {
+  Widget _buildEmptyState() {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(
-            isMine ? Icons.folder_outlined : Icons.library_books_outlined,
+            widget.isMine ? Icons.folder_outlined : Icons.library_books_outlined,
             size: 64,
             color: Colors.grey,
           ),
           const SizedBox(height: 16),
-          Text(isMine ? 'No studies yet' : 'No studies found'),
+          Text(widget.isMine ? 'No studies yet' : 'No studies found'),
           const SizedBox(height: 8),
           Text(
-            isMine ? 'Create studies on chessshare.com' : 'Try a search',
+            widget.isMine ? 'Create studies on chessshare.com' : 'Try a search',
             style: TextStyle(color: Colors.grey[600], fontSize: 13),
           ),
         ],

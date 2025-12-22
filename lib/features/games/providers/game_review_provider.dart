@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -10,6 +11,7 @@ import '../models/chess_game.dart';
 import '../models/game_review.dart';
 import '../models/move_classification.dart';
 import '../services/game_analysis_service.dart';
+import '../utils/chess_position_utils.dart';
 
 /// State for game review
 class GameReviewState {
@@ -20,8 +22,9 @@ class GameReviewState {
   final String? analysisMessage;
   final String? error;
   final int currentMoveIndex;
+  final Chess _position;
 
-  const GameReviewState({
+  GameReviewState({
     this.review,
     this.isLoading = false,
     this.isAnalyzing = false,
@@ -29,29 +32,32 @@ class GameReviewState {
     this.analysisMessage,
     this.error,
     this.currentMoveIndex = 0,
-  });
+    Chess? position,
+  }) : _position = position ?? Chess.initial;
 
+  /// Current chess position based on moves played
+  Chess get position => _position;
+
+  /// Current FEN string
+  String get fen => _position.fen;
+
+  /// Side to move
+  Side get sideToMove => _position.turn;
+
+  /// The move that was just played (at currentMoveIndex - 1)
   AnalyzedMove? get currentMove {
     if (review == null || review!.moves.isEmpty) return null;
-    // currentMoveIndex represents how many moves have been played
-    // So the current move (just played) is at index currentMoveIndex - 1
-    if (currentMoveIndex <= 0) return null; // At starting position, no move played yet
+    if (currentMoveIndex <= 0) return null;
     final moveIndex = currentMoveIndex - 1;
     if (moveIndex >= review!.moves.length) return null;
     return review!.moves[moveIndex];
   }
 
-  String get currentFen {
-    if (currentMoveIndex == 0) {
-      return 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
-    }
-    if (review == null || review!.moves.isEmpty) {
-      return 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
-    }
-    final index = (currentMoveIndex - 1).clamp(0, review!.moves.length - 1);
-    // Return the FEN after the move at index
-    final move = review!.moves[index];
-    return move.fen; // This is the FEN before the move, so we need to find the FEN after
+  /// Last move as NormalMove for board highlighting
+  NormalMove? get lastMove {
+    final move = currentMove;
+    if (move == null) return null;
+    return ChessPositionUtils.parseUciMove(move.uci);
   }
 
   GameReviewState copyWith({
@@ -62,6 +68,7 @@ class GameReviewState {
     String? analysisMessage,
     String? error,
     int? currentMoveIndex,
+    Chess? position,
   }) {
     return GameReviewState(
       review: review ?? this.review,
@@ -71,6 +78,7 @@ class GameReviewState {
       analysisMessage: analysisMessage ?? this.analysisMessage,
       error: error ?? this.error,
       currentMoveIndex: currentMoveIndex ?? this.currentMoveIndex,
+      position: position ?? _position,
     );
   }
 }
@@ -85,7 +93,7 @@ class GameReviewNotifier extends StateNotifier<GameReviewState> {
     GameAnalysisService? analysisService,
   })  : _userId = userId,
         _analysisService = analysisService ?? GameAnalysisService(),
-        super(const GameReviewState());
+        super(GameReviewState());
 
   /// Load existing review for a game
   Future<void> loadReview(ChessGame game) async {
@@ -314,8 +322,18 @@ class GameReviewNotifier extends StateNotifier<GameReviewState> {
   void goToMove(int index) {
     if (state.review == null) return;
     final maxIndex = state.review!.moves.length;
+    final clampedIndex = index.clamp(0, maxIndex);
+
+    // Build position up to the specified move index
+    final uciMoves = state.review!.moves.map((m) => m.uci).toList();
+    final position = ChessPositionUtils.buildPositionFromMoves(
+      uciMoves,
+      upToIndex: clampedIndex,
+    );
+
     state = state.copyWith(
-      currentMoveIndex: index.clamp(0, maxIndex),
+      currentMoveIndex: clampedIndex,
+      position: position,
     );
   }
 

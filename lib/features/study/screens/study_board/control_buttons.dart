@@ -45,60 +45,17 @@ class ControlButtons extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
-          _NavButton(
-            icon: Icons.skip_previous_rounded,
-            tooltip: 'Back',
-            onPressed: moveIndex > 0 ? onBack : null,
-            isDark: isDark,
-          ),
-          _ActionButton(
-            icon: Icons.lightbulb_rounded,
-            tooltip: 'Hint',
-            color: Colors.amber,
-            onPressed: isPlaying ? onHint : null,
-            isDark: isDark,
-          ),
-          _ActionButton(
-            icon: Icons.sync_rounded,
-            tooltip: 'Flip',
-            color: AppColors.primary,
-            onPressed: onFlip,
-            isDark: isDark,
-          ),
-          _ActionButton(
-            icon: Icons.replay_rounded,
-            tooltip: 'Reset',
-            color: Colors.orange,
-            onPressed: onReset,
-            isDark: isDark,
-          ),
-          _NavButton(
-            icon: Icons.skip_next_rounded,
-            tooltip: 'Next',
-            onPressed: moveIndex < totalMoves ? onForward : null,
-            isDark: isDark,
-          ),
+          _buildNavButton(Icons.skip_previous_rounded, 'Back', moveIndex > 0 ? onBack : null),
+          _buildActionButton(Icons.lightbulb_rounded, 'Hint', Colors.amber, isPlaying ? onHint : null),
+          _buildActionButton(Icons.sync_rounded, 'Flip', AppColors.primary, onFlip),
+          _buildActionButton(Icons.replay_rounded, 'Reset', Colors.orange, onReset),
+          _buildNavButton(Icons.skip_next_rounded, 'Next', moveIndex < totalMoves ? onForward : null),
         ],
       ),
     );
   }
-}
 
-class _NavButton extends StatelessWidget {
-  final IconData icon;
-  final String tooltip;
-  final VoidCallback? onPressed;
-  final bool isDark;
-
-  const _NavButton({
-    required this.icon,
-    required this.tooltip,
-    required this.onPressed,
-    required this.isDark,
-  });
-
-  @override
-  Widget build(BuildContext context) {
+  Widget _buildNavButton(IconData icon, String tooltip, VoidCallback? onPressed) {
     final isEnabled = onPressed != null;
 
     return Tooltip(
@@ -129,25 +86,8 @@ class _NavButton extends StatelessWidget {
       ),
     );
   }
-}
 
-class _ActionButton extends StatelessWidget {
-  final IconData icon;
-  final String tooltip;
-  final Color color;
-  final VoidCallback? onPressed;
-  final bool isDark;
-
-  const _ActionButton({
-    required this.icon,
-    required this.tooltip,
-    required this.color,
-    required this.onPressed,
-    required this.isDark,
-  });
-
-  @override
-  Widget build(BuildContext context) {
+  Widget _buildActionButton(IconData icon, String tooltip, Color color, VoidCallback? onPressed) {
     final isEnabled = onPressed != null;
 
     return Tooltip(

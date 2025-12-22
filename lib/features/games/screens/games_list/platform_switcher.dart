@@ -64,7 +64,7 @@ class PlatformSwitcher extends StatelessWidget {
               _PlatformChip(
                 label: lichessUsername!,
                 icon: '♞',
-                platformColor: Colors.white,
+                platformColor: const Color(0xFF769656),
                 isSelected: !hasBoth || selectedPlatform == GamePlatform.lichess,
                 isDark: isDark,
                 onTap: () => onPlatformSelected(GamePlatform.lichess),

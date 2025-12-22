@@ -1,6 +1,5 @@
 import 'package:chessground/chessground.dart';
 import 'package:dartchess/dartchess.dart';
-import 'package:fast_immutable_collections/fast_immutable_collections.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -12,7 +11,9 @@ import '../../../core/widgets/board_settings_sheet.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../models/chess_game.dart';
 import '../models/move_classification.dart';
+import '../providers/exploration_mode_provider.dart';
 import '../providers/game_review_provider.dart';
+import '../utils/chess_position_utils.dart';
 import '../widgets/move_markers.dart';
 import 'game_review/accuracy_summary.dart';
 import 'game_review/action_buttons.dart';
@@ -36,9 +37,6 @@ class GameReviewScreen extends ConsumerStatefulWidget {
 class _GameReviewScreenState extends ConsumerState<GameReviewScreen> {
   late String _userId;
   Side _orientation = Side.white;
-  Chess _position = Chess.initial;
-  bool _isFreeExploration = false;
-  Chess? _explorationPosition;
 
   @override
   void initState() {
@@ -53,46 +51,6 @@ class _GameReviewScreenState extends ConsumerState<GameReviewScreen> {
     });
   }
 
-  void _updatePosition(GameReviewState state) {
-    if (state.review == null) {
-      _position = Chess.initial;
-      return;
-    }
-
-    _position = Chess.initial;
-    for (var i = 0; i < state.currentMoveIndex && i < state.review!.moves.length; i++) {
-      final move = state.review!.moves[i];
-      try {
-        final parsedMove = _parseUciMove(move.uci);
-        if (parsedMove != null) {
-          _position = _position.play(parsedMove) as Chess;
-        }
-      } catch (e) {
-        break;
-      }
-    }
-  }
-
-  NormalMove? _parseUciMove(String uci) {
-    if (uci.length < 4) return null;
-    try {
-      final from = Square.fromName(uci.substring(0, 2));
-      final to = Square.fromName(uci.substring(2, 4));
-      Role? promotion;
-      if (uci.length > 4) {
-        switch (uci[4].toLowerCase()) {
-          case 'q': promotion = Role.queen; break;
-          case 'r': promotion = Role.rook; break;
-          case 'b': promotion = Role.bishop; break;
-          case 'n': promotion = Role.knight; break;
-        }
-      }
-      return NormalMove(from: from, to: to, promotion: promotion);
-    } catch (e) {
-      return null;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final userId = ref.watch(authProvider).profile?.id ?? '';
@@ -103,7 +61,7 @@ class _GameReviewScreenState extends ConsumerState<GameReviewScreen> {
     }
 
     final state = ref.watch(gameReviewProvider(userId));
-    _updatePosition(state);
+    final explorationState = ref.watch(explorationModeProvider);
 
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
@@ -111,22 +69,24 @@ class _GameReviewScreenState extends ConsumerState<GameReviewScreen> {
     final boardSize = screenWidth - 16;
 
     return Scaffold(
-      appBar: _buildAppBar(context),
-      body: _buildBody(state, boardSize, isDark),
+      appBar: _buildAppBar(context, state, explorationState),
+      body: _buildBody(state, explorationState, boardSize, isDark),
     );
   }
 
-  AppBar _buildAppBar(BuildContext context) {
+  AppBar _buildAppBar(BuildContext context, GameReviewState state, ExplorationState explorationState) {
+    final isExploring = explorationState.isEnabled;
+
     return AppBar(
       title: Text('vs ${widget.game.opponentUsername}', style: const TextStyle(fontSize: 17)),
       actions: [
         IconButton(
           icon: Icon(
-            _isFreeExploration ? Icons.explore : Icons.explore_outlined,
-            color: _isFreeExploration ? Theme.of(context).primaryColor : null,
+            isExploring ? Icons.explore : Icons.explore_outlined,
+            color: isExploring ? Theme.of(context).primaryColor : null,
           ),
-          onPressed: _toggleExploration,
-          tooltip: _isFreeExploration ? 'Exit free mode' : 'Free exploration',
+          onPressed: () => _toggleExploration(state),
+          tooltip: isExploring ? 'Exit free mode' : 'Free exploration',
         ),
         IconButton(
           icon: const Icon(Icons.settings),
@@ -159,15 +119,8 @@ class _GameReviewScreenState extends ConsumerState<GameReviewScreen> {
     );
   }
 
-  void _toggleExploration() {
-    setState(() {
-      _isFreeExploration = !_isFreeExploration;
-      if (_isFreeExploration) {
-        _explorationPosition = Chess.fromSetup(Setup.parseFen(_position.fen));
-      } else {
-        _explorationPosition = null;
-      }
-    });
+  void _toggleExploration(GameReviewState state) {
+    ref.read(explorationModeProvider.notifier).toggle(state.fen);
   }
 
   void _showSettings(BuildContext context) {
@@ -182,7 +135,7 @@ class _GameReviewScreenState extends ConsumerState<GameReviewScreen> {
     );
   }
 
-  Widget _buildBody(GameReviewState state, double boardSize, bool isDark) {
+  Widget _buildBody(GameReviewState state, ExplorationState explorationState, double boardSize, bool isDark) {
     if (state.isLoading) return const Center(child: CircularProgressIndicator());
 
     if (state.isAnalyzing) {
@@ -213,8 +166,9 @@ class _GameReviewScreenState extends ConsumerState<GameReviewScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 8.0),
           child: Stack(
             children: [
-              _buildChessboard(state, boardSize),
-              if (state.currentMove != null) _buildMoveMarker(state, boardSize),
+              _buildChessboard(state, explorationState, boardSize),
+              if (state.currentMove != null && !explorationState.isEnabled)
+                _buildMoveMarker(state, boardSize),
             ],
           ),
         ),
@@ -241,7 +195,7 @@ class _GameReviewScreenState extends ConsumerState<GameReviewScreen> {
         ReviewActionButtons(
           mistakesCount: _getMistakesCount(state),
           onPractice: () => _navigateToPracticeMistakes(state),
-          onPlayEngine: () => _navigateToPlayVsStockfish(),
+          onPlayEngine: () => _navigateToPlayVsStockfish(state),
         ),
         SizedBox(height: MediaQuery.of(context).padding.bottom + 8),
       ],
@@ -268,11 +222,12 @@ class _GameReviewScreenState extends ConsumerState<GameReviewScreen> {
     );
   }
 
-  Widget _buildChessboard(GameReviewState state, double boardSize) {
+  Widget _buildChessboard(GameReviewState state, ExplorationState explorationState, double boardSize) {
     final boardSettings = ref.watch(boardSettingsProvider);
     final lightSquare = boardSettings.colorScheme.lightSquare;
     final darkSquare = boardSettings.colorScheme.darkSquare;
     final pieceAssets = boardSettings.pieceSet.pieceSet.assets;
+    final isExploring = explorationState.isEnabled;
 
     final settings = ChessboardSettings(
       pieceAssets: pieceAssets,
@@ -287,28 +242,24 @@ class _GameReviewScreenState extends ConsumerState<GameReviewScreen> {
         validMoves: Colors.black.withValues(alpha: 0.15),
         validPremoves: Colors.blue.withValues(alpha: 0.2),
       ),
-      showValidMoves: _isFreeExploration,
+      showValidMoves: isExploring,
       showLastMove: true,
       animationDuration: const Duration(milliseconds: 150),
       dragFeedbackScale: 2.0,
       dragFeedbackOffset: const Offset(0, -1),
     );
 
-    final displayPosition = _isFreeExploration && _explorationPosition != null
-        ? _explorationPosition!
-        : _position;
-
-    if (_isFreeExploration && _explorationPosition != null) {
+    if (isExploring && explorationState.position != null) {
       return Chessboard(
         size: boardSize,
         settings: settings,
         orientation: _orientation,
-        fen: displayPosition.fen,
+        fen: explorationState.fen,
         lastMove: null,
         game: GameData(
           playerSide: PlayerSide.both,
-          sideToMove: displayPosition.turn == Side.white ? Side.white : Side.black,
-          validMoves: _getValidMoves(displayPosition),
+          sideToMove: explorationState.sideToMove ?? Side.white,
+          validMoves: explorationState.validMoves,
           promotionMove: null,
           onMove: (move, {isDrop}) => _makeExplorationMove(move),
           onPromotionSelection: (role) {},
@@ -319,33 +270,14 @@ class _GameReviewScreenState extends ConsumerState<GameReviewScreen> {
         size: boardSize,
         settings: settings,
         orientation: _orientation,
-        fen: displayPosition.fen,
-        lastMove: state.currentMove != null ? _parseUciMove(state.currentMove!.uci) : null,
+        fen: state.fen,
+        lastMove: state.lastMove,
       );
     }
   }
 
-  IMap<Square, ISet<Square>> _getValidMoves(Chess position) {
-    final Map<Square, Set<Square>> moves = {};
-    for (final entry in position.legalMoves.entries) {
-      final from = entry.key;
-      final toSquares = entry.value;
-      if (toSquares.isNotEmpty) {
-        moves[from] = toSquares.squares.toSet();
-      }
-    }
-    return IMap(moves.map((k, v) => MapEntry(k, ISet(v))));
-  }
-
   void _makeExplorationMove(NormalMove move) {
-    if (_explorationPosition == null) return;
-    try {
-      final dcMove = NormalMove(from: move.from, to: move.to, promotion: move.promotion);
-      final newPosition = _explorationPosition!.play(dcMove) as Chess;
-      setState(() => _explorationPosition = newPosition);
-    } catch (e) {
-      // Invalid move, ignore
-    }
+    ref.read(explorationModeProvider.notifier).makeMove(move);
   }
 
   Widget _buildMoveMarker(GameReviewState state, double boardSize) {
@@ -354,28 +286,27 @@ class _GameReviewScreenState extends ConsumerState<GameReviewScreen> {
 
     final squareSize = boardSize / 8;
     final markerSize = squareSize * 0.4;
-    final uci = move.uci;
-    if (uci.length < 4) return const SizedBox.shrink();
 
-    try {
-      final toSquare = Square.fromName(uci.substring(2, 4));
-      final file = toSquare.file;
-      final rank = toSquare.rank;
+    final toSquareName = ChessPositionUtils.getDestinationSquare(move.uci);
+    if (toSquareName == null) return const SizedBox.shrink();
 
-      double x = _orientation == Side.black ? (7 - file).toDouble() : file.toDouble();
-      double y = _orientation == Side.black ? rank.toDouble() : (7 - rank).toDouble();
+    final toSquare = ChessPositionUtils.parseSquare(toSquareName);
+    if (toSquare == null) return const SizedBox.shrink();
 
-      final left = x * squareSize + squareSize - markerSize * 1.1;
-      final top = y * squareSize + markerSize * 0.1;
+    final file = toSquare.file;
+    final rank = toSquare.rank;
 
-      return Positioned(
-        left: left,
-        top: top,
-        child: MoveMarker(classification: move.classification, size: markerSize),
-      );
-    } catch (e) {
-      return const SizedBox.shrink();
-    }
+    double x = _orientation == Side.black ? (7 - file).toDouble() : file.toDouble();
+    double y = _orientation == Side.black ? rank.toDouble() : (7 - rank).toDouble();
+
+    final left = x * squareSize + squareSize - markerSize * 1.1;
+    final top = y * squareSize + markerSize * 0.1;
+
+    return Positioned(
+      left: left,
+      top: top,
+      child: MoveMarker(classification: move.classification, size: markerSize),
+    );
   }
 
   int _getMistakesCount(GameReviewState state) {
@@ -413,12 +344,12 @@ class _GameReviewScreenState extends ConsumerState<GameReviewScreen> {
     );
   }
 
-  void _navigateToPlayVsStockfish() {
+  void _navigateToPlayVsStockfish(GameReviewState state) {
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => PlayVsStockfishScreen(
-          startFen: _position.fen,
+          startFen: state.fen,
           playerColor: widget.game.playerColor == 'white' ? Side.white : Side.black,
         ),
       ),
