@@ -107,7 +107,8 @@ class _GamesListScreenState extends ConsumerState<GamesListScreen> {
   }
 
   Widget _buildBody(BuildContext context, GamesState gamesState, List<ChessGame> games) {
-    if (gamesState.isLoading || gamesState.isImporting) {
+    // Show loading while initial cache load is happening
+    if (gamesState.isInitialLoading || gamesState.isLoading || gamesState.isImporting) {
       return GamesLoadingView(
         isImporting: gamesState.isImporting,
         importingPlatform: gamesState.importingPlatform,

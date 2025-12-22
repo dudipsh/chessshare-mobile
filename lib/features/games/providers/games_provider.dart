@@ -12,6 +12,7 @@ import '../services/games_cache_service.dart';
 class GamesState {
   final List<ChessGame> games;
   final bool isLoading;
+  final bool isInitialLoading; // True until first cache load completes
   final String? error;
   final bool isImporting;
   final String? importingPlatform;
@@ -25,6 +26,7 @@ class GamesState {
   GamesState({
     this.games = const [],
     this.isLoading = false,
+    this.isInitialLoading = true, // Start as loading until cache loads
     this.error,
     this.isImporting = false,
     this.importingPlatform,
@@ -39,6 +41,7 @@ class GamesState {
   GamesState copyWith({
     List<ChessGame>? games,
     bool? isLoading,
+    bool? isInitialLoading,
     String? error,
     bool? isImporting,
     String? importingPlatform,
@@ -52,6 +55,7 @@ class GamesState {
     return GamesState(
       games: games ?? this.games,
       isLoading: isLoading ?? this.isLoading,
+      isInitialLoading: isInitialLoading ?? this.isInitialLoading,
       error: error,
       isImporting: isImporting ?? this.isImporting,
       importingPlatform: importingPlatform ?? this.importingPlatform,
@@ -141,12 +145,19 @@ class GamesNotifier extends StateNotifier<GamesState> {
 
     try {
       final cachedGames = await GamesCacheService.getCachedGames();
-      if (cachedGames.isNotEmpty && mounted) {
-        debugPrint('Loaded ${cachedGames.length} games from cache');
-        state = state.copyWith(games: cachedGames);
+      if (mounted) {
+        if (cachedGames.isNotEmpty) {
+          debugPrint('Loaded ${cachedGames.length} games from cache');
+          state = state.copyWith(games: cachedGames, isInitialLoading: false);
+        } else {
+          state = state.copyWith(isInitialLoading: false);
+        }
       }
     } catch (e) {
       debugPrint('Error loading games from cache: $e');
+      if (mounted) {
+        state = state.copyWith(isInitialLoading: false);
+      }
     }
   }
 
@@ -262,18 +273,27 @@ class GamesNotifier extends StateNotifier<GamesState> {
     }
   }
 
-  /// Refresh games from saved profiles
+  /// Refresh games from saved profiles (silent - keeps existing games visible)
   Future<void> refreshFromSavedProfiles() async {
     if (!mounted) return;
 
-    final chessComUser = _chessComUsername;
-    final lichessUser = _lichessUsername;
+    // Use silent refresh - don't clear games or show loading
+    state = state.copyWith(isSyncingInBackground: true);
 
-    if (chessComUser != null && chessComUser.isNotEmpty && mounted) {
-      await importFromChessCom(chessComUser);
-    }
-    if (lichessUser != null && lichessUser.isNotEmpty && mounted) {
-      await importFromLichess(lichessUser);
+    try {
+      final chessComUser = _chessComUsername;
+      final lichessUser = _lichessUsername;
+
+      if (chessComUser != null && chessComUser.isNotEmpty && mounted) {
+        await _importFromChessComSilent(chessComUser);
+      }
+      if (lichessUser != null && lichessUser.isNotEmpty && mounted) {
+        await _importFromLichessSilent(lichessUser);
+      }
+    } finally {
+      if (mounted) {
+        state = state.copyWith(isSyncingInBackground: false);
+      }
     }
   }
 
