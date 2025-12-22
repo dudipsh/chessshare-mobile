@@ -100,6 +100,28 @@ class StudyBoard {
   }
 
   int get totalMoves => variations.fold(0, (sum, v) => sum + v.moveCount);
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'title': title,
+      'description': description,
+      'owner_id': ownerId,
+      'author': {
+        'full_name': ownerName,
+        'avatar_url': ownerAvatarUrl,
+      },
+      'cover_image_url': coverImageUrl,
+      'is_public': isPublic,
+      'views_count': viewsCount,
+      'likes_count': likesCount,
+      'user_liked': userLiked,
+      'starting_fen': startingFen,
+      'variations': variations.map((v) => v.toJson()).toList(),
+      'created_at': createdAt.toIso8601String(),
+      'updated_at': updatedAt.toIso8601String(),
+    };
+  }
 }
 
 /// Study variation (a line of moves to practice)
@@ -169,5 +191,21 @@ class StudyVariation {
         .where((m) => m.isNotEmpty && !m.startsWith('{') && !m.contains('.'))
         .length;
     return moves;
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'board_id': boardId,
+      'name': name,
+      'pgn': pgn,
+      'starting_fen': startingFen,
+      'player_color': playerColor,
+      'position': position,
+      'moves_completed': movesCompleted,
+      'total_moves': totalMoves,
+      'is_completed': isCompleted,
+      'completion_percentage': completionPercentage,
+    };
   }
 }

@@ -35,14 +35,17 @@ class StudyBoardFooter extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(top: 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildAvatar(context),
-          const SizedBox(width: 8),
-          Expanded(child: _buildTitleSection(context)),
-        ],
+      padding: const EdgeInsets.only(top: 6),
+      child: SizedBox(
+        height: 44, // Fixed height to prevent overflow
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildAvatar(context),
+            const SizedBox(width: 8),
+            Expanded(child: _buildTitleSection(context)),
+          ],
+        ),
       ),
     );
   }
@@ -79,6 +82,7 @@ class StudyBoardFooter extends StatelessWidget {
   Widget _buildTitleSection(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
       children: [
         if (ownerName != null)
           GestureDetector(
@@ -86,18 +90,20 @@ class StudyBoardFooter extends StatelessWidget {
             child: Text(
               ownerName!,
               style: TextStyle(
-                fontSize: 12,
+                fontSize: 11,
                 color: isDark ? Colors.grey[400] : Colors.grey[600],
               ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
           ),
-        Text(
-          title,
-          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
+        Flexible(
+          child: Text(
+            title,
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
       ],
     );

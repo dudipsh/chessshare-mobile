@@ -8,6 +8,7 @@ import '../../../app/theme/colors.dart';
 import '../../../core/database/local_database.dart';
 import '../../../core/providers/board_settings_provider.dart';
 import '../../../core/widgets/board_settings_sheet.dart';
+import '../../analysis/providers/engine_provider.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../models/chess_game.dart';
 import '../models/move_classification.dart';
@@ -37,6 +38,7 @@ class GameReviewScreen extends ConsumerStatefulWidget {
 class _GameReviewScreenState extends ConsumerState<GameReviewScreen> {
   late String _userId;
   Side _orientation = Side.white;
+  String? _lastExplorationFen;
 
   @override
   void initState() {
@@ -48,7 +50,16 @@ class _GameReviewScreenState extends ConsumerState<GameReviewScreen> {
       if (_userId.isNotEmpty) {
         ref.read(gameReviewProvider(_userId).notifier).loadReview(widget.game);
       }
+      // Initialize engine for exploration analysis
+      ref.read(engineAnalysisProvider.notifier).initialize();
     });
+  }
+
+  @override
+  void dispose() {
+    // Stop engine analysis when leaving the screen
+    ref.read(engineAnalysisProvider.notifier).stopAnalysis();
+    super.dispose();
   }
 
   @override
@@ -62,6 +73,29 @@ class _GameReviewScreenState extends ConsumerState<GameReviewScreen> {
 
     final state = ref.watch(gameReviewProvider(userId));
     final explorationState = ref.watch(explorationModeProvider);
+    final engineState = ref.watch(engineAnalysisProvider);
+
+    // Sync exploration position with game review when not exploring
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!explorationState.isExploring && state.review != null) {
+        ref.read(explorationModeProvider.notifier).setPosition(
+          state.fen,
+          state.currentMoveIndex,
+        );
+        // Stop engine analysis when not exploring
+        if (_lastExplorationFen != null) {
+          ref.read(engineAnalysisProvider.notifier).stopAnalysis();
+          _lastExplorationFen = null;
+        }
+      } else if (explorationState.isExploring) {
+        // Analyze the exploration position
+        final currentFen = explorationState.fen;
+        if (currentFen != _lastExplorationFen && engineState.isReady) {
+          _lastExplorationFen = currentFen;
+          ref.read(engineAnalysisProvider.notifier).analyzePosition(currentFen);
+        }
+      }
+    });
 
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
@@ -70,24 +104,14 @@ class _GameReviewScreenState extends ConsumerState<GameReviewScreen> {
 
     return Scaffold(
       appBar: _buildAppBar(context, state, explorationState),
-      body: _buildBody(state, explorationState, boardSize, isDark),
+      body: _buildBody(state, explorationState, engineState, boardSize, isDark),
     );
   }
 
   AppBar _buildAppBar(BuildContext context, GameReviewState state, ExplorationState explorationState) {
-    final isExploring = explorationState.isEnabled;
-
     return AppBar(
       title: Text('vs ${widget.game.opponentUsername}', style: const TextStyle(fontSize: 17)),
       actions: [
-        IconButton(
-          icon: Icon(
-            isExploring ? Icons.explore : Icons.explore_outlined,
-            color: isExploring ? Theme.of(context).primaryColor : null,
-          ),
-          onPressed: () => _toggleExploration(state),
-          tooltip: isExploring ? 'Exit free mode' : 'Free exploration',
-        ),
         IconButton(
           icon: const Icon(Icons.settings),
           onPressed: () => _showSettings(context),
@@ -119,10 +143,6 @@ class _GameReviewScreenState extends ConsumerState<GameReviewScreen> {
     );
   }
 
-  void _toggleExploration(GameReviewState state) {
-    ref.read(explorationModeProvider.notifier).toggle(state.fen);
-  }
-
   void _showSettings(BuildContext context) {
     showBoardSettingsSheet(
       context: context,
@@ -135,7 +155,7 @@ class _GameReviewScreenState extends ConsumerState<GameReviewScreen> {
     );
   }
 
-  Widget _buildBody(GameReviewState state, ExplorationState explorationState, double boardSize, bool isDark) {
+  Widget _buildBody(GameReviewState state, ExplorationState explorationState, EngineAnalysisState engineState, double boardSize, bool isDark) {
     if (state.isLoading) return const Center(child: CircularProgressIndicator());
 
     if (state.isAnalyzing) {
@@ -148,6 +168,23 @@ class _GameReviewScreenState extends ConsumerState<GameReviewScreen> {
     if (state.error != null) return _buildErrorView(state);
     if (state.review == null) return const Center(child: Text('No review available'));
 
+    // Get evaluation - use engine eval during exploration, or game analysis eval otherwise
+    int? evalCp;
+    if (explorationState.isExploring) {
+      // Use engine evaluation in centipawns during exploration
+      final eval = engineState.evaluation;
+      if (eval != null) {
+        if (eval.mateInMoves != null) {
+          // Convert mate to large centipawn value
+          evalCp = eval.mateInMoves! > 0 ? 10000 + eval.mateInMoves! : -10000 - eval.mateInMoves!.abs();
+        } else {
+          evalCp = eval.centipawns;
+        }
+      }
+    } else {
+      evalCp = state.currentMove?.evalAfter;
+    }
+
     return Column(
       children: [
         AccuracySummary(
@@ -158,8 +195,9 @@ class _GameReviewScreenState extends ConsumerState<GameReviewScreen> {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
           child: StaticEvaluationBar(
-            evalCp: state.currentMove?.evalAfter,
+            evalCp: evalCp,
             width: boardSize,
+            isAnalyzing: explorationState.isExploring && engineState.isAnalyzing,
           ),
         ),
         Padding(
@@ -167,37 +205,184 @@ class _GameReviewScreenState extends ConsumerState<GameReviewScreen> {
           child: Stack(
             children: [
               _buildChessboard(state, explorationState, boardSize),
-              if (state.currentMove != null && !explorationState.isEnabled)
+              if (state.currentMove != null && !explorationState.isExploring)
                 _buildMoveMarker(state, boardSize),
             ],
           ),
         ),
-        if (state.currentMove != null)
-          MoveInfoPanel(move: state.currentMove!, isDark: isDark),
+        // Flexible area for move info, hints, and exploration bar
+        Expanded(
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Show best move suggestion when not exploring
+                if (state.currentMove != null && !explorationState.isExploring)
+                  _buildBestMoveHint(state, isDark),
+                // Show exploration indicator when exploring
+                if (explorationState.isExploring)
+                  _buildExplorationBar(explorationState, isDark),
+                if (state.currentMove != null && !explorationState.isExploring)
+                  MoveInfoPanel(move: state.currentMove!, isDark: isDark),
+              ],
+            ),
+          ),
+        ),
         MoveStrip(
           moves: state.review!.moves,
-          currentMoveIndex: state.currentMoveIndex,
+          currentMoveIndex: explorationState.isExploring
+              ? (explorationState.originalMoveIndex ?? state.currentMoveIndex)
+              : state.currentMoveIndex,
           isDark: isDark,
           onMoveSelected: (index) {
+            // Exit exploration if active and go to selected move
+            if (explorationState.isExploring) {
+              ref.read(explorationModeProvider.notifier).returnToGame();
+            }
             ref.read(gameReviewProvider(_userId).notifier).goToMove(index);
           },
         ),
         NavigationControls(
           currentMoveIndex: state.currentMoveIndex,
           totalMoves: state.review?.moves.length ?? 0,
-          onFirst: () => ref.read(gameReviewProvider(_userId).notifier).goToStart(),
-          onPrevious: () => ref.read(gameReviewProvider(_userId).notifier).previousMove(),
-          onNext: () => ref.read(gameReviewProvider(_userId).notifier).nextMove(),
-          onLast: () => ref.read(gameReviewProvider(_userId).notifier).goToEnd(),
+          onFirst: () {
+            if (explorationState.isExploring) {
+              ref.read(explorationModeProvider.notifier).returnToGame();
+            }
+            ref.read(gameReviewProvider(_userId).notifier).goToStart();
+          },
+          onPrevious: () {
+            if (explorationState.isExploring) {
+              // Undo exploration move instead of going back in game
+              ref.read(explorationModeProvider.notifier).undoMove();
+            } else {
+              ref.read(gameReviewProvider(_userId).notifier).previousMove();
+            }
+          },
+          onNext: () {
+            if (explorationState.isExploring) {
+              ref.read(explorationModeProvider.notifier).returnToGame();
+            }
+            ref.read(gameReviewProvider(_userId).notifier).nextMove();
+          },
+          onLast: () {
+            if (explorationState.isExploring) {
+              ref.read(explorationModeProvider.notifier).returnToGame();
+            }
+            ref.read(gameReviewProvider(_userId).notifier).goToEnd();
+          },
         ),
-        const Spacer(),
         ReviewActionButtons(
           mistakesCount: _getMistakesCount(state),
           onPractice: () => _navigateToPracticeMistakes(state),
-          onPlayEngine: () => _navigateToPlayVsStockfish(state),
+          onPlayEngine: () => _navigateToPlayVsStockfish(state, explorationState),
         ),
         SizedBox(height: MediaQuery.of(context).padding.bottom + 8),
       ],
+    );
+  }
+
+  Widget _buildBestMoveHint(GameReviewState state, bool isDark) {
+    final move = state.currentMove!;
+    if (move.bestMove == null) return const SizedBox.shrink();
+
+    // Only show if current move wasn't the best
+    final isBestMove = move.classification == MoveClassification.best ||
+                       move.classification == MoveClassification.brilliant ||
+                       move.classification == MoveClassification.great;
+    if (isBestMove) return const SizedBox.shrink();
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.green.withValues(alpha: 0.15) : Colors.green.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: Colors.green.withValues(alpha: 0.3),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.lightbulb_outline, size: 18, color: Colors.green[isDark ? 400 : 600]),
+          const SizedBox(width: 8),
+          Text(
+            'Best: ',
+            style: TextStyle(
+              fontSize: 13,
+              color: isDark ? Colors.grey[400] : Colors.grey[600],
+            ),
+          ),
+          Text(
+            move.bestMove!,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: Colors.green[isDark ? 400 : 700],
+            ),
+          ),
+          const Spacer(),
+          Text(
+            'Tap to explore',
+            style: TextStyle(
+              fontSize: 11,
+              color: isDark ? Colors.grey[500] : Colors.grey[500],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildExplorationBar(ExplorationState explorationState, bool isDark) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.primary.withValues(alpha: 0.15) : AppColors.primary.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: AppColors.primary.withValues(alpha: 0.3),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.explore, size: 18, color: AppColors.primary),
+          const SizedBox(width: 8),
+          Text(
+            'Exploring',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              color: AppColors.primary,
+            ),
+          ),
+          if (explorationState.explorationMoves.isNotEmpty) ...[
+            const SizedBox(width: 4),
+            Text(
+              '(${explorationState.explorationMoves.length} moves)',
+              style: TextStyle(
+                fontSize: 12,
+                color: isDark ? Colors.grey[400] : Colors.grey[600],
+              ),
+            ),
+          ],
+          const Spacer(),
+          TextButton.icon(
+            onPressed: () {
+              ref.read(explorationModeProvider.notifier).returnToGame();
+            },
+            icon: const Icon(Icons.undo, size: 16),
+            label: const Text('Back to game'),
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              foregroundColor: AppColors.primary,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -226,7 +411,6 @@ class _GameReviewScreenState extends ConsumerState<GameReviewScreen> {
     final lightSquare = boardSettings.colorScheme.lightSquare;
     final darkSquare = boardSettings.colorScheme.darkSquare;
     final pieceAssets = boardSettings.pieceSet.pieceSet.assets;
-    final isExploring = explorationState.isEnabled;
 
     final settings = ChessboardSettings(
       pieceAssets: pieceAssets,
@@ -241,42 +425,53 @@ class _GameReviewScreenState extends ConsumerState<GameReviewScreen> {
         validMoves: Colors.black.withValues(alpha: 0.15),
         validPremoves: Colors.blue.withValues(alpha: 0.2),
       ),
-      showValidMoves: isExploring,
-      showLastMove: true,
+      showValidMoves: true,
+      showLastMove: !explorationState.isExploring,
       animationDuration: const Duration(milliseconds: 150),
       dragFeedbackScale: 2.0,
       dragFeedbackOffset: const Offset(0, -1),
     );
 
-    if (isExploring && explorationState.position != null) {
-      return Chessboard(
-        size: boardSize,
-        settings: settings,
-        orientation: _orientation,
-        fen: explorationState.fen,
-        lastMove: null,
-        game: GameData(
-          playerSide: PlayerSide.both,
-          sideToMove: explorationState.sideToMove ?? Side.white,
-          validMoves: explorationState.validMoves,
-          promotionMove: null,
-          onMove: (move, {isDrop}) => _makeExplorationMove(move),
-          onPromotionSelection: (role) {},
-        ),
-      );
-    } else {
-      return Chessboard.fixed(
-        size: boardSize,
-        settings: settings,
-        orientation: _orientation,
-        fen: state.fen,
-        lastMove: state.lastMove,
-      );
-    }
+    // Always use interactive chessboard
+    final fen = explorationState.isExploring
+        ? explorationState.fen
+        : state.fen;
+    final validMoves = explorationState.validMoves;
+
+    return Chessboard(
+      size: boardSize,
+      settings: settings,
+      orientation: _orientation,
+      fen: fen,
+      lastMove: explorationState.isExploring ? null : state.lastMove,
+      game: GameData(
+        playerSide: PlayerSide.both,
+        sideToMove: explorationState.sideToMove,
+        validMoves: validMoves,
+        promotionMove: null,
+        onMove: (move, {isDrop}) => _onBoardMove(move, state),
+        onPromotionSelection: (role) {},
+      ),
+    );
   }
 
-  void _makeExplorationMove(NormalMove move) {
-    ref.read(explorationModeProvider.notifier).makeMove(move);
+  void _onBoardMove(NormalMove move, GameReviewState state) {
+    // Get the expected next move from game history
+    String? expectedUci;
+    if (state.currentMoveIndex < (state.review?.moves.length ?? 0)) {
+      expectedUci = state.review!.moves[state.currentMoveIndex].uci;
+    }
+
+    // Make the move in exploration provider
+    final isExplorationMove = ref.read(explorationModeProvider.notifier).makeMove(
+      move,
+      expectedUci: expectedUci,
+    );
+
+    // If this was the game's next move, also advance the game review
+    if (!isExplorationMove && expectedUci != null) {
+      ref.read(gameReviewProvider(_userId).notifier).nextMove();
+    }
   }
 
   Widget _buildMoveMarker(GameReviewState state, double boardSize) {
@@ -343,12 +538,15 @@ class _GameReviewScreenState extends ConsumerState<GameReviewScreen> {
     );
   }
 
-  void _navigateToPlayVsStockfish(GameReviewState state) {
+  void _navigateToPlayVsStockfish(GameReviewState state, ExplorationState explorationState) {
+    // Use current position (could be exploration position)
+    final fen = explorationState.isExploring ? explorationState.fen : state.fen;
+
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => PlayVsStockfishScreen(
-          startFen: state.fen,
+          startFen: fen,
           playerColor: widget.game.playerColor == 'white' ? Side.white : Side.black,
         ),
       ),

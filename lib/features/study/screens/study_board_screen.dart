@@ -9,6 +9,7 @@ import '../../../core/widgets/board_settings_sheet.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../models/study_board.dart';
 import '../providers/study_board_provider.dart';
+import '../providers/study_history_provider.dart';
 import '../services/study_service.dart';
 import 'study_board/control_buttons.dart';
 import 'study_board/study_marker_painter.dart';
@@ -40,7 +41,11 @@ class _StudyBoardScreenState extends ConsumerState<StudyBoardScreen> {
 
     if (mounted) {
       setState(() => _isLoading = false);
-      ref.read(studyBoardProvider.notifier).loadBoard(freshBoard ?? widget.board);
+      final boardToUse = freshBoard ?? widget.board;
+      ref.read(studyBoardProvider.notifier).loadBoard(boardToUse);
+
+      // Record view for history
+      ref.read(studyHistoryProvider.notifier).recordView(boardToUse);
     }
   }
 

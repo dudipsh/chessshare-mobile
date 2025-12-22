@@ -3,11 +3,13 @@ import 'package:flutter/material.dart';
 class StaticEvaluationBar extends StatelessWidget {
   final int? evalCp;
   final double width;
+  final bool isAnalyzing;
 
   const StaticEvaluationBar({
     super.key,
     this.evalCp,
     required this.width,
+    this.isAnalyzing = false,
   });
 
   @override
@@ -24,7 +26,9 @@ class StaticEvaluationBar extends StatelessWidget {
 
     // Format evaluation string
     String evalString = '';
-    if (evalCp != null) {
+    if (isAnalyzing && evalCp == null) {
+      evalString = '...';
+    } else if (evalCp != null) {
       if (evalCp!.abs() >= 10000) {
         final mateIn = ((10000 - evalCp!.abs()) / 2).ceil();
         evalString = evalCp! > 0 ? 'M$mateIn' : '-M$mateIn';
@@ -41,15 +45,26 @@ class StaticEvaluationBar extends StatelessWidget {
         children: [
           SizedBox(
             width: 40,
-            child: Text(
-              normalizedScore > 0.5 ? evalString : '',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-                color: isDark ? Colors.white70 : Colors.grey.shade700,
-              ),
-              textAlign: TextAlign.center,
-            ),
+            child: isAnalyzing && evalCp == null
+                ? Center(
+                    child: SizedBox(
+                      width: 12,
+                      height: 12,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: isDark ? Colors.white54 : Colors.grey.shade600,
+                      ),
+                    ),
+                  )
+                : Text(
+                    normalizedScore > 0.5 ? evalString : '',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? Colors.white70 : Colors.grey.shade700,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
           ),
           Expanded(
             child: Container(

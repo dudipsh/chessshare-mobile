@@ -4,121 +4,152 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../utils/chess_position_utils.dart';
 
-/// State for free exploration mode in game review
+/// State for seamless exploration in game review
+/// Users can always drag pieces. When they deviate from the game, they're "exploring"
 class ExplorationState {
-  final bool isEnabled;
-  final Chess? position;
-  final List<String> moveHistory; // UCI moves made during exploration
+  final bool isExploring; // True when user made moves not in original game
+  final Chess? currentPosition; // Current board position
+  final List<String> explorationMoves; // UCI moves made during exploration
+  final String? originalFen; // The FEN before exploration started
+  final int? originalMoveIndex; // The move index before exploration started
 
   const ExplorationState({
-    this.isEnabled = false,
-    this.position,
-    this.moveHistory = const [],
+    this.isExploring = false,
+    this.currentPosition,
+    this.explorationMoves = const [],
+    this.originalFen,
+    this.originalMoveIndex,
   });
 
   /// Get valid moves for the current position
   IMap<Square, ISet<Square>> get validMoves {
-    if (position == null) return const IMap.empty();
-
-    final moves = ChessPositionUtils.getValidMoves(position!);
+    if (currentPosition == null) return const IMap.empty();
+    final moves = ChessPositionUtils.getValidMoves(currentPosition!);
     return IMap(moves.map((k, v) => MapEntry(k, ISet(v))));
   }
 
   /// Current side to move
-  Side? get sideToMove => position?.turn;
+  Side get sideToMove => currentPosition?.turn ?? Side.white;
 
   /// Current FEN
-  String get fen => position?.fen ?? ChessPositionUtils.startingFen;
+  String get fen => currentPosition?.fen ?? ChessPositionUtils.startingFen;
+
+  /// Can undo exploration moves
+  bool get canUndo => isExploring && explorationMoves.isNotEmpty;
 
   ExplorationState copyWith({
-    bool? isEnabled,
-    Chess? position,
-    List<String>? moveHistory,
+    bool? isExploring,
+    Chess? currentPosition,
+    List<String>? explorationMoves,
+    String? originalFen,
+    int? originalMoveIndex,
     bool clearPosition = false,
   }) {
     return ExplorationState(
-      isEnabled: isEnabled ?? this.isEnabled,
-      position: clearPosition ? null : (position ?? this.position),
-      moveHistory: moveHistory ?? this.moveHistory,
+      isExploring: isExploring ?? this.isExploring,
+      currentPosition: clearPosition ? null : (currentPosition ?? this.currentPosition),
+      explorationMoves: explorationMoves ?? this.explorationMoves,
+      originalFen: originalFen ?? this.originalFen,
+      originalMoveIndex: originalMoveIndex ?? this.originalMoveIndex,
     );
   }
 }
 
-/// Notifier for exploration mode
+/// Notifier for seamless exploration mode
 class ExplorationModeNotifier extends StateNotifier<ExplorationState> {
   ExplorationModeNotifier() : super(const ExplorationState());
 
-  /// Enter exploration mode from a given position
-  void enterExploration(String fen) {
-    final position = ChessPositionUtils.positionFromFen(fen);
-    if (position != null) {
-      state = ExplorationState(
-        isEnabled: true,
-        position: position,
-        moveHistory: [],
-      );
-    }
-  }
+  /// Update the current position (called when game review moves)
+  void setPosition(String fen, int moveIndex) {
+    if (state.isExploring) return; // Don't update if exploring
 
-  /// Exit exploration mode
-  void exitExploration() {
-    state = const ExplorationState(
-      isEnabled: false,
-      position: null,
-      moveHistory: [],
+    final position = ChessPositionUtils.positionFromFen(fen);
+    state = state.copyWith(
+      currentPosition: position,
+      originalFen: fen,
+      originalMoveIndex: moveIndex,
     );
   }
 
-  /// Toggle exploration mode
-  void toggle(String currentFen) {
-    if (state.isEnabled) {
-      exitExploration();
-    } else {
-      enterExploration(currentFen);
-    }
-  }
+  /// Make a move - could be from game history or exploration
+  /// Returns true if this is an exploration move (deviated from game)
+  bool makeMove(NormalMove move, {String? expectedUci}) {
+    if (state.currentPosition == null) return false;
 
-  /// Make a move in exploration mode
-  bool makeMove(NormalMove move) {
-    if (!state.isEnabled || state.position == null) return false;
-
-    final newPosition = ChessPositionUtils.makeMove(state.position!, move);
+    final newPosition = ChessPositionUtils.makeMove(state.currentPosition!, move);
     if (newPosition == null) return false;
 
-    // Build UCI string
+    // Build UCI string for this move
     final uci = '${move.from.name}${move.to.name}${move.promotion?.letter ?? ''}';
 
+    // Check if this matches the expected next move in game history
+    if (!state.isExploring && expectedUci != null && uci == expectedUci) {
+      // This is the next game move - just update position without entering exploration
+      state = state.copyWith(currentPosition: newPosition);
+      return false;
+    }
+
+    // This is an exploration move (different from game history)
     state = state.copyWith(
-      position: newPosition,
-      moveHistory: [...state.moveHistory, uci],
+      isExploring: true,
+      currentPosition: newPosition,
+      explorationMoves: [...state.explorationMoves, uci],
+      // Keep original fen/moveIndex from before exploration started
+      originalFen: state.isExploring ? state.originalFen : state.originalFen,
+      originalMoveIndex: state.isExploring ? state.originalMoveIndex : state.originalMoveIndex,
     );
 
     return true;
   }
 
-  /// Go back one move in exploration
+  /// Undo the last exploration move
   void undoMove() {
-    if (!state.isEnabled || state.moveHistory.isEmpty) return;
+    if (!state.isExploring || state.explorationMoves.isEmpty || state.originalFen == null) return;
 
-    // Rebuild position from original FEN + all moves except last
-    final newHistory = state.moveHistory.sublist(0, state.moveHistory.length - 1);
+    final newHistory = state.explorationMoves.sublist(0, state.explorationMoves.length - 1);
 
-    // We need the original FEN to rebuild - for simplicity, rebuild from start
-    // In a more complete implementation, we'd store the starting FEN
+    if (newHistory.isEmpty) {
+      // Back to original position - exit exploration
+      final originalPosition = ChessPositionUtils.positionFromFen(state.originalFen!);
+      state = state.copyWith(
+        isExploring: false,
+        currentPosition: originalPosition,
+        explorationMoves: [],
+      );
+    } else {
+      // Rebuild position from original FEN + remaining moves
+      Chess? position = ChessPositionUtils.positionFromFen(state.originalFen!);
+      if (position != null) {
+        for (final uci in newHistory) {
+          final move = ChessPositionUtils.parseUciMove(uci);
+          if (move != null) {
+            position = ChessPositionUtils.makeMove(position!, move);
+            if (position == null) break;
+          }
+        }
+      }
+      state = state.copyWith(
+        currentPosition: position,
+        explorationMoves: newHistory,
+      );
+    }
+  }
+
+  /// Return to game (exit exploration mode)
+  void returnToGame() {
+    if (!state.isExploring || state.originalFen == null) return;
+
+    final originalPosition = ChessPositionUtils.positionFromFen(state.originalFen!);
     state = state.copyWith(
-      moveHistory: newHistory,
+      isExploring: false,
+      currentPosition: originalPosition,
+      explorationMoves: [],
     );
   }
 
-  /// Reset exploration to the starting position
-  void reset(String originalFen) {
-    if (!state.isEnabled) return;
-
-    final position = ChessPositionUtils.positionFromFen(originalFen);
-    state = state.copyWith(
-      position: position,
-      moveHistory: [],
-    );
+  /// Reset state completely
+  void reset() {
+    state = const ExplorationState();
   }
 }
 

@@ -283,32 +283,42 @@ class StudyService {
     }
   }
 
-  /// Like a board
-  static Future<bool> likeBoard(String boardId, String userId) async {
+  /// Toggle like on a board using RPC function
+  /// Returns { liked: bool, likesCount: int } or null on error
+  static Future<Map<String, dynamic>?> toggleBoardLike(String boardId) async {
     try {
-      await SupabaseService.client.from('board_likes').insert({
-        'board_id': boardId,
-        'profile_id': userId,
+      final result = await SupabaseService.client.rpc('toggle_board_like', params: {
+        'p_board_id': boardId,
       });
-      return true;
+      return result as Map<String, dynamic>;
     } catch (e) {
-      debugPrint('Error liking board: $e');
+      debugPrint('Error toggling board like: $e');
+      return null;
+    }
+  }
+
+  /// Check if user liked a board using RPC function
+  static Future<bool> checkBoardLiked(String boardId) async {
+    try {
+      final result = await SupabaseService.client.rpc('check_board_liked', params: {
+        'p_board_id': boardId,
+      });
+      return result as bool? ?? false;
+    } catch (e) {
+      debugPrint('Error checking board liked: $e');
       return false;
     }
   }
 
-  /// Unlike a board
-  static Future<bool> unlikeBoard(String boardId, String userId) async {
+  /// Record a board view using RPC function
+  static Future<void> recordBoardView(String boardId, {String? userId}) async {
     try {
-      await SupabaseService.client
-          .from('board_likes')
-          .delete()
-          .eq('board_id', boardId)
-          .eq('profile_id', userId);
-      return true;
+      await SupabaseService.client.rpc('record_board_view', params: {
+        'p_board_id': boardId,
+        if (userId != null) 'p_user_id': userId,
+      });
     } catch (e) {
-      debugPrint('Error unliking board: $e');
-      return false;
+      debugPrint('Error recording board view: $e');
     }
   }
 

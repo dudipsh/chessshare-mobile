@@ -70,9 +70,9 @@ class _StudyBoardGridState extends ConsumerState<StudyBoardGrid> {
         padding: const EdgeInsets.all(12),
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 2,
-          childAspectRatio: 0.75,
+          childAspectRatio: 0.72, // Adjusted for footer height
           crossAxisSpacing: 12,
-          mainAxisSpacing: 16,
+          mainAxisSpacing: 12,
         ),
         itemCount: itemCount,
         itemBuilder: (ctx, i) {

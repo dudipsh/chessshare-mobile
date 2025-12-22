@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../app/theme/colors.dart';
+import '../../../core/widgets/design_components.dart';
+import '../../gamification/widgets/level_badge.dart';
+import '../providers/study_history_provider.dart';
+import '../providers/study_likes_provider.dart';
 import '../providers/study_provider.dart';
 import 'study/study_board_grid.dart';
 
@@ -20,7 +25,7 @@ class _StudyScreenState extends ConsumerState<StudyScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
   }
 
   @override
@@ -33,6 +38,9 @@ class _StudyScreenState extends ConsumerState<StudyScreen>
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(studyListProvider);
+    final historyState = ref.watch(studyHistoryProvider);
+    final likesState = ref.watch(studyLikesProvider);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
       appBar: AppBar(
@@ -40,14 +48,27 @@ class _StudyScreenState extends ConsumerState<StudyScreen>
             ? TextField(
                 controller: _searchController,
                 autofocus: true,
-                decoration: const InputDecoration(
+                style: TextStyle(color: isDark ? Colors.white : Colors.black87),
+                decoration: InputDecoration(
                   hintText: 'Search studies...',
+                  hintStyle: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600]),
                   border: InputBorder.none,
                 ),
                 onSubmitted: (q) => ref.read(studyListProvider.notifier).search(q),
               )
             : const Text('Study'),
         actions: [
+          // Show gamification badges
+          const Padding(
+            padding: EdgeInsets.only(right: 4),
+            child: Row(
+              children: [
+                LevelBadge(compact: true),
+                SizedBox(width: 4),
+                StreakBadge(compact: true),
+              ],
+            ),
+          ),
           IconButton(
             icon: Icon(_showSearch ? Icons.close : Icons.search),
             onPressed: () {
@@ -61,16 +82,296 @@ class _StudyScreenState extends ConsumerState<StudyScreen>
             },
           ),
         ],
-        bottom: TabBar(
-          controller: _tabController,
-          tabs: const [Tab(text: 'Explore'), Tab(text: 'My Studies')],
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(48),
+          child: Container(
+            decoration: BoxDecoration(
+              border: Border(
+                bottom: BorderSide(
+                  color: isDark ? Colors.white10 : Colors.black.withValues(alpha: 0.08),
+                ),
+              ),
+            ),
+            child: TabBar(
+              controller: _tabController,
+              isScrollable: true,
+              tabAlignment: TabAlignment.start,
+              labelColor: AppColors.primary,
+              unselectedLabelColor: isDark ? Colors.grey[400] : Colors.grey[600],
+              indicatorColor: AppColors.primary,
+              indicatorWeight: 3,
+              labelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+              unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14),
+              tabs: [
+                _buildTab('Explore', Icons.explore_outlined),
+                _buildTab('My Studies', Icons.folder_outlined),
+                _buildTab('History', Icons.history),
+                _buildTab('Liked', Icons.favorite_border),
+              ],
+            ),
+          ),
         ),
       ),
       body: TabBarView(
         controller: _tabController,
         children: [
-          StudyBoardGrid(boards: state.publicBoards, isLoading: state.isLoading),
-          StudyBoardGrid(boards: state.myBoards, isLoading: state.isLoading, isMine: true),
+          // Explore tab
+          StudyBoardGrid(
+            boards: state.publicBoards,
+            isLoading: state.isLoading,
+          ),
+          // My Studies tab
+          _buildMyStudiesTab(state, isDark),
+          // History tab
+          _buildHistoryTab(historyState, isDark),
+          // Liked tab
+          _buildLikedTab(likesState, isDark),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMyStudiesTab(StudyListState state, bool isDark) {
+    if (state.isLoading && state.myBoards.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (state.myBoards.isEmpty) {
+      return EmptyStateWidget(
+        icon: Icons.folder_outlined,
+        title: 'No studies yet',
+        subtitle: 'Create your own studies on chessshare.com\nand they will appear here',
+        isDark: isDark,
+        action: OutlinedButton.icon(
+          onPressed: () {
+            // Could open web URL
+          },
+          icon: const Icon(Icons.open_in_new, size: 18),
+          label: const Text('Open ChessShare'),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: AppColors.primary,
+            side: const BorderSide(color: AppColors.primary),
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      children: [
+        // Compact stats header
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: Row(
+            children: [
+              _buildMiniStat(Icons.library_books, '${state.myBoards.length}', 'studies', AppColors.primary, isDark),
+              const SizedBox(width: 16),
+              _buildMiniStat(Icons.visibility, _formatCount(state.myBoards.fold(0, (sum, b) => sum + b.viewsCount)), 'views', isDark ? Colors.grey[400]! : Colors.grey[600]!, isDark),
+              const SizedBox(width: 16),
+              _buildMiniStat(Icons.favorite, _formatCount(state.myBoards.fold(0, (sum, b) => sum + b.likesCount)), 'likes', Colors.red[400]!, isDark),
+            ],
+          ),
+        ),
+        Expanded(
+          child: StudyBoardGrid(
+            boards: state.myBoards,
+            isLoading: false,
+            isMine: true,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMiniStat(IconData icon, String value, String label, Color color, bool isDark) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 16, color: color),
+        const SizedBox(width: 4),
+        Text(
+          '$value $label',
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+            color: isDark ? Colors.grey[400] : Colors.grey[600],
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _formatCount(int count) {
+    if (count >= 1000000) {
+      return '${(count / 1000000).toStringAsFixed(1)}M';
+    } else if (count >= 1000) {
+      return '${(count / 1000).toStringAsFixed(1)}K';
+    }
+    return '$count';
+  }
+
+  Widget _buildTab(String label, IconData icon) {
+    return Tab(
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 18),
+          const SizedBox(width: 6),
+          Text(label),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHistoryTab(StudyHistoryState state, bool isDark) {
+    if (state.isLoading && state.boards.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (state.boards.isEmpty) {
+      return EmptyStateWidget(
+        icon: Icons.history,
+        title: 'No history yet',
+        subtitle: 'Boards you view will appear here',
+        isDark: isDark,
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: () => ref.read(studyHistoryProvider.notifier).refresh(),
+      child: Column(
+        children: [
+          // Compact header
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Row(
+              children: [
+                SyncIndicator(
+                  isSyncing: state.isSyncing,
+                  message: 'Syncing...',
+                  isDark: isDark,
+                ),
+                if (!state.isSyncing)
+                  Text(
+                    '${state.boards.length} boards viewed',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: isDark ? Colors.grey[400] : Colors.grey[600],
+                    ),
+                  ),
+                const Spacer(),
+                TextButton.icon(
+                  onPressed: () => _showClearHistoryDialog(),
+                  icon: Icon(Icons.delete_outline, size: 16, color: Colors.red[400]),
+                  label: Text('Clear', style: TextStyle(color: Colors.red[400], fontSize: 12)),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: StudyBoardGrid(
+              boards: state.boards,
+              isLoading: false,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLikedTab(StudyLikesState state, bool isDark) {
+    if (state.isLoading && state.boards.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (state.boards.isEmpty) {
+      return EmptyStateWidget(
+        icon: Icons.favorite_border,
+        title: 'No liked boards',
+        subtitle: 'Tap the heart on boards to save them here',
+        isDark: isDark,
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: () => ref.read(studyLikesProvider.notifier).refresh(),
+      child: Column(
+        children: [
+          // Compact header
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Row(
+              children: [
+                SyncIndicator(
+                  isSyncing: state.isSyncing,
+                  message: 'Syncing...',
+                  isDark: isDark,
+                ),
+                if (!state.isSyncing)
+                  Row(
+                    children: [
+                      Icon(Icons.favorite, size: 16, color: Colors.red[400]),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${state.boards.length} liked boards',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: isDark ? Colors.grey[400] : Colors.grey[600],
+                        ),
+                      ),
+                    ],
+                  ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: StudyBoardGrid(
+              boards: state.boards,
+              isLoading: false,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showClearHistoryDialog() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(
+          'Clear History',
+          style: TextStyle(color: isDark ? Colors.white : Colors.black87),
+        ),
+        content: Text(
+          'Are you sure you want to clear your viewing history?',
+          style: TextStyle(color: isDark ? Colors.grey[300] : Colors.grey[700]),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(
+              'Cancel',
+              style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600]),
+            ),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              ref.read(studyHistoryProvider.notifier).clearHistory();
+            },
+            child: const Text('Clear', style: TextStyle(color: Colors.red)),
+          ),
         ],
       ),
     );

@@ -11,7 +11,7 @@ import '../../features/study/models/study_board.dart';
 class LocalDatabase {
   static Database? _database;
   static const String _databaseName = 'chessshare.db';
-  static const int _databaseVersion = 5;
+  static const int _databaseVersion = 6;
 
   // Table names
   static const String userProfileTable = 'user_profile';
@@ -23,6 +23,8 @@ class LocalDatabase {
   static const String personalMistakesTable = 'personal_mistakes';
   static const String studyBoardsTable = 'study_boards';
   static const String studyVariationsTable = 'study_variations';
+  static const String boardViewsTable = 'board_views';
+  static const String boardLikesCacheTable = 'board_likes_cache';
 
   static Future<Database> get database async {
     _database ??= await _initDatabase();
@@ -95,6 +97,9 @@ class LocalDatabase {
 
     // Version 4 tables (study boards)
     await _createV4Tables(db);
+
+    // Version 6 tables (board views, likes cache)
+    await _createV6Tables(db);
   }
 
   static Future<void> _createV2Tables(Database db) async {
@@ -231,6 +236,10 @@ class LocalDatabase {
       // Ensure is_positive column exists (may have been missed in v3 migration)
       await _addColumnIfNotExists(db, puzzlesTable, 'is_positive', 'INTEGER DEFAULT 0');
     }
+
+    if (oldVersion < 6) {
+      await _createV6Tables(db);
+    }
   }
 
   /// Create V4 tables (study boards)
@@ -277,6 +286,34 @@ class LocalDatabase {
     // Create indexes
     await db.execute('CREATE INDEX IF NOT EXISTS idx_study_boards_owner ON $studyBoardsTable(owner_id)');
     await db.execute('CREATE INDEX IF NOT EXISTS idx_study_variations_board ON $studyVariationsTable(board_id)');
+  }
+
+  /// Create V6 tables (board views and likes cache for Study feature)
+  static Future<void> _createV6Tables(Database db) async {
+    // Track viewed boards locally (for History tab)
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $boardViewsTable (
+        board_id TEXT PRIMARY KEY,
+        board_data TEXT NOT NULL,
+        viewed_at INTEGER NOT NULL,
+        view_count INTEGER DEFAULT 1
+      )
+    ''');
+
+    // Cache liked boards (for Liked tab)
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $boardLikesCacheTable (
+        board_id TEXT PRIMARY KEY,
+        board_data TEXT NOT NULL,
+        liked_at INTEGER NOT NULL
+      )
+    ''');
+
+    // Create indexes
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_board_views_viewed_at ON $boardViewsTable(viewed_at DESC)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_board_likes_liked_at ON $boardLikesCacheTable(liked_at DESC)');
+
+    debugPrint('Created V6 tables: board_views, board_likes_cache');
   }
 
   // User Profile operations
@@ -901,5 +938,141 @@ class LocalDatabase {
     if (results.isEmpty) return null;
     final cachedAt = results.first['cached_at'] as String?;
     return cachedAt != null ? DateTime.tryParse(cachedAt) : null;
+  }
+
+  // ========== Board Views (History) ==========
+
+  /// Record a board view (for History tab)
+  static Future<void> recordBoardView(String boardId, String boardDataJson) async {
+    final db = await database;
+    final now = DateTime.now().millisecondsSinceEpoch;
+
+    // Check if already exists
+    final existing = await db.query(
+      boardViewsTable,
+      where: 'board_id = ?',
+      whereArgs: [boardId],
+      limit: 1,
+    );
+
+    if (existing.isNotEmpty) {
+      // Update view count and timestamp
+      final currentCount = existing.first['view_count'] as int? ?? 0;
+      await db.update(
+        boardViewsTable,
+        {
+          'viewed_at': now,
+          'view_count': currentCount + 1,
+          'board_data': boardDataJson,
+        },
+        where: 'board_id = ?',
+        whereArgs: [boardId],
+      );
+    } else {
+      // Insert new
+      await db.insert(
+        boardViewsTable,
+        {
+          'board_id': boardId,
+          'board_data': boardDataJson,
+          'viewed_at': now,
+          'view_count': 1,
+        },
+      );
+    }
+  }
+
+  /// Get viewed boards history (most recent first)
+  static Future<List<Map<String, dynamic>>> getBoardViewHistory({int limit = 50}) async {
+    final db = await database;
+    return await db.query(
+      boardViewsTable,
+      orderBy: 'viewed_at DESC',
+      limit: limit,
+    );
+  }
+
+  /// Clear board view history
+  static Future<void> clearBoardViewHistory() async {
+    final db = await database;
+    await db.delete(boardViewsTable);
+  }
+
+  /// Delete a specific board from history
+  static Future<void> deleteBoardFromHistory(String boardId) async {
+    final db = await database;
+    await db.delete(
+      boardViewsTable,
+      where: 'board_id = ?',
+      whereArgs: [boardId],
+    );
+  }
+
+  // ========== Board Likes Cache ==========
+
+  /// Add a liked board to cache
+  static Future<void> addLikedBoard(String boardId, String boardDataJson) async {
+    final db = await database;
+    await db.insert(
+      boardLikesCacheTable,
+      {
+        'board_id': boardId,
+        'board_data': boardDataJson,
+        'liked_at': DateTime.now().millisecondsSinceEpoch,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// Remove a liked board from cache
+  static Future<void> removeLikedBoard(String boardId) async {
+    final db = await database;
+    await db.delete(
+      boardLikesCacheTable,
+      where: 'board_id = ?',
+      whereArgs: [boardId],
+    );
+  }
+
+  /// Get all liked boards from cache (most recent first)
+  static Future<List<Map<String, dynamic>>> getLikedBoards({int limit = 50}) async {
+    final db = await database;
+    return await db.query(
+      boardLikesCacheTable,
+      orderBy: 'liked_at DESC',
+      limit: limit,
+    );
+  }
+
+  /// Check if a board is liked (in cache)
+  static Future<bool> isBoardLiked(String boardId) async {
+    final db = await database;
+    final results = await db.query(
+      boardLikesCacheTable,
+      columns: ['board_id'],
+      where: 'board_id = ?',
+      whereArgs: [boardId],
+      limit: 1,
+    );
+    return results.isNotEmpty;
+  }
+
+  /// Sync liked boards from server (replace all)
+  static Future<void> syncLikedBoards(List<Map<String, dynamic>> boards) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      // Clear existing
+      await txn.delete(boardLikesCacheTable);
+      // Insert all
+      for (final board in boards) {
+        await txn.insert(boardLikesCacheTable, board);
+      }
+    });
+  }
+
+  /// Clear all liked boards cache
+  static Future<void> clearLikedBoardsCache() async {
+    final db = await database;
+    await db.delete(boardLikesCacheTable);
   }
 }
