@@ -8,10 +8,10 @@ import '../../../app/theme/colors.dart';
 import '../models/analyzed_move.dart';
 import '../models/chess_game.dart';
 import '../widgets/move_markers.dart';
-import 'practice_mistakes/arrow_painter.dart';
 import 'practice_mistakes/attempt_indicators.dart';
 import 'practice_mistakes/completion_dialog.dart';
 import 'practice_mistakes/feedback_message.dart';
+import 'practice_mistakes/hint_marker.dart';
 import 'practice_mistakes/mistake_info_header.dart';
 import 'practice_mistakes/practice_progress_bar.dart';
 
@@ -193,7 +193,7 @@ class _PracticeMistakesScreenState extends ConsumerState<PracticeMistakesScreen>
                   if (_feedbackMarker != null && _lastMove != null)
                     _buildFeedbackMarker(boardSize),
                   if (_showHint && currentMistake.bestMoveUci != null)
-                    _buildHintArrow(boardSize),
+                    _buildHintMarker(boardSize),
                 ],
               ),
             ),
@@ -300,35 +300,17 @@ class _PracticeMistakesScreenState extends ConsumerState<PracticeMistakesScreen>
     );
   }
 
-  Widget _buildHintArrow(double boardSize) {
+  Widget _buildHintMarker(double boardSize) {
     final bestMoveUci = currentMistake.bestMoveUci;
     if (bestMoveUci == null || bestMoveUci.length < 4) return const SizedBox.shrink();
 
-    final squareSize = boardSize / 8;
     try {
       final from = Square.fromName(bestMoveUci.substring(0, 2));
-      final to = Square.fromName(bestMoveUci.substring(2, 4));
 
-      double fromX, fromY, toX, toY;
-      if (_orientation == Side.black) {
-        fromX = (7 - from.file + 0.5) * squareSize;
-        fromY = (from.rank + 0.5) * squareSize;
-        toX = (7 - to.file + 0.5) * squareSize;
-        toY = (to.rank + 0.5) * squareSize;
-      } else {
-        fromX = (from.file + 0.5) * squareSize;
-        fromY = (7 - from.rank + 0.5) * squareSize;
-        toX = (to.file + 0.5) * squareSize;
-        toY = (7 - to.rank + 0.5) * squareSize;
-      }
-
-      return CustomPaint(
-        size: Size(boardSize, boardSize),
-        painter: ArrowPainter(
-          from: Offset(fromX, fromY),
-          to: Offset(toX, toY),
-          color: MoveClassification.best.color.withValues(alpha: 0.7),
-        ),
+      return HintMarkerOverlay(
+        hintSquare: from,
+        orientation: _orientation,
+        boardSize: boardSize,
       );
     } catch (e) {
       return const SizedBox.shrink();
