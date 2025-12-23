@@ -9,6 +9,7 @@ import '../services/profile_service.dart';
 /// State for the profile feature
 class ProfileState {
   final ProfileData? profile;
+  final ProfileStats? stats; // Boards count, views, likes from RPC
   final List<ProfileBioLink> bioLinks;
   final List<LinkedChessAccount> linkedAccounts;
   final List<UserBoard> boards;
@@ -22,6 +23,7 @@ class ProfileState {
 
   const ProfileState({
     this.profile,
+    this.stats,
     this.bioLinks = const [],
     this.linkedAccounts = const [],
     this.boards = const [],
@@ -36,6 +38,7 @@ class ProfileState {
 
   ProfileState copyWith({
     ProfileData? profile,
+    ProfileStats? stats,
     List<ProfileBioLink>? bioLinks,
     List<LinkedChessAccount>? linkedAccounts,
     List<UserBoard>? boards,
@@ -50,6 +53,7 @@ class ProfileState {
   }) {
     return ProfileState(
       profile: profile ?? this.profile,
+      stats: stats ?? this.stats,
       bioLinks: bioLinks ?? this.bioLinks,
       linkedAccounts: linkedAccounts ?? this.linkedAccounts,
       boards: boards ?? this.boards,
@@ -171,18 +175,22 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
   /// Fetch fresh data from network and update cache
   Future<void> _fetchFreshData() async {
     try {
-      // Load profile data in parallel
+      // Load profile data in parallel (including new stats RPC)
       final results = await Future.wait([
         ProfileService.getProfile(userId),
         ProfileService.getBioLinks(userId),
         ProfileService.getLinkedAccounts(userId),
         ProfileService.getGameReviews(userId),
+        ProfileService.getProfileStats(), // New RPC for boards count & views
       ]);
 
       final profile = results[0] as ProfileData?;
       final bioLinks = results[1] as List<ProfileBioLink>;
       var linkedAccounts = results[2] as List<LinkedChessAccount>;
       final gameReviews = results[3] as List<GameReviewSummary>;
+      final stats = results[4] as ProfileStats?;
+
+      debugPrint('ProfileStats from RPC: boards=${stats?.boardsCount}, views=${stats?.totalViews}, likes=${stats?.totalLikes}');
 
       // Also check local database for linked usernames if not from server
       if (linkedAccounts.isEmpty) {
@@ -238,6 +246,7 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
 
         state = state.copyWith(
           profile: profile,
+          stats: stats, // Use stats from new RPC
           bioLinks: bioLinks,
           linkedAccounts: linkedAccounts,
           gameReviews: gameReviews,
@@ -253,10 +262,12 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
         );
         debugPrint('Profile data fetched and cached');
 
-        // Always load boards for Overview tab stats
-        debugPrint('Loading boards for profile stats...');
-        await loadBoards(forceRefresh: true);
-        debugPrint('Boards loaded: ${state.boards.length} boards, total views: ${state.boards.fold(0, (sum, b) => sum + b.viewsCount)}');
+        // Load boards only if stats RPC failed (fallback)
+        if (stats == null) {
+          debugPrint('Stats RPC failed, loading boards as fallback...');
+          await loadBoards(forceRefresh: true);
+          debugPrint('Boards loaded: ${state.boards.length} boards, total views: ${state.boards.fold(0, (sum, b) => sum + b.viewsCount)}');
+        }
       }
     } catch (e) {
       debugPrint('Error fetching fresh data: $e');

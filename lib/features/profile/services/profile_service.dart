@@ -1,6 +1,9 @@
 import '../../../core/repositories/profile_repository.dart';
 import '../models/profile_data.dart';
 
+// Re-export ProfileStats for convenience
+export '../../../core/repositories/profile_repository.dart' show ProfileStats;
+
 /// Service for fetching profile data - delegates to ProfileRepository
 /// This service exists for backwards compatibility
 class ProfileService {
@@ -46,4 +49,8 @@ class ProfileService {
   /// Update profile bio
   static Future<bool> updateBio(String userId, String bio) =>
       ProfileRepository.updateBio(userId, bio);
+
+  /// Get profile statistics (boards count, views, likes)
+  static Future<ProfileStats?> getProfileStats() =>
+      ProfileRepository.getProfileStats();
 }

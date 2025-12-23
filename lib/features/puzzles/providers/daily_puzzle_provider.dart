@@ -163,14 +163,22 @@ class DailyPuzzleNotifier extends StateNotifier<DailyPuzzleState> {
     );
 
     try {
-      // Generate a deterministic puzzle based on the date
-      final puzzle = await _fetchPuzzleForDate(date);
+      // Generate a deterministic puzzle based on the date with timeout
+      final puzzle = await _fetchPuzzleForDate(date).timeout(
+        const Duration(seconds: 10),
+        onTimeout: () {
+          debugPrint('Timeout loading puzzle for date $dateKey');
+          return _createDefaultPuzzle(date);
+        },
+      );
+      if (!mounted) return;
       state = state.copyWith(
         puzzle: puzzle,
         isLoading: false,
       );
     } catch (e) {
       debugPrint('Error loading puzzle for date $dateKey: $e');
+      if (!mounted) return;
       state = state.copyWith(
         puzzle: _createDefaultPuzzle(date),
         isLoading: false,

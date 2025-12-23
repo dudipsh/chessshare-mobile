@@ -1,10 +1,56 @@
+import 'package:flutter/foundation.dart';
+
 import '../../features/profile/models/profile_data.dart';
 import 'base_repository.dart';
 
+/// Profile statistics returned by get_my_profile_stats RPC
+class ProfileStats {
+  final int boardsCount;
+  final int publicBoardsCount;
+  final int privateBoardsCount;
+  final int totalViews;
+  final int totalLikes;
+
+  ProfileStats({
+    required this.boardsCount,
+    required this.publicBoardsCount,
+    required this.privateBoardsCount,
+    required this.totalViews,
+    required this.totalLikes,
+  });
+
+  factory ProfileStats.fromJson(Map<String, dynamic> json) {
+    return ProfileStats(
+      boardsCount: (json['boards_count'] as num?)?.toInt() ?? 0,
+      publicBoardsCount: (json['public_boards_count'] as num?)?.toInt() ?? 0,
+      privateBoardsCount: (json['private_boards_count'] as num?)?.toInt() ?? 0,
+      totalViews: (json['total_views'] as num?)?.toInt() ?? 0,
+      totalLikes: (json['total_likes'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
+
 /// Repository for profile-related data
 class ProfileRepository {
-  /// Get profile by user ID
+  /// Get profile by user ID - uses get_user_dashboard_data for comprehensive stats
   static Future<ProfileData?> getProfile(String userId) async {
+    // Try get_user_dashboard_data first (returns boards_count, total_views, etc.)
+    final dashboardResult = await BaseRepository.executeRpc<ProfileData?>(
+      functionName: 'get_user_dashboard_data',
+      params: {'target_user_id': userId},
+      parser: (response) {
+        if (response == null) return null;
+        final data = response is List ? response.first : response;
+        return ProfileData.fromJson(data as Map<String, dynamic>);
+      },
+      defaultValue: null,
+    );
+
+    if (dashboardResult.success && dashboardResult.data != null) {
+      return dashboardResult.data;
+    }
+
+    // Fallback to get_profile_by_id if dashboard RPC fails
     final result = await BaseRepository.executeRpc<ProfileData?>(
       functionName: 'get_profile_by_id',
       params: {'profile_id': userId},
@@ -138,6 +184,22 @@ class ProfileRepository {
       defaultValue: <GameReviewSummary>[],
     );
     return result.data ?? [];
+  }
+
+  /// Get profile statistics (boards count, views, likes) using RPC
+  static Future<ProfileStats?> getProfileStats() async {
+    final result = await BaseRepository.executeRpc<ProfileStats?>(
+      functionName: 'get_my_profile_stats',
+      params: {},
+      parser: (response) {
+        if (response == null) return null;
+        final data = response is List ? response.first : response;
+        debugPrint('ProfileStats response: $data');
+        return ProfileStats.fromJson(data as Map<String, dynamic>);
+      },
+      defaultValue: null,
+    );
+    return result.data;
   }
 
   /// Update linked chess account

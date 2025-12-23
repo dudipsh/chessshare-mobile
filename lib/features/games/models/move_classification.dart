@@ -238,16 +238,17 @@ extension MoveClassificationExtension on MoveClassification {
       }
     }
 
+    // Best move check - comes before miss to prevent false positives
+    // If the player played the engine's top choice, it can't be a miss
+    if (isBestMove || adjustedCpl == 0) return MoveClassification.best;
+
     // Great move: forcing check with ≤15cp loss
     if (isGreat || (isCheck && adjustedCpl <= ClassificationThresholds.best)) {
       return MoveClassification.great;
     }
 
-    // Miss: specifically for missed tactical opportunities
+    // Miss: specifically for missed tactical opportunities (only if not best move)
     if (isMiss) return MoveClassification.miss;
-
-    // Best move check
-    if (isBestMove || adjustedCpl == 0) return MoveClassification.best;
 
     // Threshold-based classification (web thresholds)
     if (adjustedCpl <= ClassificationThresholds.best) return MoveClassification.best;

@@ -246,8 +246,18 @@ class GameAnalysisService {
         final bestMoveUci = bestMoveResult.uci;
         final bestMoveSan = bestMoveResult.san;
 
-        // Check if the played move is the best move
-        final isBestMove = bestMoveUci == pos.uci;
+        // Check if the played move is the best move (case-insensitive like web)
+        // Also handle potential whitespace/null issues
+        final normalizedBestMove = bestMoveUci.trim().toLowerCase();
+        final normalizedPlayedMove = pos.uci.trim().toLowerCase();
+        final isBestMove = normalizedBestMove.isNotEmpty &&
+                          normalizedPlayedMove.isNotEmpty &&
+                          normalizedBestMove == normalizedPlayedMove;
+
+        // Debug logging for move classification issues
+        if (i < 10) {
+          debugPrint('Move ${i + 1} (${pos.color}): ${pos.san} | UCI: "${pos.uci}" | Best: "${bestMoveUci}" | isBestMove: $isBestMove');
+        }
 
         // Calculate centipawn loss properly:
         // CPL = eval if best move was played - eval after actual move
@@ -269,15 +279,22 @@ class GameAnalysisService {
           }
         }
 
-        // Check for missed wins (had mate, now doesn't)
+        // Check for missed wins (had mate, now doesn't) - only if NOT the best move
         bool isMiss = false;
-        if (mateBefore != null && mateAfter == null) {
+        if (!isBestMove && mateBefore != null && mateAfter == null) {
           // Had a forced mate before, but not after the move
           if (pos.color == 'white' && mateBefore > 0) {
             isMiss = true; // White had mate in N, now doesn't
+            debugPrint('Move ${i + 1}: MISS detected - White had mate in $mateBefore');
           } else if (pos.color == 'black' && mateBefore < 0) {
             isMiss = true; // Black had mate in N (negative), now doesn't
+            debugPrint('Move ${i + 1}: MISS detected - Black had mate in ${mateBefore.abs()}');
           }
+        }
+
+        // Additional debug for early moves if not best move
+        if (!isBestMove && i < 10) {
+          debugPrint('Move ${i + 1}: NOT best move | mateBefore: $mateBefore | mateAfter: $mateAfter | CPL: $cpl');
         }
 
         // Check if this is a check move (for Great move detection)
@@ -317,6 +334,11 @@ class GameAnalysisService {
           evalAfter: evalAfterCp,
           isCheck: isCheck,
         );
+
+        // Debug: Log final classification for first 10 moves
+        if (i < 10) {
+          debugPrint('Move ${i + 1} FINAL: ${pos.san} → ${classification.name} | CPL: $cpl | isMiss: $isMiss | evalBefore: $evalBeforeCp | evalAfter: $evalAfterCp');
+        }
 
         final analyzedMove = AnalyzedMove(
           id: const Uuid().v4(),

@@ -141,9 +141,14 @@ class OverviewTab extends ConsumerWidget {
     }
   }
 
-  /// Get boards count - prefer API count, fallback to loaded boards
+  /// Get boards count - prefer stats RPC, fallback to loaded boards
   String _getBoardsCount() {
-    // First try API-provided count
+    // First try stats from new RPC
+    if (state.stats != null) {
+      return '${state.stats!.boardsCount}';
+    }
+
+    // Fallback to API-provided count in profile
     final apiCount = state.profile?.boardsCount ?? 0;
     if (apiCount > 0) return '$apiCount';
 
@@ -151,9 +156,14 @@ class OverviewTab extends ConsumerWidget {
     return '${state.boards.length}';
   }
 
-  /// Get views count - prefer API count, fallback to sum from loaded boards
+  /// Get views count - prefer stats RPC, fallback to sum from loaded boards
   String _getViewsCount() {
-    // First try API-provided count
+    // First try stats from new RPC
+    if (state.stats != null) {
+      return '${state.stats!.totalViews}';
+    }
+
+    // Fallback to API-provided count in profile
     final apiCount = state.profile?.totalViews ?? 0;
     if (apiCount > 0) return '$apiCount';
 

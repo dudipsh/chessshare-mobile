@@ -105,4 +105,34 @@ abstract class ChessPositionUtils {
       return null;
     }
   }
+
+  /// Parse and play a SAN move on a position
+  static Chess? playSanMove(Chess position, String san) {
+    try {
+      final move = position.parseSan(san);
+      if (move != null) {
+        return position.play(move) as Chess;
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /// Build position from SAN moves
+  static Chess? buildPositionFromSanMoves(List<String> sanMoves, {int? upToIndex}) {
+    Chess position = Chess.initial;
+    final limit = upToIndex ?? sanMoves.length;
+
+    for (var i = 0; i < limit && i < sanMoves.length; i++) {
+      final result = playSanMove(position, sanMoves[i]);
+      if (result != null) {
+        position = result;
+      } else {
+        return null; // Failed to parse move
+      }
+    }
+
+    return position;
+  }
 }

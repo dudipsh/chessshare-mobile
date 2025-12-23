@@ -324,12 +324,68 @@ class GameReviewNotifier extends StateNotifier<GameReviewState> {
     final maxIndex = state.review!.moves.length;
     final clampedIndex = index.clamp(0, maxIndex);
 
-    // Build position up to the specified move index
-    final uciMoves = state.review!.moves.map((m) => m.uci).toList();
-    final position = ChessPositionUtils.buildPositionFromMoves(
-      uciMoves,
-      upToIndex: clampedIndex,
-    );
+    Chess? position;
+
+    // FEN in AnalyzedMove is "position BEFORE the move"
+    // So moves[N].fen = position before move N = position after moves 0..N-1
+    //
+    // currentMoveIndex = 0: starting position (no moves played)
+    // currentMoveIndex = N: position after N moves played = moves[N].fen (if exists)
+
+    if (clampedIndex == 0) {
+      // At start - use initial position
+      position = Chess.initial;
+    } else if (clampedIndex < state.review!.moves.length) {
+      // We have a FEN at this index (position before this move = after previous moves)
+      final moveFen = state.review!.moves[clampedIndex].fen;
+      if (moveFen.isNotEmpty) {
+        position = ChessPositionUtils.positionFromFen(moveFen);
+      }
+    } else {
+      // At the very end (after all moves) - need to compute final position
+      // Try using the last move's FEN and apply the last move
+      if (state.review!.moves.isNotEmpty) {
+        final lastMove = state.review!.moves.last;
+        if (lastMove.fen.isNotEmpty && lastMove.uci.isNotEmpty) {
+          final beforeLast = ChessPositionUtils.positionFromFen(lastMove.fen);
+          if (beforeLast != null) {
+            final move = ChessPositionUtils.parseUciMove(lastMove.uci);
+            if (move != null) {
+              position = ChessPositionUtils.makeMove(beforeLast, move);
+            }
+          }
+        }
+      }
+    }
+
+    // Fallback: Build position from UCI or SAN moves if FEN approach failed
+    if (position == null) {
+      final uciMoves = state.review!.moves.map((m) => m.uci).toList();
+      // Try UCI moves first
+      if (uciMoves.isNotEmpty && uciMoves.first.isNotEmpty) {
+        position = ChessPositionUtils.buildPositionFromMoves(
+          uciMoves,
+          upToIndex: clampedIndex,
+        );
+      }
+
+      // Try SAN moves if UCI didn't work
+      if (position == null) {
+        final sanMoves = state.review!.moves.map((m) => m.san).toList();
+        if (sanMoves.isNotEmpty && sanMoves.first.isNotEmpty) {
+          position = ChessPositionUtils.buildPositionFromSanMoves(
+            sanMoves,
+            upToIndex: clampedIndex,
+          );
+        }
+      }
+
+      // Last resort: use initial position
+      if (position == null) {
+        position = Chess.initial;
+        debugPrint('WARNING: Could not build position for move $clampedIndex - using initial position');
+      }
+    }
 
     state = state.copyWith(
       currentMoveIndex: clampedIndex,

@@ -70,17 +70,23 @@ class StudyListNotifier extends StateNotifier<StudyListState> {
     );
 
     try {
-      // Pass userId for progress tracking
+      // Pass userId for progress tracking with timeout
       final publicBoards = await StudyService.getPublicBoards(
         userId: _userId,
         limit: _pageSize,
+      ).timeout(
+        const Duration(seconds: 15),
+        onTimeout: () => <StudyBoard>[],
       );
       if (!mounted) return;
 
       List<StudyBoard> myBoards = [];
 
       if (_userId != null && !_userId.startsWith('guest_')) {
-        myBoards = await StudyService.getMyBoards(_userId);
+        myBoards = await StudyService.getMyBoards(_userId).timeout(
+          const Duration(seconds: 15),
+          onTimeout: () => <StudyBoard>[],
+        );
         if (!mounted) return;
       }
 
