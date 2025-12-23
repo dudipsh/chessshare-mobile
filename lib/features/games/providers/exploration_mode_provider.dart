@@ -68,6 +68,7 @@ class ExplorationState {
 
 /// Notifier for seamless exploration mode
 class ExplorationModeNotifier extends StateNotifier<ExplorationState> {
+  static const _ownerId = 'shared'; // Use shared owner to reuse pre-loaded instance
   StockfishService? _engine;
   bool _isEngineReady = false;
 
@@ -75,7 +76,9 @@ class ExplorationModeNotifier extends StateNotifier<ExplorationState> {
 
   @override
   void dispose() {
-    _releaseEngine();
+    // Don't release 'shared' - it's meant to be kept alive
+    _engine = null;
+    _isEngineReady = false;
     super.dispose();
   }
 
@@ -84,7 +87,7 @@ class ExplorationModeNotifier extends StateNotifier<ExplorationState> {
 
     try {
       _engine = await GlobalStockfishManager.instance.acquire(
-        'exploration',
+        _ownerId,
         config: const StockfishConfig(maxDepth: 12, multiPv: 1),
       );
       _isEngineReady = true;
@@ -95,11 +98,9 @@ class ExplorationModeNotifier extends StateNotifier<ExplorationState> {
   }
 
   void _releaseEngine() {
-    if (_engine != null) {
-      GlobalStockfishManager.instance.release('exploration');
-      _engine = null;
-      _isEngineReady = false;
-    }
+    // Don't release 'shared' - just clear local reference
+    _engine = null;
+    _isEngineReady = false;
   }
 
   /// Evaluate the current exploration position

@@ -234,6 +234,8 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
 
       // Update state with fresh data
       if (profile != null) {
+        debugPrint('Profile loaded - boardsCount: ${profile.boardsCount}, totalViews: ${profile.totalViews}');
+
         state = state.copyWith(
           profile: profile,
           bioLinks: bioLinks,
@@ -251,10 +253,10 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
         );
         debugPrint('Profile data fetched and cached');
 
-        // Also load boards for Overview tab stats (if not already loaded)
-        if (state.boards.isEmpty) {
-          await loadBoards();
-        }
+        // Always load boards for Overview tab stats
+        debugPrint('Loading boards for profile stats...');
+        await loadBoards(forceRefresh: true);
+        debugPrint('Boards loaded: ${state.boards.length} boards, total views: ${state.boards.fold(0, (sum, b) => sum + b.viewsCount)}');
       }
     } catch (e) {
       debugPrint('Error fetching fresh data: $e');
@@ -283,12 +285,19 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
 
   /// Load user boards (lazy loaded when tab is selected)
   Future<void> loadBoards({bool forceRefresh = false}) async {
-    if (state.boards.isNotEmpty && !forceRefresh) return; // Already loaded
+    debugPrint('loadBoards called - forceRefresh: $forceRefresh, current boards: ${state.boards.length}');
+    if (state.boards.isNotEmpty && !forceRefresh) {
+      debugPrint('loadBoards skipped - already have ${state.boards.length} boards');
+      return; // Already loaded
+    }
 
     state = state.copyWith(isLoadingBoards: true);
 
     try {
+      debugPrint('loadBoards fetching from API for userId: $userId');
       final boards = await ProfileService.getUserBoards(userId);
+      debugPrint('loadBoards received ${boards.length} boards from API');
+
       state = state.copyWith(
         boards: boards,
         isLoadingBoards: false,

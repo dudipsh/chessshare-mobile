@@ -38,7 +38,7 @@ class OverviewTab extends ConsumerWidget {
             children: [
               StatBox(
                 label: 'Boards',
-                value: '${state.boards.isNotEmpty ? state.boards.length : (state.profile?.boardsCount ?? 0)}',
+                value: _getBoardsCount(),
                 icon: Icons.dashboard,
                 isDark: isDark,
               ),
@@ -47,7 +47,7 @@ class OverviewTab extends ConsumerWidget {
               const SizedBox(width: 12),
               StatBox(
                 label: 'Views',
-                value: '${state.boards.isNotEmpty ? state.boards.fold(0, (sum, b) => sum + b.viewsCount) : (state.profile?.totalViews ?? 0)}',
+                value: _getViewsCount(),
                 icon: Icons.visibility,
                 isDark: isDark,
               ),
@@ -139,5 +139,30 @@ class OverviewTab extends ConsumerWidget {
       case 'twitch': return Icons.videocam;
       default: return Icons.link;
     }
+  }
+
+  /// Get boards count - prefer API count, fallback to loaded boards
+  String _getBoardsCount() {
+    // First try API-provided count
+    final apiCount = state.profile?.boardsCount ?? 0;
+    if (apiCount > 0) return '$apiCount';
+
+    // Fallback to loaded boards count
+    return '${state.boards.length}';
+  }
+
+  /// Get views count - prefer API count, fallback to sum from loaded boards
+  String _getViewsCount() {
+    // First try API-provided count
+    final apiCount = state.profile?.totalViews ?? 0;
+    if (apiCount > 0) return '$apiCount';
+
+    // Fallback to sum from loaded boards
+    if (state.boards.isNotEmpty) {
+      final sum = state.boards.fold(0, (sum, b) => sum + b.viewsCount);
+      return '$sum';
+    }
+
+    return '0';
   }
 }
