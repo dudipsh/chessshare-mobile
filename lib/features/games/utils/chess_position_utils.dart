@@ -135,4 +135,96 @@ abstract class ChessPositionUtils {
 
     return position;
   }
+
+  /// Convert UCI move to SAN notation given a FEN position
+  static String? uciToSan(String fen, String uci) {
+    if (uci.isEmpty || fen.isEmpty) return null;
+
+    try {
+      final position = Chess.fromSetup(Setup.parseFen(fen));
+      final move = parseUciMove(uci);
+      if (move != null) {
+        return position.makeSan(move).$2;
+      }
+    } catch (e) {
+      // Conversion failed
+    }
+    return null;
+  }
+
+  /// Piece icons mapping (Unicode chess symbols)
+  static const Map<String, String> _pieceIcons = {
+    'K': '♔', // White King
+    'Q': '♕', // White Queen
+    'R': '♖', // White Rook
+    'B': '♗', // White Bishop
+    'N': '♘', // White Knight
+    'k': '♚', // Black King
+    'q': '♛', // Black Queen
+    'r': '♜', // Black Rook
+    'b': '♝', // Black Bishop
+    'n': '♞', // Black Knight
+  };
+
+  /// Get piece icon from SAN piece letter
+  static String getPieceIcon(String pieceLetter, {bool isWhite = true}) {
+    final key = isWhite ? pieceLetter.toUpperCase() : pieceLetter.toLowerCase();
+    return _pieceIcons[key] ?? pieceLetter;
+  }
+
+  /// Format a move with piece icon for display
+  /// Converts SAN like "Qxf3" to "♕xf3" or UCI like "b7f3" to "♕f3"
+  static String formatMoveWithIcon(String move, {String? fen, bool isWhite = true}) {
+    if (move.isEmpty) return move;
+
+    String san = move;
+
+    // If it looks like UCI (4+ chars, all lowercase, no piece letter), convert to SAN
+    if (fen != null && move.length >= 4 && RegExp(r'^[a-h][1-8][a-h][1-8][qrbn]?$').hasMatch(move.toLowerCase())) {
+      final converted = uciToSan(fen, move);
+      if (converted != null) {
+        san = converted;
+      }
+    }
+
+    // Replace piece letters with icons
+    if (san.isNotEmpty) {
+      final firstChar = san[0];
+      if ('KQRBN'.contains(firstChar)) {
+        return '${getPieceIcon(firstChar, isWhite: isWhite)}${san.substring(1)}';
+      }
+    }
+
+    return san;
+  }
+
+  /// Get the moving piece from a FEN and UCI move
+  static String? getMovingPiece(String fen, String uci) {
+    if (uci.length < 4 || fen.isEmpty) return null;
+
+    try {
+      final position = Chess.fromSetup(Setup.parseFen(fen));
+      final fromSquare = Square.fromName(uci.substring(0, 2));
+      final piece = position.board.pieceAt(fromSquare);
+      if (piece != null) {
+        return piece.role.name; // 'king', 'queen', 'rook', 'bishop', 'knight', 'pawn'
+      }
+    } catch (e) {
+      // Failed to get piece
+    }
+    return null;
+  }
+
+  /// Get piece icon from role name
+  static String getPieceIconFromRole(String role, {bool isWhite = true}) {
+    switch (role.toLowerCase()) {
+      case 'king': return isWhite ? '♔' : '♚';
+      case 'queen': return isWhite ? '♕' : '♛';
+      case 'rook': return isWhite ? '♖' : '♜';
+      case 'bishop': return isWhite ? '♗' : '♝';
+      case 'knight': return isWhite ? '♘' : '♞';
+      case 'pawn': return isWhite ? '♙' : '♟';
+      default: return '';
+    }
+  }
 }

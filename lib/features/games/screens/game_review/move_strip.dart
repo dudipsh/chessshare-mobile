@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../app/theme/colors.dart';
 import '../../models/analyzed_move.dart';
+import '../../utils/chess_position_utils.dart';
 
 class MoveStrip extends StatefulWidget {
   final List<AnalyzedMove> moves;
@@ -165,9 +166,9 @@ class _MoveChip extends StatelessWidget {
                 ),
               ),
             if (isWhite) const SizedBox(width: 2),
-            // Move SAN
+            // Move SAN with piece icon
             Text(
-              move.san,
+              ChessPositionUtils.formatMoveWithIcon(move.san, isWhite: isWhite),
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,

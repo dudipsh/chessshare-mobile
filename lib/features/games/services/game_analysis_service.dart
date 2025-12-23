@@ -254,11 +254,6 @@ class GameAnalysisService {
                           normalizedPlayedMove.isNotEmpty &&
                           normalizedBestMove == normalizedPlayedMove;
 
-        // Debug logging for move classification issues
-        if (i < 10) {
-          debugPrint('Move ${i + 1} (${pos.color}): ${pos.san} | UCI: "${pos.uci}" | Best: "${bestMoveUci}" | isBestMove: $isBestMove');
-        }
-
         // Calculate centipawn loss properly:
         // CPL = eval if best move was played - eval after actual move
         // For White: higher eval is better, so loss = best_eval - actual_eval
@@ -279,23 +274,10 @@ class GameAnalysisService {
           }
         }
 
-        // Check for missed wins (had mate, now doesn't) - only if NOT the best move
-        bool isMiss = false;
-        if (!isBestMove && mateBefore != null && mateAfter == null) {
-          // Had a forced mate before, but not after the move
-          if (pos.color == 'white' && mateBefore > 0) {
-            isMiss = true; // White had mate in N, now doesn't
-            debugPrint('Move ${i + 1}: MISS detected - White had mate in $mateBefore');
-          } else if (pos.color == 'black' && mateBefore < 0) {
-            isMiss = true; // Black had mate in N (negative), now doesn't
-            debugPrint('Move ${i + 1}: MISS detected - Black had mate in ${mateBefore.abs()}');
-          }
-        }
-
-        // Additional debug for early moves if not best move
-        if (!isBestMove && i < 10) {
-          debugPrint('Move ${i + 1}: NOT best move | mateBefore: $mateBefore | mateAfter: $mateAfter | CPL: $cpl');
-        }
+        // Note: The web classifies "MISS" purely based on centipawn loss (60-100cp),
+        // NOT based on missed mates. We follow the same approach for consistency.
+        // Mate-based miss detection was removed as it caused false positives at low depth.
+        const isMiss = false;
 
         // Check if this is a check move (for Great move detection)
         final isCheck = pos.san.contains('+') || pos.san.contains('#');
@@ -334,11 +316,6 @@ class GameAnalysisService {
           evalAfter: evalAfterCp,
           isCheck: isCheck,
         );
-
-        // Debug: Log final classification for first 10 moves
-        if (i < 10) {
-          debugPrint('Move ${i + 1} FINAL: ${pos.san} → ${classification.name} | CPL: $cpl | isMiss: $isMiss | evalBefore: $evalBeforeCp | evalAfter: $evalAfterCp');
-        }
 
         final analyzedMove = AnalyzedMove(
           id: const Uuid().v4(),

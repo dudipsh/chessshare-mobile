@@ -256,6 +256,23 @@ class _GameReviewScreenState extends ConsumerState<GameReviewScreen> {
                        move.classification == MoveClassification.great;
     if (isBestMove) return const SizedBox.shrink();
 
+    // Format best move with piece icon
+    final isWhite = move.color == 'white';
+    String formattedBestMove;
+    if (move.bestMoveUci != null && move.bestMoveUci!.isNotEmpty && move.fen.isNotEmpty) {
+      formattedBestMove = ChessPositionUtils.formatMoveWithIcon(
+        move.bestMoveUci!,
+        fen: move.fen,
+        isWhite: isWhite,
+      );
+    } else {
+      formattedBestMove = ChessPositionUtils.formatMoveWithIcon(
+        move.bestMove!,
+        fen: move.fen,
+        isWhite: isWhite,
+      );
+    }
+
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -278,7 +295,7 @@ class _GameReviewScreenState extends ConsumerState<GameReviewScreen> {
             ),
           ),
           Text(
-            move.bestMove!,
+            formattedBestMove,
             style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.bold,
