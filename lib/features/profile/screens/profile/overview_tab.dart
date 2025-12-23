@@ -30,17 +30,27 @@ class OverviewTab extends ConsumerWidget {
         const GamificationStatsRow(),
         const SizedBox(height: 16),
 
-        // Quick stats
+        // Quick stats - calculate from boards if API doesn't provide
         SectionCard(
           title: 'Quick Stats',
           isDark: isDark,
           child: Row(
             children: [
-              StatBox(label: 'Boards', value: '${state.profile?.boardsCount ?? 0}', icon: Icons.dashboard, isDark: isDark),
+              StatBox(
+                label: 'Boards',
+                value: '${state.boards.isNotEmpty ? state.boards.length : (state.profile?.boardsCount ?? 0)}',
+                icon: Icons.dashboard,
+                isDark: isDark,
+              ),
               const SizedBox(width: 12),
               StatBox(label: 'Analyzed', value: '${state.gameReviews.length}', icon: Icons.analytics, isDark: isDark),
               const SizedBox(width: 12),
-              StatBox(label: 'Views', value: '${state.profile?.totalViews ?? 0}', icon: Icons.visibility, isDark: isDark),
+              StatBox(
+                label: 'Views',
+                value: '${state.boards.isNotEmpty ? state.boards.fold(0, (sum, b) => sum + b.viewsCount) : (state.profile?.totalViews ?? 0)}',
+                icon: Icons.visibility,
+                isDark: isDark,
+              ),
             ],
           ),
         ),

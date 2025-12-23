@@ -8,7 +8,6 @@ import '../../../app/theme/colors.dart';
 import '../../../core/database/local_database.dart';
 import '../../../core/providers/board_settings_provider.dart';
 import '../../../core/widgets/board_settings_sheet.dart';
-import '../../analysis/providers/engine_provider.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../models/chess_game.dart';
 import '../models/move_classification.dart';
@@ -38,7 +37,6 @@ class GameReviewScreen extends ConsumerStatefulWidget {
 class _GameReviewScreenState extends ConsumerState<GameReviewScreen> {
   late String _userId;
   Side _orientation = Side.white;
-  String? _lastExplorationFen;
 
   @override
   void initState() {
@@ -50,16 +48,7 @@ class _GameReviewScreenState extends ConsumerState<GameReviewScreen> {
       if (_userId.isNotEmpty) {
         ref.read(gameReviewProvider(_userId).notifier).loadReview(widget.game);
       }
-      // Initialize engine for exploration analysis
-      ref.read(engineAnalysisProvider.notifier).initialize();
     });
-  }
-
-  @override
-  void dispose() {
-    // Stop engine analysis when leaving the screen
-    ref.read(engineAnalysisProvider.notifier).stopAnalysis();
-    super.dispose();
   }
 
   @override
@@ -73,7 +62,6 @@ class _GameReviewScreenState extends ConsumerState<GameReviewScreen> {
 
     final state = ref.watch(gameReviewProvider(userId));
     final explorationState = ref.watch(explorationModeProvider);
-    final engineState = ref.watch(engineAnalysisProvider);
 
     // Sync exploration position with game review when not exploring
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -82,18 +70,6 @@ class _GameReviewScreenState extends ConsumerState<GameReviewScreen> {
           state.fen,
           state.currentMoveIndex,
         );
-        // Stop engine analysis when not exploring
-        if (_lastExplorationFen != null) {
-          ref.read(engineAnalysisProvider.notifier).stopAnalysis();
-          _lastExplorationFen = null;
-        }
-      } else if (explorationState.isExploring) {
-        // Analyze the exploration position
-        final currentFen = explorationState.fen;
-        if (currentFen != _lastExplorationFen && engineState.isReady) {
-          _lastExplorationFen = currentFen;
-          ref.read(engineAnalysisProvider.notifier).analyzePosition(currentFen);
-        }
       }
     });
 
@@ -104,7 +80,7 @@ class _GameReviewScreenState extends ConsumerState<GameReviewScreen> {
 
     return Scaffold(
       appBar: _buildAppBar(context, state, explorationState),
-      body: _buildBody(state, explorationState, engineState, boardSize, isDark),
+      body: _buildBody(state, explorationState, boardSize, isDark),
     );
   }
 
@@ -155,7 +131,7 @@ class _GameReviewScreenState extends ConsumerState<GameReviewScreen> {
     );
   }
 
-  Widget _buildBody(GameReviewState state, ExplorationState explorationState, EngineAnalysisState engineState, double boardSize, bool isDark) {
+  Widget _buildBody(GameReviewState state, ExplorationState explorationState, double boardSize, bool isDark) {
     if (state.isLoading) return const Center(child: CircularProgressIndicator());
 
     if (state.isAnalyzing) {
@@ -168,22 +144,10 @@ class _GameReviewScreenState extends ConsumerState<GameReviewScreen> {
     if (state.error != null) return _buildErrorView(state);
     if (state.review == null) return const Center(child: Text('No review available'));
 
-    // Get evaluation - use engine eval during exploration, or game analysis eval otherwise
-    int? evalCp;
-    if (explorationState.isExploring) {
-      // Use engine evaluation in centipawns during exploration
-      final eval = engineState.evaluation;
-      if (eval != null) {
-        if (eval.mateInMoves != null) {
-          // Convert mate to large centipawn value
-          evalCp = eval.mateInMoves! > 0 ? 10000 + eval.mateInMoves! : -10000 - eval.mateInMoves!.abs();
-        } else {
-          evalCp = eval.centipawns;
-        }
-      }
-    } else {
-      evalCp = state.currentMove?.evalAfter;
-    }
+    // Get evaluation - use exploration eval when exploring, otherwise game analysis eval
+    final evalCp = explorationState.isExploring
+        ? explorationState.evalCp // Live eval during exploration
+        : state.currentMove?.evalAfter;
 
     return Column(
       children: [
@@ -197,7 +161,7 @@ class _GameReviewScreenState extends ConsumerState<GameReviewScreen> {
           child: StaticEvaluationBar(
             evalCp: evalCp,
             width: boardSize,
-            isAnalyzing: explorationState.isExploring && engineState.isAnalyzing,
+            isAnalyzing: explorationState.isExploring && explorationState.isEvaluating,
           ),
         ),
         Padding(

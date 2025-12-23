@@ -250,6 +250,11 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
           gameReviews: gameReviews,
         );
         debugPrint('Profile data fetched and cached');
+
+        // Also load boards for Overview tab stats (if not already loaded)
+        if (state.boards.isEmpty) {
+          await loadBoards();
+        }
       }
     } catch (e) {
       debugPrint('Error fetching fresh data: $e');

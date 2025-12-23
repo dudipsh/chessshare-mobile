@@ -222,6 +222,76 @@ class StockfishService {
     startAnalysis(depth: depth, moveTimeMs: moveTimeMs);
   }
 
+  /// Evaluate a position and return the score in centipawns
+  /// Returns a map with 'score' (in centipawns) and 'bestMove' (UCI)
+  /// Score is from the perspective of the side to move
+  Future<Map<String, dynamic>?> evaluatePosition(String fen, {int depth = 12}) async {
+    if (_stockfish == null || _state == StockfishState.disposed) return null;
+
+    // Stop any current analysis
+    if (_state == StockfishState.analyzing) {
+      await stop();
+    }
+
+    final completer = Completer<Map<String, dynamic>?>();
+    int? lastScore;
+    String? bestMove;
+
+    // Listen for output
+    late StreamSubscription<String> subscription;
+    subscription = outputStream.listen((line) {
+      // Parse info lines for score
+      if (line.startsWith('info ') && line.contains('score')) {
+        final scoreMatch = RegExp(r'score cp (-?\d+)').firstMatch(line);
+        final mateMatch = RegExp(r'score mate (-?\d+)').firstMatch(line);
+
+        if (scoreMatch != null) {
+          lastScore = int.parse(scoreMatch.group(1)!);
+        } else if (mateMatch != null) {
+          final mateIn = int.parse(mateMatch.group(1)!);
+          // Convert mate to centipawns (large value)
+          lastScore = mateIn > 0 ? 10000 - mateIn * 100 : -10000 - mateIn * 100;
+        }
+      }
+
+      // Parse bestmove to complete
+      if (line.startsWith('bestmove ')) {
+        final moveMatch = RegExp(r'bestmove (\S+)').firstMatch(line);
+        if (moveMatch != null) {
+          bestMove = moveMatch.group(1);
+        }
+
+        subscription.cancel();
+        if (!completer.isCompleted) {
+          if (lastScore != null) {
+            completer.complete({'score': lastScore, 'bestMove': bestMove});
+          } else {
+            completer.complete(null);
+          }
+        }
+      }
+    });
+
+    // Start analysis
+    setPosition(fen);
+    startAnalysis(depth: depth);
+
+    // Timeout after 10 seconds
+    try {
+      return await completer.future.timeout(
+        const Duration(seconds: 10),
+        onTimeout: () {
+          subscription.cancel();
+          stop();
+          return lastScore != null ? {'score': lastScore, 'bestMove': bestMove} : null;
+        },
+      );
+    } catch (e) {
+      subscription.cancel();
+      return null;
+    }
+  }
+
   /// Request engine to output current best line
   void requestPv() {
     // UCI doesn't have a direct command for this,

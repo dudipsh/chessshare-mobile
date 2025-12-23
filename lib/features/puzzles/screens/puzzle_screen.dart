@@ -3,10 +3,11 @@ import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../app/theme/colors.dart';
+import '../../../core/providers/board_settings_provider.dart';
 import '../models/puzzle.dart';
 import '../providers/puzzle_provider.dart';
 import 'puzzle/puzzle_action_buttons.dart';
-import 'puzzle/puzzle_board_settings.dart';
 import 'puzzle/puzzle_feedback.dart';
 import 'puzzle/puzzle_info_bar.dart';
 import 'puzzle/puzzle_marker_painter.dart';
@@ -92,12 +93,45 @@ class _PuzzleScreenState extends ConsumerState<PuzzleScreen> {
 
   Widget _buildChessboard(WidgetRef ref, PuzzleSolveState state, double boardSize) {
     final notifier = ref.read(puzzleSolveProvider.notifier);
+    final boardSettings = ref.watch(boardSettingsProvider);
     final isPlayable = state.state == PuzzleState.playing;
+
+    final settings = ChessboardSettings(
+      pieceAssets: boardSettings.pieceSet.pieceSet.assets,
+      colorScheme: ChessboardColorScheme(
+        lightSquare: boardSettings.colorScheme.lightSquare,
+        darkSquare: boardSettings.colorScheme.darkSquare,
+        background: SolidColorChessboardBackground(
+          lightSquare: boardSettings.colorScheme.lightSquare,
+          darkSquare: boardSettings.colorScheme.darkSquare,
+        ),
+        whiteCoordBackground: SolidColorChessboardBackground(
+          lightSquare: boardSettings.colorScheme.lightSquare,
+          darkSquare: boardSettings.colorScheme.darkSquare,
+          coordinates: true,
+        ),
+        blackCoordBackground: SolidColorChessboardBackground(
+          lightSquare: boardSettings.colorScheme.lightSquare,
+          darkSquare: boardSettings.colorScheme.darkSquare,
+          coordinates: true,
+          orientation: Side.black,
+        ),
+        lastMove: HighlightDetails(solidColor: AppColors.lastMove),
+        selected: HighlightDetails(solidColor: AppColors.highlight),
+        validMoves: Colors.black.withValues(alpha: 0.15),
+        validPremoves: Colors.blue.withValues(alpha: 0.2),
+      ),
+      showValidMoves: true,
+      showLastMove: true,
+      animationDuration: const Duration(milliseconds: 150),
+      dragFeedbackScale: 2.0,
+      dragFeedbackOffset: const Offset(0, -1),
+    );
 
     if (isPlayable) {
       return Chessboard(
         size: boardSize,
-        settings: buildPuzzleBoardSettings(),
+        settings: settings,
         orientation: state.orientation,
         fen: state.currentFen,
         lastMove: state.lastMove,
@@ -113,7 +147,7 @@ class _PuzzleScreenState extends ConsumerState<PuzzleScreen> {
     } else {
       return Chessboard.fixed(
         size: boardSize,
-        settings: buildPuzzleBoardSettings(),
+        settings: settings,
         orientation: state.orientation,
         fen: state.currentFen,
         lastMove: state.lastMove,

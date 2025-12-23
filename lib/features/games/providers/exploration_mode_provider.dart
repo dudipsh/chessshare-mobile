@@ -2,6 +2,8 @@ import 'package:dartchess/dartchess.dart';
 import 'package:fast_immutable_collections/fast_immutable_collections.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/services/global_stockfish_manager.dart';
+import '../../analysis/services/stockfish_service.dart';
 import '../utils/chess_position_utils.dart';
 
 /// State for seamless exploration in game review
@@ -12,6 +14,8 @@ class ExplorationState {
   final List<String> explorationMoves; // UCI moves made during exploration
   final String? originalFen; // The FEN before exploration started
   final int? originalMoveIndex; // The move index before exploration started
+  final int? evalCp; // Centipawn evaluation for current exploration position
+  final bool isEvaluating; // Whether engine is currently evaluating
 
   const ExplorationState({
     this.isExploring = false,
@@ -19,6 +23,8 @@ class ExplorationState {
     this.explorationMoves = const [],
     this.originalFen,
     this.originalMoveIndex,
+    this.evalCp,
+    this.isEvaluating = false,
   });
 
   /// Get valid moves for the current position
@@ -43,7 +49,10 @@ class ExplorationState {
     List<String>? explorationMoves,
     String? originalFen,
     int? originalMoveIndex,
+    int? evalCp,
+    bool? isEvaluating,
     bool clearPosition = false,
+    bool clearEval = false,
   }) {
     return ExplorationState(
       isExploring: isExploring ?? this.isExploring,
@@ -51,13 +60,85 @@ class ExplorationState {
       explorationMoves: explorationMoves ?? this.explorationMoves,
       originalFen: originalFen ?? this.originalFen,
       originalMoveIndex: originalMoveIndex ?? this.originalMoveIndex,
+      evalCp: clearEval ? null : (evalCp ?? this.evalCp),
+      isEvaluating: isEvaluating ?? this.isEvaluating,
     );
   }
 }
 
 /// Notifier for seamless exploration mode
 class ExplorationModeNotifier extends StateNotifier<ExplorationState> {
+  StockfishService? _engine;
+  bool _isEngineReady = false;
+
   ExplorationModeNotifier() : super(const ExplorationState());
+
+  @override
+  void dispose() {
+    _releaseEngine();
+    super.dispose();
+  }
+
+  Future<void> _acquireEngine() async {
+    if (_isEngineReady && _engine != null) return;
+
+    try {
+      _engine = await GlobalStockfishManager.instance.acquire(
+        'exploration',
+        config: const StockfishConfig(maxDepth: 12, multiPv: 1),
+      );
+      _isEngineReady = true;
+    } catch (e) {
+      _isEngineReady = false;
+      _engine = null;
+    }
+  }
+
+  void _releaseEngine() {
+    if (_engine != null) {
+      GlobalStockfishManager.instance.release('exploration');
+      _engine = null;
+      _isEngineReady = false;
+    }
+  }
+
+  /// Evaluate the current exploration position
+  Future<void> _evaluatePosition() async {
+    if (!state.isExploring || state.currentPosition == null) return;
+
+    state = state.copyWith(isEvaluating: true);
+
+    try {
+      await _acquireEngine();
+      if (_engine == null) {
+        state = state.copyWith(isEvaluating: false);
+        return;
+      }
+
+      final fen = state.fen;
+      final sideToMove = state.sideToMove;
+
+      // Quick evaluation with depth 12
+      final result = await _engine!.evaluatePosition(fen, depth: 12);
+
+      if (!mounted) return;
+
+      if (result != null && result.containsKey('score')) {
+        int evalCp = result['score'] as int;
+        // Normalize to white's perspective
+        if (sideToMove == Side.black) {
+          evalCp = -evalCp;
+        }
+        state = state.copyWith(evalCp: evalCp, isEvaluating: false);
+      } else {
+        state = state.copyWith(isEvaluating: false);
+      }
+    } catch (e) {
+      if (mounted) {
+        state = state.copyWith(isEvaluating: false);
+      }
+    }
+  }
 
   /// Update the current position (called when game review moves)
   void setPosition(String fen, int moveIndex) {
@@ -97,7 +178,11 @@ class ExplorationModeNotifier extends StateNotifier<ExplorationState> {
       // Keep original fen/moveIndex from before exploration started
       originalFen: state.isExploring ? state.originalFen : state.originalFen,
       originalMoveIndex: state.isExploring ? state.originalMoveIndex : state.originalMoveIndex,
+      clearEval: true, // Clear previous eval while we compute new one
     );
+
+    // Trigger evaluation for the new position
+    _evaluatePosition();
 
     return true;
   }
@@ -115,7 +200,9 @@ class ExplorationModeNotifier extends StateNotifier<ExplorationState> {
         isExploring: false,
         currentPosition: originalPosition,
         explorationMoves: [],
+        clearEval: true,
       );
+      _releaseEngine();
     } else {
       // Rebuild position from original FEN + remaining moves
       Chess? position = ChessPositionUtils.positionFromFen(state.originalFen!);
@@ -131,7 +218,10 @@ class ExplorationModeNotifier extends StateNotifier<ExplorationState> {
       state = state.copyWith(
         currentPosition: position,
         explorationMoves: newHistory,
+        clearEval: true,
       );
+      // Evaluate the new position after undo
+      _evaluatePosition();
     }
   }
 
@@ -144,11 +234,14 @@ class ExplorationModeNotifier extends StateNotifier<ExplorationState> {
       isExploring: false,
       currentPosition: originalPosition,
       explorationMoves: [],
+      clearEval: true,
     );
+    _releaseEngine();
   }
 
   /// Reset state completely
   void reset() {
+    _releaseEngine();
     state = const ExplorationState();
   }
 }
