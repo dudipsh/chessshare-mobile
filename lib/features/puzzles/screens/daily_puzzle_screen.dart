@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/colors.dart';
 import '../../../core/providers/board_settings_provider.dart';
+import '../../../core/services/audio_service.dart';
 import '../models/puzzle.dart';
 import '../providers/daily_puzzle_provider.dart';
 import '../providers/puzzle_provider.dart';
@@ -94,6 +95,28 @@ class _DailyPuzzleScreenState extends ConsumerState<DailyPuzzleScreen> {
   void _nextDay() {
     _puzzleLoaded = false;
     ref.read(dailyPuzzleProvider.notifier).nextDay();
+  }
+
+  void _playMoveSound(NormalMove move, String fen) {
+    try {
+      final position = Chess.fromSetup(Setup.parseFen(fen));
+      final san = position.makeSan(move).$2;
+      final isCapture = san.contains('x');
+      final isCheck = san.contains('+') || san.contains('#');
+      final isCastle = san == 'O-O' || san == 'O-O-O';
+
+      Chess? positionAfter;
+      try {
+        positionAfter = position.play(move) as Chess;
+      } catch (_) {}
+
+      ref.read(audioServiceProvider).playMoveSound(
+        isCapture: isCapture,
+        isCheck: isCheck,
+        isCastle: isCastle,
+        isCheckmate: positionAfter?.isCheckmate ?? false,
+      );
+    } catch (_) {}
   }
 
   Widget _buildBody(
@@ -324,7 +347,10 @@ class _DailyPuzzleScreenState extends ConsumerState<DailyPuzzleScreen> {
           sideToMove: notifier.sideToMove,
           validMoves: state.validMoves,
           promotionMove: null,
-          onMove: (move, {isDrop}) => notifier.makeMove(move),
+          onMove: (move, {isDrop}) {
+            _playMoveSound(move, state.currentFen);
+            notifier.makeMove(move);
+          },
           onPromotionSelection: (role) {},
         ),
       );

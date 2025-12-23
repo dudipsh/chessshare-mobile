@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/colors.dart';
 import '../../../core/providers/board_settings_provider.dart';
+import '../../../core/services/audio_service.dart';
+import '../../../core/widgets/board_settings_sheet.dart';
 import '../models/puzzle.dart';
 import '../providers/puzzle_provider.dart';
 import 'puzzle/puzzle_action_buttons.dart';
@@ -36,6 +38,38 @@ class _PuzzleScreenState extends ConsumerState<PuzzleScreen> {
     });
   }
 
+  void _showSettings() {
+    showBoardSettingsSheet(
+      context: context,
+      ref: ref,
+      onFlipBoard: () {
+        ref.read(puzzleSolveProvider.notifier).flipBoard();
+      },
+    );
+  }
+
+  void _playMoveSound(NormalMove move, String fen) {
+    try {
+      final position = Chess.fromSetup(Setup.parseFen(fen));
+      final san = position.makeSan(move).$2;
+      final isCapture = san.contains('x');
+      final isCheck = san.contains('+') || san.contains('#');
+      final isCastle = san == 'O-O' || san == 'O-O-O';
+
+      Chess? positionAfter;
+      try {
+        positionAfter = position.play(move) as Chess;
+      } catch (_) {}
+
+      ref.read(audioServiceProvider).playMoveSound(
+        isCapture: isCapture,
+        isCheck: isCheck,
+        isCastle: isCastle,
+        isCheckmate: positionAfter?.isCheckmate ?? false,
+      );
+    } catch (_) {}
+  }
+
   @override
   Widget build(BuildContext context) {
     final puzzleState = ref.watch(puzzleSolveProvider);
@@ -55,6 +89,11 @@ class _PuzzleScreenState extends ConsumerState<PuzzleScreen> {
             icon: const Icon(Icons.refresh),
             onPressed: () => ref.read(puzzleSolveProvider.notifier).resetPuzzle(),
             tooltip: 'Reset',
+          ),
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: _showSettings,
+            tooltip: 'Board settings',
           ),
         ],
       ),
@@ -140,7 +179,10 @@ class _PuzzleScreenState extends ConsumerState<PuzzleScreen> {
           sideToMove: notifier.sideToMove,
           validMoves: state.validMoves,
           promotionMove: null,
-          onMove: (move, {isDrop}) => notifier.makeMove(move),
+          onMove: (move, {isDrop}) {
+            _playMoveSound(move, state.currentFen);
+            notifier.makeMove(move);
+          },
           onPromotionSelection: (role) {},
         ),
       );

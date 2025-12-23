@@ -6,6 +6,7 @@ import 'package:fast_immutable_collections/fast_immutable_collections.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/services/audio_service.dart';
 import '../../../core/services/global_stockfish_manager.dart';
 import '../../analysis/services/stockfish_service.dart';
 import 'play_vs_stockfish/action_buttons.dart';
@@ -105,6 +106,9 @@ class _PlayVsStockfishScreenState extends ConsumerState<PlayVsStockfishScreen> {
       final validTargets = validMovesMap[fromSquare];
       if (validTargets == null || !validTargets.squares.contains(toSquare)) return;
 
+      // Play sound before updating position
+      _playMoveSound(move, _position);
+
       setState(() {
         _position = _position.play(move) as Chess;
         _lastMove = move;
@@ -153,6 +157,8 @@ class _PlayVsStockfishScreenState extends ConsumerState<PlayVsStockfishScreen> {
 
       if (engineMove != null && engineMove.length >= 4 && mounted) {
         final move = _parseUciMove(engineMove);
+        // Play sound before updating position
+        _playMoveSound(move, _position);
         setState(() {
           _position = _position.play(move) as Chess;
           _lastMove = move;
@@ -182,6 +188,27 @@ class _PlayVsStockfishScreenState extends ConsumerState<PlayVsStockfishScreen> {
       }
     }
     return NormalMove(from: from, to: to, promotion: promotion);
+  }
+
+  void _playMoveSound(NormalMove move, Chess positionBefore) {
+    try {
+      final san = positionBefore.makeSan(move).$2;
+      final isCapture = san.contains('x');
+      final isCheck = san.contains('+') || san.contains('#');
+      final isCastle = san == 'O-O' || san == 'O-O-O';
+
+      Chess? positionAfter;
+      try {
+        positionAfter = positionBefore.play(move) as Chess;
+      } catch (_) {}
+
+      ref.read(audioServiceProvider).playMoveSound(
+        isCapture: isCapture,
+        isCheck: isCheck,
+        isCastle: isCastle,
+        isCheckmate: positionAfter?.isCheckmate ?? false,
+      );
+    } catch (_) {}
   }
 
   bool _checkGameEnd() {

@@ -5,6 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/colors.dart';
+import '../../../core/providers/board_settings_provider.dart';
+import '../../../core/services/audio_service.dart';
+import '../../../core/widgets/board_settings_sheet.dart';
 import '../models/analyzed_move.dart';
 import '../models/chess_game.dart';
 import '../widgets/move_markers.dart';
@@ -70,6 +73,9 @@ class _PracticeMistakesScreenState extends ConsumerState<PracticeMistakesScreen>
 
     final uciMove = '${move.from.name}${move.to.name}${move.promotion?.letter ?? ''}';
     final bestMoveUci = currentMistake.bestMoveUci;
+
+    // Play move sound
+    _playMoveSound(move, _position!);
 
     if (uciMove == bestMoveUci) {
       _correctCount++;
@@ -171,6 +177,38 @@ class _PracticeMistakesScreenState extends ConsumerState<PracticeMistakesScreen>
     return IMap(result);
   }
 
+  void _showSettings() {
+    showBoardSettingsSheet(
+      context: context,
+      ref: ref,
+      onFlipBoard: () {
+        setState(() {
+          _orientation = _orientation == Side.white ? Side.black : Side.white;
+        });
+      },
+    );
+  }
+
+  void _playMoveSound(NormalMove move, Chess positionBefore) {
+    final audioService = ref.read(audioServiceProvider);
+    final san = positionBefore.makeSan(move).$2;
+    final isCapture = san.contains('x');
+    final isCheck = san.contains('+') || san.contains('#');
+    final isCastle = san == 'O-O' || san == 'O-O-O';
+
+    Chess? positionAfter;
+    try {
+      positionAfter = positionBefore.play(move) as Chess;
+    } catch (_) {}
+
+    audioService.playMoveSound(
+      isCapture: isCapture,
+      isCheck: isCheck,
+      isCastle: isCastle,
+      isCheckmate: positionAfter?.isCheckmate ?? false,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -180,6 +218,13 @@ class _PracticeMistakesScreenState extends ConsumerState<PracticeMistakesScreen>
     return Scaffold(
       appBar: AppBar(
         title: Text('Practice (${_currentIndex + 1}/${widget.mistakes.length})'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: _showSettings,
+            tooltip: 'Board settings',
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         child: Column(
@@ -318,14 +363,19 @@ class _PracticeMistakesScreenState extends ConsumerState<PracticeMistakesScreen>
   }
 
   ChessboardSettings _buildBoardSettings() {
+    final boardSettings = ref.watch(boardSettingsProvider);
+    final lightSquare = boardSettings.colorScheme.lightSquare;
+    final darkSquare = boardSettings.colorScheme.darkSquare;
+    final pieceAssets = boardSettings.pieceSet.pieceSet.assets;
+
     return ChessboardSettings(
-      pieceAssets: PieceSet.merida.assets,
+      pieceAssets: pieceAssets,
       colorScheme: ChessboardColorScheme(
-        lightSquare: AppColors.lightSquare,
-        darkSquare: AppColors.darkSquare,
-        background: SolidColorChessboardBackground(lightSquare: AppColors.lightSquare, darkSquare: AppColors.darkSquare),
-        whiteCoordBackground: SolidColorChessboardBackground(lightSquare: AppColors.lightSquare, darkSquare: AppColors.darkSquare, coordinates: true),
-        blackCoordBackground: SolidColorChessboardBackground(lightSquare: AppColors.lightSquare, darkSquare: AppColors.darkSquare, coordinates: true, orientation: Side.black),
+        lightSquare: lightSquare,
+        darkSquare: darkSquare,
+        background: SolidColorChessboardBackground(lightSquare: lightSquare, darkSquare: darkSquare),
+        whiteCoordBackground: SolidColorChessboardBackground(lightSquare: lightSquare, darkSquare: darkSquare, coordinates: true),
+        blackCoordBackground: SolidColorChessboardBackground(lightSquare: lightSquare, darkSquare: darkSquare, coordinates: true, orientation: Side.black),
         lastMove: HighlightDetails(solidColor: AppColors.lastMove),
         selected: HighlightDetails(solidColor: AppColors.highlight),
         validMoves: Colors.black.withValues(alpha: 0.15),

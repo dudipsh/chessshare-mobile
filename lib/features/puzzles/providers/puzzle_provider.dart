@@ -420,6 +420,12 @@ class PuzzleSolveNotifier extends StateNotifier<PuzzleSolveState> {
   }
 
   Side get sideToMove => _position.turn;
+
+  void flipBoard() {
+    state = state.copyWith(
+      orientation: state.orientation == Side.white ? Side.black : Side.white,
+    );
+  }
 }
 
 // Provider

@@ -6,6 +6,9 @@ import 'package:dartchess/dartchess.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../app/theme/colors.dart';
+import '../../../core/providers/board_settings_provider.dart';
+import '../../../core/services/audio_service.dart';
+import '../../../core/widgets/board_settings_sheet.dart';
 import '../../games/models/chess_game.dart';
 import '../../puzzles/providers/puzzle_generator_provider.dart';
 import '../providers/analysis_provider.dart';
@@ -53,6 +56,36 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> {
     super.dispose();
   }
 
+  void _showSettings() {
+    showBoardSettingsSheet(
+      context: context,
+      ref: ref,
+      onFlipBoard: () {
+        ref.read(analysisProvider.notifier).flipBoard();
+      },
+    );
+  }
+
+  void _playMoveSound(NormalMove move, Chess positionBefore) {
+    final audioService = ref.read(audioServiceProvider);
+    final san = positionBefore.makeSan(move).$2;
+    final isCapture = san.contains('x');
+    final isCheck = san.contains('+') || san.contains('#');
+    final isCastle = san == 'O-O' || san == 'O-O-O';
+
+    Chess? positionAfter;
+    try {
+      positionAfter = positionBefore.play(move) as Chess;
+    } catch (_) {}
+
+    audioService.playMoveSound(
+      isCapture: isCapture,
+      isCheck: isCheck,
+      isCastle: isCastle,
+      isCheckmate: positionAfter?.isCheckmate ?? false,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final analysisState = ref.watch(analysisProvider);
@@ -92,10 +125,9 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> {
             },
           ),
           IconButton(
-            icon: const Icon(Icons.swap_vert),
-            onPressed: () {
-              ref.read(analysisProvider.notifier).flipBoard();
-            },
+            icon: const Icon(Icons.settings),
+            onPressed: _showSettings,
+            tooltip: 'Board settings',
           ),
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert),
@@ -177,6 +209,11 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> {
         validMoves: analysisState.validMoves,
         promotionMove: null,
         onMove: (move, {isDrop}) {
+          // Play move sound
+          try {
+            final position = Chess.fromSetup(Setup.parseFen(analysisState.currentFen));
+            _playMoveSound(move, position);
+          } catch (_) {}
           notifier.onUserMove(move, isDrop: isDrop);
         },
         onPromotionSelection: (role) {},
@@ -185,23 +222,28 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> {
   }
 
   ChessboardSettings _buildBoardSettings() {
+    final boardSettings = ref.watch(boardSettingsProvider);
+    final lightSquare = boardSettings.colorScheme.lightSquare;
+    final darkSquare = boardSettings.colorScheme.darkSquare;
+    final pieceAssets = boardSettings.pieceSet.pieceSet.assets;
+
     return ChessboardSettings(
-      pieceAssets: PieceSet.merida.assets,
+      pieceAssets: pieceAssets,
       colorScheme: ChessboardColorScheme(
-        lightSquare: AppColors.lightSquare,
-        darkSquare: AppColors.darkSquare,
+        lightSquare: lightSquare,
+        darkSquare: darkSquare,
         background: SolidColorChessboardBackground(
-          lightSquare: AppColors.lightSquare,
-          darkSquare: AppColors.darkSquare,
+          lightSquare: lightSquare,
+          darkSquare: darkSquare,
         ),
         whiteCoordBackground: SolidColorChessboardBackground(
-          lightSquare: AppColors.lightSquare,
-          darkSquare: AppColors.darkSquare,
+          lightSquare: lightSquare,
+          darkSquare: darkSquare,
           coordinates: true,
         ),
         blackCoordBackground: SolidColorChessboardBackground(
-          lightSquare: AppColors.lightSquare,
-          darkSquare: AppColors.darkSquare,
+          lightSquare: lightSquare,
+          darkSquare: darkSquare,
           coordinates: true,
           orientation: Side.black,
         ),

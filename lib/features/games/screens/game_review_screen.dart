@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/theme/colors.dart';
 import '../../../core/database/local_database.dart';
 import '../../../core/providers/board_settings_provider.dart';
+import '../../../core/services/audio_service.dart';
 import '../../../core/widgets/board_settings_sheet.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../models/chess_game.dart';
@@ -436,7 +437,32 @@ class _GameReviewScreenState extends ConsumerState<GameReviewScreen> {
     );
   }
 
+  void _playMoveSound(NormalMove move, String fen) {
+    try {
+      final position = Chess.fromSetup(Setup.parseFen(fen));
+      final san = position.makeSan(move).$2;
+      final isCapture = san.contains('x');
+      final isCheck = san.contains('+') || san.contains('#');
+      final isCastle = san == 'O-O' || san == 'O-O-O';
+
+      Chess? positionAfter;
+      try {
+        positionAfter = position.play(move) as Chess;
+      } catch (_) {}
+
+      ref.read(audioServiceProvider).playMoveSound(
+        isCapture: isCapture,
+        isCheck: isCheck,
+        isCastle: isCastle,
+        isCheckmate: positionAfter?.isCheckmate ?? false,
+      );
+    } catch (_) {}
+  }
+
   void _onBoardMove(NormalMove move, GameReviewState state) {
+    // Play move sound
+    _playMoveSound(move, state.fen);
+
     // Get the expected next move from game history
     String? expectedUci;
     if (state.currentMoveIndex < (state.review?.moves.length ?? 0)) {
