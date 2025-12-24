@@ -227,4 +227,41 @@ abstract class ChessPositionUtils {
       default: return '';
     }
   }
+
+  /// Convert SAN move to UCI notation given a FEN position
+  static String? sanToUci(String fen, String san) {
+    if (san.isEmpty || fen.isEmpty) return null;
+
+    try {
+      final position = Chess.fromSetup(Setup.parseFen(fen));
+      final move = position.parseSan(san);
+      if (move != null && move is NormalMove) {
+        final fromSquare = move.from.name;
+        final toSquare = move.to.name;
+        final promotion = move.promotion != null
+            ? move.promotion!.name[0].toLowerCase()
+            : '';
+        return '$fromSquare$toSquare$promotion';
+      }
+    } catch (e) {
+      // Conversion failed
+    }
+    return null;
+  }
+
+  /// Get the destination square from a SAN move and FEN
+  static String? getDestinationSquareFromSan(String fen, String san) {
+    if (san.isEmpty || fen.isEmpty) return null;
+
+    try {
+      final position = Chess.fromSetup(Setup.parseFen(fen));
+      final move = position.parseSan(san);
+      if (move != null && move is NormalMove) {
+        return move.to.name;
+      }
+    } catch (e) {
+      // Parse failed
+    }
+    return null;
+  }
 }

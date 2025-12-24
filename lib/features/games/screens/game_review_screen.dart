@@ -205,6 +205,10 @@ class _GameReviewScreenState extends ConsumerState<GameReviewScreen> {
               ref.read(explorationModeProvider.notifier).returnToGame();
             }
             ref.read(gameReviewProvider(_userId).notifier).goToMove(index);
+            // Play sound for the selected move
+            if (index > 0) {
+              _playSoundForMoveIndex(index);
+            }
           },
         ),
         NavigationControls(
@@ -221,20 +225,36 @@ class _GameReviewScreenState extends ConsumerState<GameReviewScreen> {
               // Undo exploration move instead of going back in game
               ref.read(explorationModeProvider.notifier).undoMove();
             } else {
+              final currentIdx = ref.read(gameReviewProvider(_userId)).currentMoveIndex;
               ref.read(gameReviewProvider(_userId).notifier).previousMove();
+              // Play sound for the move we're going back to
+              if (currentIdx > 1) {
+                _playSoundForMoveIndex(currentIdx - 1);
+              }
             }
           },
           onNext: () {
             if (explorationState.isExploring) {
               ref.read(explorationModeProvider.notifier).returnToGame();
             }
+            final currentIdx = ref.read(gameReviewProvider(_userId)).currentMoveIndex;
+            final totalMoves = ref.read(gameReviewProvider(_userId)).review?.moves.length ?? 0;
             ref.read(gameReviewProvider(_userId).notifier).nextMove();
+            // Play sound for the move we just advanced to
+            if (currentIdx < totalMoves) {
+              _playSoundForMoveIndex(currentIdx + 1);
+            }
           },
           onLast: () {
             if (explorationState.isExploring) {
               ref.read(explorationModeProvider.notifier).returnToGame();
             }
+            final totalMoves = ref.read(gameReviewProvider(_userId)).review?.moves.length ?? 0;
             ref.read(gameReviewProvider(_userId).notifier).goToEnd();
+            // Play sound for the last move
+            if (totalMoves > 0) {
+              _playSoundForMoveIndex(totalMoves);
+            }
           },
         ),
         ReviewActionButtons(
@@ -441,22 +461,35 @@ class _GameReviewScreenState extends ConsumerState<GameReviewScreen> {
     try {
       final position = Chess.fromSetup(Setup.parseFen(fen));
       final san = position.makeSan(move).$2;
-      final isCapture = san.contains('x');
-      final isCheck = san.contains('+') || san.contains('#');
-      final isCastle = san == 'O-O' || san == 'O-O-O';
+      _playSoundFromSan(san, fen);
+    } catch (_) {}
+  }
 
-      Chess? positionAfter;
-      try {
-        positionAfter = position.play(move) as Chess;
-      } catch (_) {}
+  /// Play sound based on SAN notation (for navigation)
+  void _playSoundFromSan(String san, String fen) {
+    try {
+      final isCapture = san.contains('x');
+      final isCheck = san.contains('+');
+      final isCheckmate = san.contains('#');
+      final isCastle = san == 'O-O' || san == 'O-O-O';
 
       ref.read(audioServiceProvider).playMoveSound(
         isCapture: isCapture,
         isCheck: isCheck,
         isCastle: isCastle,
-        isCheckmate: positionAfter?.isCheckmate ?? false,
+        isCheckmate: isCheckmate,
       );
     } catch (_) {}
+  }
+
+  /// Play sound for the move at the given index
+  void _playSoundForMoveIndex(int moveIndex) {
+    final state = ref.read(gameReviewProvider(_userId));
+    if (state.review == null || moveIndex <= 0 || moveIndex > state.review!.moves.length) {
+      return;
+    }
+    final move = state.review!.moves[moveIndex - 1];
+    _playSoundFromSan(move.san, move.fen);
   }
 
   void _onBoardMove(NormalMove move, GameReviewState state) {
@@ -488,7 +521,11 @@ class _GameReviewScreenState extends ConsumerState<GameReviewScreen> {
     final squareSize = boardSize / 8;
     final markerSize = squareSize * 0.4;
 
-    final toSquareName = ChessPositionUtils.getDestinationSquare(move.uci);
+    // Try UCI first, then fallback to computing from SAN
+    String? toSquareName = ChessPositionUtils.getDestinationSquare(move.uci);
+    if (toSquareName == null && move.san.isNotEmpty && move.fen.isNotEmpty) {
+      toSquareName = ChessPositionUtils.getDestinationSquareFromSan(move.fen, move.san);
+    }
     if (toSquareName == null) return const SizedBox.shrink();
 
     final toSquare = ChessPositionUtils.parseSquare(toSquareName);

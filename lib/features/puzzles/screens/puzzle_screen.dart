@@ -16,8 +16,15 @@ import 'puzzle/puzzle_marker_painter.dart';
 
 class PuzzleScreen extends ConsumerStatefulWidget {
   final Puzzle puzzle;
+  final List<Puzzle>? puzzlesList;
+  final int? currentIndex;
 
-  const PuzzleScreen({super.key, required this.puzzle});
+  const PuzzleScreen({
+    super.key,
+    required this.puzzle,
+    this.puzzlesList,
+    this.currentIndex,
+  });
 
   @override
   ConsumerState<PuzzleScreen> createState() => _PuzzleScreenState();
@@ -25,17 +32,40 @@ class PuzzleScreen extends ConsumerStatefulWidget {
 
 class _PuzzleScreenState extends ConsumerState<PuzzleScreen> {
   bool _loadAttempted = false;
+  late Puzzle _currentPuzzle;
+  late int _currentIndex;
 
   @override
   void initState() {
     super.initState();
+    _currentPuzzle = widget.puzzle;
+    _currentIndex = widget.currentIndex ?? 0;
+
     // Load puzzle once on init
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_loadAttempted) {
         _loadAttempted = true;
-        ref.read(puzzleSolveProvider.notifier).loadPuzzle(widget.puzzle);
+        ref.read(puzzleSolveProvider.notifier).loadPuzzle(_currentPuzzle);
       }
     });
+  }
+
+  bool get _hasNextPuzzle {
+    final puzzlesList = widget.puzzlesList;
+    if (puzzlesList == null) return false;
+    return _currentIndex < puzzlesList.length - 1;
+  }
+
+  void _goToNextPuzzle() {
+    final puzzlesList = widget.puzzlesList;
+    if (puzzlesList == null || !_hasNextPuzzle) return;
+
+    setState(() {
+      _currentIndex++;
+      _currentPuzzle = puzzlesList[_currentIndex];
+    });
+
+    ref.read(puzzleSolveProvider.notifier).loadPuzzle(_currentPuzzle);
   }
 
   void _showSettings() {
@@ -76,9 +106,15 @@ class _PuzzleScreenState extends ConsumerState<PuzzleScreen> {
     final screenWidth = MediaQuery.of(context).size.width;
     final boardSize = screenWidth - 16;
 
+    // Build title with progress if we have a list
+    String title = _currentPuzzle.theme.displayName;
+    if (widget.puzzlesList != null) {
+      title = '${_currentIndex + 1}/${widget.puzzlesList!.length} - $title';
+    }
+
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.puzzle.theme.displayName),
+        title: Text(title),
         actions: [
           IconButton(
             icon: const Icon(Icons.lightbulb_outline),
@@ -99,7 +135,7 @@ class _PuzzleScreenState extends ConsumerState<PuzzleScreen> {
       ),
       body: Column(
         children: [
-          PuzzleInfoBar(sideToMove: widget.puzzle.sideToMove, rating: widget.puzzle.rating),
+          PuzzleInfoBar(sideToMove: _currentPuzzle.sideToMove, rating: _currentPuzzle.rating),
           Padding(
             padding: const EdgeInsets.all(8.0),
             child: Stack(
@@ -123,6 +159,7 @@ class _PuzzleScreenState extends ConsumerState<PuzzleScreen> {
             PuzzleActionButtons(
               onTryAgain: () => ref.read(puzzleSolveProvider.notifier).resetPuzzle(),
               onDone: () => Navigator.pop(context),
+              onNextPuzzle: _hasNextPuzzle ? _goToNextPuzzle : null,
             ),
           SizedBox(height: MediaQuery.of(context).padding.bottom + 8),
         ],

@@ -19,7 +19,19 @@ class ProfileService {
   static Future<List<LinkedChessAccount>> getLinkedAccounts(String userId) =>
       ProfileRepository.getLinkedAccounts(userId);
 
-  /// Get user boards
+  /// Get own boards (uses get_my_boards_paginated RPC)
+  static Future<List<UserBoard>> getMyBoards({
+    int limit = 20,
+    DateTime? cursorPublic,
+    DateTime? cursorPrivate,
+  }) =>
+      ProfileRepository.getMyBoards(
+        limit: limit,
+        cursorPublic: cursorPublic,
+        cursorPrivate: cursorPrivate,
+      );
+
+  /// Get another user's public boards
   static Future<List<UserBoard>> getUserBoards(
     String userId, {
     int limit = 20,

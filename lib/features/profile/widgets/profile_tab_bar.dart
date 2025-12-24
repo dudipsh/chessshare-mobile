@@ -26,7 +26,8 @@ class ProfileTabBar extends ConsumerWidget {
       child: Row(
         children: [
           _buildTab(ref, 'Overview', 0),
-          _buildTab(ref, 'Stats', 1),
+          _buildTab(ref, 'Boards', 1),
+          _buildTab(ref, 'Stats', 2),
         ],
       ),
     );

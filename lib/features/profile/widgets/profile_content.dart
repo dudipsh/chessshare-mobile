@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../auth/providers/auth_provider.dart';
 import '../providers/profile_provider.dart';
+import '../screens/profile/boards_tab.dart';
 import '../screens/profile/link_account_sheet.dart';
 import '../screens/profile/overview_tab.dart';
 import '../screens/profile/profile_header.dart';
@@ -75,6 +76,16 @@ class ProfileContent extends ConsumerWidget {
           onLinkAccount: () => showLinkAccountSheet(context, ref),
         );
       case 1:
+        // Boards are loaded by ProfileNotifier.selectTab()
+        return BoardsTab(
+          boards: profileState.boards,
+          isLoading: profileState.isLoadingBoards,
+          isLoadingMore: profileState.isLoadingMoreBoards,
+          hasMore: profileState.hasMoreBoards,
+          isDark: isDark,
+          onLoadMore: () => ref.read(profileProvider(userId).notifier).loadMoreBoards(),
+        );
+      case 2:
         return StatsTab(state: profileState, isDark: isDark);
       default:
         return const SizedBox.shrink();

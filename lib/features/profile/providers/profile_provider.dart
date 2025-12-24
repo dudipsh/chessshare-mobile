@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/database/local_database.dart';
 import '../models/profile_data.dart';
@@ -16,10 +17,12 @@ class ProfileState {
   final List<GameReviewSummary> gameReviews;
   final bool isLoading;
   final bool isLoadingBoards;
+  final bool isLoadingMoreBoards; // Loading more boards (pagination)
+  final bool hasMoreBoards; // Has more boards to load
   final bool isRefreshing; // Loading fresh data while showing cached
   final bool isFromCache; // Data is from cache (may be stale)
   final String? error;
-  final int selectedTab; // 0: Overview, 1: Boards, 2: Games
+  final int selectedTab; // 0: Overview, 1: Boards, 2: Stats
 
   const ProfileState({
     this.profile,
@@ -30,6 +33,8 @@ class ProfileState {
     this.gameReviews = const [],
     this.isLoading = false,
     this.isLoadingBoards = false,
+    this.isLoadingMoreBoards = false,
+    this.hasMoreBoards = true,
     this.isRefreshing = false,
     this.isFromCache = false,
     this.error,
@@ -45,6 +50,8 @@ class ProfileState {
     List<GameReviewSummary>? gameReviews,
     bool? isLoading,
     bool? isLoadingBoards,
+    bool? isLoadingMoreBoards,
+    bool? hasMoreBoards,
     bool? isRefreshing,
     bool? isFromCache,
     String? error,
@@ -60,6 +67,8 @@ class ProfileState {
       gameReviews: gameReviews ?? this.gameReviews,
       isLoading: isLoading ?? this.isLoading,
       isLoadingBoards: isLoadingBoards ?? this.isLoadingBoards,
+      isLoadingMoreBoards: isLoadingMoreBoards ?? this.isLoadingMoreBoards,
+      hasMoreBoards: hasMoreBoards ?? this.hasMoreBoards,
       isRefreshing: isRefreshing ?? this.isRefreshing,
       isFromCache: isFromCache ?? this.isFromCache,
       error: clearError ? null : (error ?? this.error),
@@ -111,24 +120,33 @@ class ProfileState {
 class ProfileNotifier extends StateNotifier<ProfileState> {
   final String userId;
 
+  /// Check if viewing own profile vs another user's profile
+  bool get isOwnProfile {
+    final currentUserId = Supabase.instance.client.auth.currentUser?.id;
+    return currentUserId != null && currentUserId == userId;
+  }
+
   ProfileNotifier(this.userId) : super(const ProfileState(isLoading: true)) {
     _initProfile();
   }
 
   /// Initialize profile - load from cache first, then fetch fresh data
   Future<void> _initProfile() async {
-    // Try to load from cache first for instant UI
-    final hasCachedData = await _loadFromCache();
+    // Only use cache for own profile - other users should always fetch fresh
+    if (isOwnProfile) {
+      final hasCachedData = await _loadFromCache();
 
-    if (hasCachedData) {
-      // Have cached data - show it immediately and refresh in background
-      state = state.copyWith(isRefreshing: true);
-      await _fetchFreshData();
-      state = state.copyWith(isRefreshing: false);
-    } else {
-      // No cached data - need to fetch from network
-      await loadProfile();
+      if (hasCachedData) {
+        // Have cached data - show it immediately and refresh in background
+        state = state.copyWith(isRefreshing: true);
+        await _fetchFreshData();
+        state = state.copyWith(isRefreshing: false);
+        return;
+      }
     }
+
+    // No cached data or viewing other user - fetch from network
+    await loadProfile();
   }
 
   /// Load profile data from cache
@@ -175,69 +193,57 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
   /// Fetch fresh data from network and update cache
   Future<void> _fetchFreshData() async {
     try {
-      // Load profile data in parallel (including new stats RPC)
-      final results = await Future.wait([
-        ProfileService.getProfile(userId),
-        ProfileService.getBioLinks(userId),
-        ProfileService.getLinkedAccounts(userId),
-        ProfileService.getGameReviews(userId),
-        ProfileService.getProfileStats(), // New RPC for boards count & views
-      ]);
+      ProfileData? profile;
+      List<ProfileBioLink> bioLinks = [];
+      List<LinkedChessAccount> linkedAccounts = [];
+      List<GameReviewSummary> gameReviews = [];
+      ProfileStats? stats;
 
-      final profile = results[0] as ProfileData?;
-      final bioLinks = results[1] as List<ProfileBioLink>;
-      var linkedAccounts = results[2] as List<LinkedChessAccount>;
-      final gameReviews = results[3] as List<GameReviewSummary>;
-      final stats = results[4] as ProfileStats?;
+      if (isOwnProfile) {
+        // Own profile - fetch all data including linked accounts and stats
+        final results = await Future.wait([
+          ProfileService.getProfile(userId),
+          ProfileService.getBioLinks(userId),
+          ProfileService.getLinkedAccounts(userId),
+          ProfileService.getGameReviews(userId),
+          ProfileService.getProfileStats(), // Only for own profile
+        ]);
 
-      debugPrint('ProfileStats from RPC: boards=${stats?.boardsCount}, views=${stats?.totalViews}, likes=${stats?.totalLikes}');
+        profile = results[0] as ProfileData?;
+        bioLinks = results[1] as List<ProfileBioLink>;
+        linkedAccounts = results[2] as List<LinkedChessAccount>;
+        gameReviews = results[3] as List<GameReviewSummary>;
+        stats = results[4] as ProfileStats?;
 
-      // Also check local database for linked usernames if not from server
-      if (linkedAccounts.isEmpty) {
-        final localProfile = await LocalDatabase.getUserProfile(userId);
-        final localAccounts = <LinkedChessAccount>[];
+        debugPrint('ProfileStats from RPC: boards=${stats?.boardsCount}, views=${stats?.totalViews}, likes=${stats?.totalLikes}');
 
-        // Check local database first
-        if (localProfile != null) {
-          if (localProfile.chessComUsername != null && localProfile.chessComUsername!.isNotEmpty) {
-            localAccounts.add(LinkedChessAccount(
-              id: 'local_chesscom',
-              platform: 'chesscom',
-              username: localProfile.chessComUsername!,
-              linkedAt: DateTime.now(),
-            ));
-          }
-          if (localProfile.lichessUsername != null && localProfile.lichessUsername!.isNotEmpty) {
-            localAccounts.add(LinkedChessAccount(
-              id: 'local_lichess',
-              platform: 'lichess',
-              username: localProfile.lichessUsername!,
-              linkedAt: DateTime.now(),
-            ));
-          }
+        // Also check local database for linked usernames if not from server
+        if (linkedAccounts.isEmpty) {
+          linkedAccounts = await _getLinkedAccountsFromLocalOrProfile(profile);
+        }
+      } else {
+        // Other user's profile - only fetch public data
+        // DO NOT call getLinkedAccounts() or getProfileStats() as they return
+        // the current user's data (using auth.uid() internally)
+        final results = await Future.wait([
+          ProfileService.getProfile(userId),
+          ProfileService.getBioLinks(userId),
+          ProfileService.getUserBoards(userId), // Get public boards
+        ]);
+
+        profile = results[0] as ProfileData?;
+        bioLinks = results[1] as List<ProfileBioLink>;
+        final boards = results[2] as List<UserBoard>;
+
+        // For other users, get chess account info from their profile data
+        if (profile != null) {
+          linkedAccounts = _buildLinkedAccountsFromProfile(profile);
         }
 
-        // Also check profile data if still empty
-        if (localAccounts.isEmpty && profile != null) {
-          if (profile.chessComUsername != null && profile.chessComUsername!.isNotEmpty) {
-            localAccounts.add(LinkedChessAccount(
-              id: 'profile_chesscom',
-              platform: 'chesscom',
-              username: profile.chessComUsername!,
-              linkedAt: DateTime.now(),
-            ));
-          }
-          if (profile.lichessUsername != null && profile.lichessUsername!.isNotEmpty) {
-            localAccounts.add(LinkedChessAccount(
-              id: 'profile_lichess',
-              platform: 'lichess',
-              username: profile.lichessUsername!,
-              linkedAt: DateTime.now(),
-            ));
-          }
-        }
+        // Update boards in state
+        state = state.copyWith(boards: boards);
 
-        linkedAccounts = localAccounts;
+        debugPrint('Loaded other user profile: ${profile?.fullName}, boards: ${boards.length}');
       }
 
       // Update state with fresh data
@@ -246,27 +252,29 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
 
         state = state.copyWith(
           profile: profile,
-          stats: stats, // Use stats from new RPC
+          stats: stats, // Only set for own profile
           bioLinks: bioLinks,
           linkedAccounts: linkedAccounts,
           gameReviews: gameReviews,
           isFromCache: false,
         );
 
-        // Cache the fresh data
-        await ProfileCacheService.cacheAllProfileData(
-          profile: profile,
-          bioLinks: bioLinks,
-          linkedAccounts: linkedAccounts,
-          gameReviews: gameReviews,
-        );
-        debugPrint('Profile data fetched and cached');
+        // Only cache own profile data
+        if (isOwnProfile) {
+          await ProfileCacheService.cacheAllProfileData(
+            profile: profile,
+            bioLinks: bioLinks,
+            linkedAccounts: linkedAccounts,
+            gameReviews: gameReviews,
+          );
+          debugPrint('Profile data fetched and cached');
 
-        // Load boards only if stats RPC failed (fallback)
-        if (stats == null) {
-          debugPrint('Stats RPC failed, loading boards as fallback...');
-          await loadBoards(forceRefresh: true);
-          debugPrint('Boards loaded: ${state.boards.length} boards, total views: ${state.boards.fold(0, (sum, b) => sum + b.viewsCount)}');
+          // Load boards only if stats RPC failed (fallback)
+          if (stats == null) {
+            debugPrint('Stats RPC failed, loading boards as fallback...');
+            await loadBoards(forceRefresh: true);
+            debugPrint('Boards loaded: ${state.boards.length} boards, total views: ${state.boards.fold(0, (sum, b) => sum + b.viewsCount)}');
+          }
         }
       }
     } catch (e) {
@@ -276,6 +284,63 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
         state = state.copyWith(error: 'Failed to load profile');
       }
     }
+  }
+
+  /// Build linked accounts list from profile data (for other users)
+  List<LinkedChessAccount> _buildLinkedAccountsFromProfile(ProfileData profile) {
+    final accounts = <LinkedChessAccount>[];
+
+    if (profile.chessComUsername != null && profile.chessComUsername!.isNotEmpty) {
+      accounts.add(LinkedChessAccount(
+        id: 'profile_chesscom',
+        platform: 'chesscom',
+        username: profile.chessComUsername!,
+        linkedAt: profile.createdAt,
+      ));
+    }
+    if (profile.lichessUsername != null && profile.lichessUsername!.isNotEmpty) {
+      accounts.add(LinkedChessAccount(
+        id: 'profile_lichess',
+        platform: 'lichess',
+        username: profile.lichessUsername!,
+        linkedAt: profile.createdAt,
+      ));
+    }
+
+    return accounts;
+  }
+
+  /// Get linked accounts from local database or profile data
+  Future<List<LinkedChessAccount>> _getLinkedAccountsFromLocalOrProfile(ProfileData? profile) async {
+    final localAccounts = <LinkedChessAccount>[];
+
+    // Check local database first
+    final localProfile = await LocalDatabase.getUserProfile(userId);
+    if (localProfile != null) {
+      if (localProfile.chessComUsername != null && localProfile.chessComUsername!.isNotEmpty) {
+        localAccounts.add(LinkedChessAccount(
+          id: 'local_chesscom',
+          platform: 'chesscom',
+          username: localProfile.chessComUsername!,
+          linkedAt: DateTime.now(),
+        ));
+      }
+      if (localProfile.lichessUsername != null && localProfile.lichessUsername!.isNotEmpty) {
+        localAccounts.add(LinkedChessAccount(
+          id: 'local_lichess',
+          platform: 'lichess',
+          username: localProfile.lichessUsername!,
+          linkedAt: DateTime.now(),
+        ));
+      }
+    }
+
+    // Also check profile data if still empty
+    if (localAccounts.isEmpty && profile != null) {
+      return _buildLinkedAccountsFromProfile(profile);
+    }
+
+    return localAccounts;
   }
 
   /// Load all profile data (force network fetch)
@@ -294,32 +359,116 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
     }
   }
 
+  // Cursors for pagination (track last created_at for public and private separately)
+  DateTime? _cursorPublic;
+  DateTime? _cursorPrivate;
+
   /// Load user boards (lazy loaded when tab is selected)
   Future<void> loadBoards({bool forceRefresh = false}) async {
-    debugPrint('loadBoards called - forceRefresh: $forceRefresh, current boards: ${state.boards.length}');
+    debugPrint('loadBoards called - forceRefresh: $forceRefresh, current boards: ${state.boards.length}, isOwnProfile: $isOwnProfile');
     if (state.boards.isNotEmpty && !forceRefresh) {
       debugPrint('loadBoards skipped - already have ${state.boards.length} boards');
       return; // Already loaded
     }
 
-    state = state.copyWith(isLoadingBoards: true);
+    // Reset cursors on fresh load
+    _cursorPublic = null;
+    _cursorPrivate = null;
+
+    state = state.copyWith(isLoadingBoards: true, hasMoreBoards: true);
 
     try {
-      debugPrint('loadBoards fetching from API for userId: $userId');
-      final boards = await ProfileService.getUserBoards(userId);
+      List<UserBoard> boards;
+
+      if (isOwnProfile) {
+        // Use get_my_boards_paginated for own profile
+        debugPrint('loadBoards: fetching own boards using getMyBoards()');
+        boards = await ProfileService.getMyBoards();
+
+        // Update cursors based on returned boards
+        _updateCursors(boards);
+      } else {
+        // Use direct query for other users (public boards only)
+        debugPrint('loadBoards: fetching boards for other user $userId');
+        boards = await ProfileService.getUserBoards(userId);
+      }
+
       debugPrint('loadBoards received ${boards.length} boards from API');
 
       state = state.copyWith(
         boards: boards,
         isLoadingBoards: false,
+        hasMoreBoards: boards.length >= 20, // Assume more if we got a full page
       );
 
-      // Cache boards
-      await ProfileCacheService.cacheUserBoards(boards);
+      // Cache boards only for own profile
+      if (isOwnProfile) {
+        await ProfileCacheService.cacheUserBoards(boards);
+      }
     } catch (e) {
       debugPrint('Error loading boards: $e');
       state = state.copyWith(isLoadingBoards: false);
     }
+  }
+
+  /// Load more boards (pagination)
+  Future<void> loadMoreBoards() async {
+    if (!isOwnProfile || state.isLoadingMoreBoards || !state.hasMoreBoards) {
+      debugPrint('loadMoreBoards skipped - isOwn: $isOwnProfile, loading: ${state.isLoadingMoreBoards}, hasMore: ${state.hasMoreBoards}');
+      return;
+    }
+
+    debugPrint('loadMoreBoards: cursorPublic=$_cursorPublic, cursorPrivate=$_cursorPrivate');
+
+    state = state.copyWith(isLoadingMoreBoards: true);
+
+    try {
+      final newBoards = await ProfileService.getMyBoards(
+        cursorPublic: _cursorPublic,
+        cursorPrivate: _cursorPrivate,
+      );
+
+      debugPrint('loadMoreBoards received ${newBoards.length} more boards');
+
+      if (newBoards.isEmpty) {
+        state = state.copyWith(
+          isLoadingMoreBoards: false,
+          hasMoreBoards: false,
+        );
+        return;
+      }
+
+      // Update cursors
+      _updateCursors(newBoards);
+
+      // Append to existing boards
+      final allBoards = [...state.boards, ...newBoards];
+
+      state = state.copyWith(
+        boards: allBoards,
+        isLoadingMoreBoards: false,
+        hasMoreBoards: newBoards.length >= 20,
+      );
+    } catch (e) {
+      debugPrint('Error loading more boards: $e');
+      state = state.copyWith(isLoadingMoreBoards: false);
+    }
+  }
+
+  /// Update cursors based on loaded boards
+  void _updateCursors(List<UserBoard> boards) {
+    for (final board in boards) {
+      if (board.isPublic) {
+        if (_cursorPublic == null || board.createdAt.isBefore(_cursorPublic!)) {
+          _cursorPublic = board.createdAt;
+        }
+      } else {
+        if (_cursorPrivate == null || board.createdAt.isBefore(_cursorPrivate!)) {
+          _cursorPrivate = board.createdAt;
+        }
+      }
+    }
+    debugPrint('Updated cursors: public=$_cursorPublic, private=$_cursorPrivate');
   }
 
   /// Change selected tab

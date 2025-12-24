@@ -20,8 +20,8 @@ class GameCard extends StatelessWidget {
     final resultText = _getResultText(game.result);
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final subtleColor = isDark ? Colors.white.withOpacity(0.5) : Colors.black54;
-    final fadedColor = isDark ? Colors.white.withOpacity(0.4) : Colors.black45;
+    final subtleColor = isDark ? Colors.white.withValues(alpha: 0.5) : Colors.black54;
+    final fadedColor = isDark ? Colors.white.withValues(alpha: 0.4) : Colors.black45;
 
     return Card(
       child: InkWell(
@@ -82,7 +82,7 @@ class GameCard extends StatelessWidget {
                             vertical: 2,
                           ),
                           decoration: BoxDecoration(
-                            color: resultColor.withOpacity(0.2),
+                            color: resultColor.withValues(alpha: 0.2),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
@@ -266,7 +266,7 @@ class GameCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: (isChessCom ? Colors.green : (isDark ? Colors.white : Colors.grey)).withOpacity(0.1),
+        color: (isChessCom ? Colors.green : (isDark ? Colors.white : Colors.grey)).withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(4),
       ),
       child: Text(

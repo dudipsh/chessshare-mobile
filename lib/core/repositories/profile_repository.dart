@@ -99,50 +99,91 @@ class ProfileRepository {
     return result.data ?? [];
   }
 
-  /// Get user boards
+  /// Get own boards - uses get_my_boards_paginated RPC
+  /// Note: The RPC requires p_is_public to be true or false (not null)
+  /// So we fetch public and private boards separately and combine them
+  static Future<List<UserBoard>> getMyBoards({
+    int limit = 20,
+    DateTime? cursorPublic,
+    DateTime? cursorPrivate,
+  }) async {
+    // Fetch public and private boards in parallel
+    final results = await Future.wait([
+      _fetchMyBoardsByVisibility(isPublic: true, limit: limit, cursor: cursorPublic),
+      _fetchMyBoardsByVisibility(isPublic: false, limit: limit, cursor: cursorPrivate),
+    ]);
+
+    final publicBoards = results[0];
+    final privateBoards = results[1];
+
+    // Combine and sort by created_at descending
+    final allBoards = [...publicBoards, ...privateBoards];
+    allBoards.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+    debugPrint('getMyBoards: Combined ${publicBoards.length} public + ${privateBoards.length} private = ${allBoards.length} total boards');
+
+    return allBoards.take(limit).toList();
+  }
+
+  static Future<List<UserBoard>> _fetchMyBoardsByVisibility({
+    required bool isPublic,
+    required int limit,
+    DateTime? cursor,
+  }) async {
+    final rpcResult = await BaseRepository.executeRpc<List<UserBoard>>(
+      functionName: 'get_my_boards_paginated',
+      params: {
+        'p_is_public': isPublic,
+        'p_limit': limit,
+        'p_cursor_created_at': cursor?.toUtc().toIso8601String(),
+      },
+      parser: (response) {
+        if (response == null) return <UserBoard>[];
+        final list = response as List;
+        debugPrint('get_my_boards_paginated (isPublic=$isPublic, cursor=$cursor) returned ${list.length} boards');
+        return list.map((e) {
+          final map = e as Map<String, dynamic>;
+          return UserBoard(
+            id: map['id'] as String,
+            title: map['title'] as String? ?? 'Untitled Board',
+            coverImageUrl: map['cover_image_url'] as String?,
+            isPublic: map['is_public'] as bool? ?? true,
+            viewsCount: map['views_count'] as int? ?? 0,
+            likesCount: map['likes_count'] as int? ?? 0,
+            createdAt: DateTime.parse(map['created_at'] as String),
+            authorName: map['author_name'] as String?,
+            authorAvatarUrl: map['author_avatar_url'] as String?,
+          );
+        }).toList();
+      },
+      defaultValue: <UserBoard>[],
+    );
+
+    return rpcResult.data ?? [];
+  }
+
+  /// Get another user's public boards - uses direct query
   static Future<List<UserBoard>> getUserBoards(
     String userId, {
     int limit = 20,
     int offset = 0,
   }) async {
-    // Try RPC first
-    final rpcResult = await BaseRepository.executeRpc<List<UserBoard>>(
-      functionName: 'get_user_boards_with_author',
-      params: {
-        'p_user_id': userId,
-        'p_limit': limit,
-        'p_offset': offset,
-      },
-      parser: (response) {
-        if (response == null) return <UserBoard>[];
-        final list = response as List;
-        return list
-            .map((e) => UserBoard.fromJson(e as Map<String, dynamic>))
-            .toList();
-      },
-      defaultValue: null, // Use null to detect failure
-    );
-
-    // If RPC worked, return the result
-    if (rpcResult.success && rpcResult.data != null) {
-      return rpcResult.data!;
-    }
-
-    // Fallback: Query boards table directly
-    final directResult = await BaseRepository.executeAuth<List<UserBoard>>(
+    // Query boards table directly for other users (only public boards)
+    final result = await BaseRepository.executeAuth<List<UserBoard>>(
       operation: 'getUserBoards',
       query: (client) async {
         final response = await client
             .from('boards')
             .select('id, title, cover_image_url, is_public, views_count, likes_count, created_at')
             .eq('user_id', userId)
+            .eq('is_public', true) // Only public boards for other users
             .order('created_at', ascending: false)
             .range(offset, offset + limit - 1);
 
         final list = response as List;
+        debugPrint('getUserBoards: Direct query returned ${list.length} boards for user $userId');
         if (list.isEmpty) return <UserBoard>[];
         return list.map((e) {
-          // Map the table columns to UserBoard model
           return UserBoard(
             id: e['id'] as String,
             title: e['title'] as String? ?? 'Untitled Board',
@@ -157,7 +198,7 @@ class ProfileRepository {
       defaultValue: <UserBoard>[],
     );
 
-    return directResult.data ?? [];
+    return result.data ?? [];
   }
 
   /// Get game reviews summary

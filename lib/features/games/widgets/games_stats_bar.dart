@@ -4,23 +4,21 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/theme/colors.dart';
 import '../providers/games_provider.dart';
 
-/// Stats bar showing games statistics
+/// Stats bar showing games statistics - styled to match Profile
 class GamesStatsBar extends ConsumerWidget {
   const GamesStatsBar({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final stats = ref.watch(gamesStatsProvider);
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest,
-        border: Border(
-          bottom: BorderSide(color: theme.dividerColor),
-        ),
+        color: isDark ? Colors.grey[850] : Colors.grey[100],
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -28,27 +26,37 @@ class GamesStatsBar extends ConsumerWidget {
           _StatItem(
             value: '${stats['total']}',
             label: 'Games',
-            color: isDark ? Colors.white70 : Colors.black87,
+            icon: Icons.sports_esports,
+            iconColor: AppColors.primary,
+            isDark: isDark,
           ),
           _StatItem(
             value: '${stats['wins']}',
             label: 'Wins',
-            color: AppColors.win,
+            icon: Icons.emoji_events,
+            iconColor: AppColors.win,
+            isDark: isDark,
           ),
           _StatItem(
             value: '${stats['losses']}',
             label: 'Losses',
-            color: AppColors.loss,
+            icon: Icons.close,
+            iconColor: AppColors.loss,
+            isDark: isDark,
           ),
           _StatItem(
             value: '${stats['draws']}',
             label: 'Draws',
-            color: AppColors.draw,
+            icon: Icons.balance,
+            iconColor: AppColors.draw,
+            isDark: isDark,
           ),
           _StatItem(
             value: '${(stats['winRate'] as double).toStringAsFixed(0)}%',
             label: 'Win Rate',
-            color: AppColors.accent,
+            icon: Icons.trending_up,
+            iconColor: AppColors.accent,
+            isDark: isDark,
           ),
         ],
       ),
@@ -59,32 +67,45 @@ class GamesStatsBar extends ConsumerWidget {
 class _StatItem extends StatelessWidget {
   final String value;
   final String label;
-  final Color color;
+  final IconData icon;
+  final Color iconColor;
+  final bool isDark;
 
   const _StatItem({
     required this.value,
     required this.label,
-    required this.color,
+    required this.icon,
+    required this.iconColor,
+    required this.isDark,
   });
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return Column(
       children: [
+        Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: iconColor.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(icon, color: iconColor, size: 18),
+        ),
+        const SizedBox(height: 6),
         Text(
           value,
           style: TextStyle(
-            fontSize: 18,
+            fontSize: 15,
             fontWeight: FontWeight.bold,
-            color: color,
+            color: isDark ? Colors.white : Colors.black87,
           ),
         ),
         Text(
           label,
           style: TextStyle(
-            fontSize: 11,
-            color: theme.colorScheme.onSurface.withOpacity(0.6),
+            fontSize: 10,
+            color: isDark ? Colors.grey[400] : Colors.grey[600],
           ),
         ),
       ],

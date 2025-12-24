@@ -110,7 +110,20 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/puzzle',
         name: 'puzzle',
         builder: (context, state) {
-          final puzzle = state.extra as Puzzle;
+          final extra = state.extra;
+          // Support both single puzzle and puzzle with list context
+          if (extra is Map<String, dynamic>) {
+            final puzzle = extra['puzzle'] as Puzzle;
+            final puzzlesList = extra['puzzlesList'] as List<Puzzle>?;
+            final currentIndex = extra['currentIndex'] as int?;
+            return PuzzleScreen(
+              puzzle: puzzle,
+              puzzlesList: puzzlesList,
+              currentIndex: currentIndex,
+            );
+          }
+          // Fallback for single puzzle
+          final puzzle = extra as Puzzle;
           return PuzzleScreen(puzzle: puzzle);
         },
       ),

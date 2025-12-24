@@ -20,51 +20,98 @@ class DateNavigationHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        IconButton(
-          onPressed: onPrevious,
-          icon: const Icon(Icons.chevron_left, size: 28),
-          tooltip: 'Previous day',
-        ),
-        Text(
-          _formatDate(selectedDate),
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: isDark ? Colors.white : Colors.black87,
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          _buildNavButton(
+            icon: Icons.chevron_left,
+            onPressed: onPrevious,
+            enabled: true,
           ),
-        ),
-        if (isToday)
+          const SizedBox(width: 8),
           Container(
-            margin: const EdgeInsets.only(left: 8),
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             decoration: BoxDecoration(
-              color: AppColors.primary.withOpacity(0.2),
+              color: isDark ? Colors.grey[850] : Colors.grey[100],
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Text(
-              'Today',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: AppColors.primary,
-              ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.calendar_today,
+                  size: 16,
+                  color: isDark ? Colors.grey[400] : Colors.grey[600],
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  _formatDate(selectedDate),
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? Colors.white : Colors.black87,
+                  ),
+                ),
+                if (isToday) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Text(
+                      'Today',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
-        IconButton(
-          onPressed: isToday ? null : onNext,
-          icon: Icon(
-            Icons.chevron_right,
-            size: 28,
-            color: isToday
-                ? (isDark ? Colors.white24 : Colors.grey.shade300)
-                : null,
+          const SizedBox(width: 8),
+          _buildNavButton(
+            icon: Icons.chevron_right,
+            onPressed: onNext,
+            enabled: !isToday,
           ),
-          tooltip: 'Next day',
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNavButton({
+    required IconData icon,
+    required VoidCallback? onPressed,
+    required bool enabled,
+  }) {
+    return Container(
+      width: 36,
+      height: 36,
+      decoration: BoxDecoration(
+        color: enabled
+            ? (isDark ? Colors.grey[850] : Colors.grey[100])
+            : (isDark ? Colors.grey[900] : Colors.grey[50]),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: IconButton(
+        onPressed: enabled ? onPressed : null,
+        padding: EdgeInsets.zero,
+        icon: Icon(
+          icon,
+          size: 20,
+          color: enabled
+              ? (isDark ? Colors.white : Colors.black87)
+              : (isDark ? Colors.grey[700] : Colors.grey[300]),
         ),
-      ],
+        tooltip: icon == Icons.chevron_left ? 'Previous day' : 'Next day',
+      ),
     );
   }
 

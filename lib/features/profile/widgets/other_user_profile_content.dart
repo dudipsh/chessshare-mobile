@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../app/theme/colors.dart';
+import '../models/profile_data.dart';
 import '../providers/profile_provider.dart';
 
 class OtherUserProfileContent extends StatelessWidget {
@@ -8,6 +10,7 @@ class OtherUserProfileContent extends StatelessWidget {
   final String? userName;
   final String? userAvatar;
   final bool isDark;
+  final VoidCallback? onLoadBoards;
 
   const OtherUserProfileContent({
     super.key,
@@ -15,6 +18,7 @@ class OtherUserProfileContent extends StatelessWidget {
     required this.userName,
     required this.userAvatar,
     required this.isDark,
+    this.onLoadBoards,
   });
 
   @override
@@ -33,6 +37,9 @@ class OtherUserProfileContent extends StatelessWidget {
           const SizedBox(height: 24),
           _buildChessAccountsSection(),
         ],
+        // Show boards section
+        const SizedBox(height: 24),
+        _buildBoardsSection(context),
       ],
     );
   }
@@ -159,6 +166,148 @@ class OtherUserProfileContent extends StatelessWidget {
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildBoardsSection(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Boards',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: isDark ? Colors.white : Colors.black87,
+          ),
+        ),
+        const SizedBox(height: 12),
+        if (profileState.isLoadingBoards)
+          const Center(
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: CircularProgressIndicator(),
+            ),
+          )
+        else if (profileState.boards.isEmpty)
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: isDark ? Colors.grey[850] : Colors.grey[100],
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Center(
+              child: Column(
+                children: [
+                  Icon(
+                    Icons.dashboard_outlined,
+                    size: 48,
+                    color: isDark ? Colors.grey[600] : Colors.grey[400],
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'No public boards',
+                    style: TextStyle(
+                      color: isDark ? Colors.grey[400] : Colors.grey[600],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          )
+        else
+          _buildBoardsGrid(context),
+      ],
+    );
+  }
+
+  Widget _buildBoardsGrid(BuildContext context) {
+    // Show up to 4 boards in a 2x2 grid
+    final displayBoards = profileState.boards.take(4).toList();
+
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        childAspectRatio: 0.85,
+        crossAxisSpacing: 12,
+        mainAxisSpacing: 12,
+      ),
+      itemCount: displayBoards.length,
+      itemBuilder: (context, index) => _buildBoardCard(context, displayBoards[index]),
+    );
+  }
+
+  Widget _buildBoardCard(BuildContext context, UserBoard board) {
+    return GestureDetector(
+      onTap: () {
+        context.pushNamed('study-board', extra: {'boardId': board.id});
+      },
+      child: Container(
+        decoration: BoxDecoration(
+          color: isDark ? Colors.grey[850] : Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: isDark ? Colors.grey[700]! : Colors.grey[200]!),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Container(
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.1),
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+                ),
+                child: board.coverImageUrl != null
+                    ? ClipRRect(
+                        borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+                        child: Image.network(
+                          board.coverImageUrl!,
+                          fit: BoxFit.cover,
+                          width: double.infinity,
+                        ),
+                      )
+                    : const Center(
+                        child: Icon(Icons.dashboard, size: 40, color: AppColors.primary),
+                      ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    board.title,
+                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Icon(Icons.visibility, size: 14, color: Colors.grey[500]),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${board.viewsCount}',
+                        style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                      ),
+                      const SizedBox(width: 8),
+                      Icon(Icons.favorite, size: 14, color: Colors.grey[500]),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${board.likesCount}',
+                        style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -194,14 +194,18 @@ class GameReviewNotifier extends StateNotifier<GameReviewState> {
       final moves = <AnalyzedMove>[];
       if (movesResponse != null && movesResponse is List) {
         for (final moveData in movesResponse) {
+          final fen = moveData['fen'] as String;
+          final san = moveData['san'] as String;
+          // Compute UCI from FEN and SAN (server doesn't store UCI)
+          final uci = ChessPositionUtils.sanToUci(fen, san) ?? '';
           moves.add(AnalyzedMove(
             id: '${reviewId}_${moveData['move_index']}',
             gameReviewId: reviewId,
             moveNumber: moveData['move_index'] + 1,
             color: (moveData['move_index'] as int) % 2 == 0 ? 'white' : 'black',
-            fen: moveData['fen'] as String,
-            san: moveData['san'] as String,
-            uci: '', // Not stored in server
+            fen: fen,
+            san: san,
+            uci: uci,
             classification: MoveClassificationExtension.fromJson(
               moveData['marker_type'] as String? ?? 'good',
             ),
