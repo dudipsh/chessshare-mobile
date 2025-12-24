@@ -68,6 +68,7 @@ abstract class ChessPositionUtils {
   }
 
   /// Get valid moves for a position as an immutable map
+  /// Includes standard castling destinations (g1/c1 or g8/c8) in addition to rook squares
   static Map<Square, Set<Square>> getValidMoves(Chess position) {
     final Map<Square, Set<Square>> moves = {};
 
@@ -76,6 +77,33 @@ abstract class ChessPositionUtils {
       final toSquares = entry.value;
       if (toSquares.isNotEmpty) {
         moves[from] = toSquares.squares.toSet();
+      }
+    }
+
+    // Add standard castling destinations for the king
+    // dartchess returns rook squares as castling destinations (Chess960 style)
+    // but we also want to allow king moving 2 squares (standard notation)
+    final king = position.board.kingOf(position.turn);
+    if (king != null && moves.containsKey(king)) {
+      final kingMoves = moves[king]!;
+      final Set<Square> additionalMoves = {};
+
+      // Check if king can castle kingside (to g1/g8)
+      final kingsideRook = position.turn == Side.white ? Square.h1 : Square.h8;
+      final kingsideDest = position.turn == Side.white ? Square.g1 : Square.g8;
+      if (kingMoves.contains(kingsideRook)) {
+        additionalMoves.add(kingsideDest);
+      }
+
+      // Check if king can castle queenside (to c1/c8)
+      final queensideRook = position.turn == Side.white ? Square.a1 : Square.a8;
+      final queensideDest = position.turn == Side.white ? Square.c1 : Square.c8;
+      if (kingMoves.contains(queensideRook)) {
+        additionalMoves.add(queensideDest);
+      }
+
+      if (additionalMoves.isNotEmpty) {
+        moves[king] = {...kingMoves, ...additionalMoves};
       }
     }
 
