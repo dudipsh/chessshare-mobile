@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:dartchess/dartchess.dart';
-import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../core/api/supabase_service.dart';
@@ -107,7 +106,6 @@ class GameAnalysisService {
   /// Cancel the current analysis
   void cancelAnalysis() {
     if (_isAnalyzing) {
-      debugPrint('GameAnalysisService: Cancelling analysis...');
       _isCancelled = true;
     }
   }
@@ -172,7 +170,6 @@ class GameAnalysisService {
       for (var i = 0; i < positions.length; i++) {
         // Check for cancellation
         if (_isCancelled) {
-          debugPrint('GameAnalysisService: Analysis cancelled at move $i');
           throw StateError('Analysis cancelled');
         }
 
@@ -229,7 +226,6 @@ class GameAnalysisService {
 
         // Check cancellation after engine analysis
         if (_isCancelled) {
-          debugPrint('GameAnalysisService: Analysis cancelled at move $i');
           throw StateError('Analysis cancelled');
         }
 
@@ -393,8 +389,6 @@ class GameAnalysisService {
         createdAt: createdAt,
       );
     } catch (e) {
-      debugPrint('Analysis error: $e');
-
       // Update review with error
       await LocalDatabase.saveGameReview({
         'id': reviewId,
@@ -415,7 +409,6 @@ class GameAnalysisService {
 
       // Release Stockfish after analysis completes
       if (_stockfish != null) {
-        debugPrint('GameAnalysisService: Releasing Stockfish after analysis');
         await GlobalStockfishManager.instance.release(_ownerId);
         _stockfish = null;
       }
@@ -481,13 +474,12 @@ class GameAnalysisService {
             color: sideToMove == Side.white ? 'white' : 'black',
             legalMoveCount: legalMoves,
           ));
-        } catch (e) {
-          debugPrint('Error parsing move $token: $e');
+        } catch (_) {
           continue;
         }
       }
-    } catch (e) {
-      debugPrint('Error parsing PGN: $e');
+    } catch (_) {
+      // PGN parsing error
     }
 
     return moves;
@@ -573,8 +565,8 @@ class GameAnalysisService {
             if (move != null) {
               san = position.makeSan(move).$2;
             }
-          } catch (e) {
-            debugPrint('Error converting UCI to SAN: $e');
+          } catch (_) {
+            // Move conversion failed - likely invalid for this position
           }
         }
 
@@ -612,12 +604,10 @@ class GameAnalysisService {
   }) async {
     final user = SupabaseService.currentUser;
     if (user == null) {
-      debugPrint('Server sync: No authenticated user, skipping');
       return;
     }
 
     try {
-      debugPrint('Server sync: Saving game review to server...');
 
       // 1. Save game review metadata
       final serverReviewId = await GamesRepository.saveGameReview(
@@ -648,11 +638,8 @@ class GameAnalysisService {
       );
 
       if (serverReviewId == null) {
-        debugPrint('Server sync: Failed to save game review');
         return;
       }
-
-      debugPrint('Server sync: Game review saved with ID: $serverReviewId');
 
       // 2. Save move evaluations
       final movesData = analyzedMoves.map((m) => {
@@ -666,12 +653,10 @@ class GameAnalysisService {
         'centipawn_loss': m.centipawnLoss,
       }).toList();
 
-      final movesSaved = await GamesRepository.saveGameReviewMoves(
+      await GamesRepository.saveGameReviewMoves(
         gameReviewId: serverReviewId,
         moves: movesData,
       );
-
-      debugPrint('Server sync: Moves saved: $movesSaved');
 
       // 3. Save personal mistakes (puzzles)
       if (puzzleMoves.isNotEmpty) {
@@ -686,18 +671,13 @@ class GameAnalysisService {
             .toList();
 
         if (mistakesData.isNotEmpty) {
-          final mistakesSaved = await GamesRepository.savePersonalMistakes(
+          await GamesRepository.savePersonalMistakes(
             gameReviewId: serverReviewId,
             mistakes: mistakesData,
           );
-
-          debugPrint('Server sync: Puzzles saved: $mistakesSaved (${mistakesData.length} puzzles)');
         }
       }
-
-      debugPrint('Server sync: Complete!');
-    } catch (e) {
-      debugPrint('Server sync error: $e');
+    } catch (_) {
       // Don't throw - server sync failure shouldn't break local analysis
     }
   }

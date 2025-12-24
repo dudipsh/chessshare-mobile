@@ -149,7 +149,7 @@ class ManageAccountsSheet extends ConsumerWidget {
           ),
           TextButton(
             onPressed: () async {
-              Navigator.pop(dialogContext); // Close dialog first
+              Navigator.pop(dialogContext); // Close dialog only
 
               await onConfirm();
 
@@ -162,11 +162,8 @@ class ManageAccountsSheet extends ConsumerWidget {
                 ref.read(profileProvider(profile.id).notifier).refresh();
               }
 
-              // Close bottom sheet after a small delay to avoid navigator lock
-              await Future.delayed(const Duration(milliseconds: 100));
-              if (context.mounted) {
-                Navigator.pop(context); // Close bottom sheet
-              }
+              // Don't close the bottom sheet - let it rebuild with updated state
+              // User can close it manually with swipe or X button
 
               scaffoldMessenger.showSnackBar(
                 SnackBar(content: Text('$platformName account unlinked')),

@@ -82,22 +82,18 @@ class StockfishService {
     }
 
     _setState(StockfishState.initializing);
-    debugPrint('Stockfish: Starting initialization...');
 
     try {
       _stockfish = Stockfish();
-      debugPrint('Stockfish: Instance created, state: ${_stockfish?.state}');
 
       // Wait for the Stockfish binary to be ready before sending commands
       await _waitForStockfishReady();
-      debugPrint('Stockfish: Binary ready');
 
       // Set up single listener that handles all output
       _readyCompleter = Completer<void>();
       _outputSubscription = _stockfish!.stdout.listen(_handleStdout);
 
       // Send UCI command to start protocol
-      debugPrint('Stockfish: Sending uci command...');
       _send('uci');
 
       // Wait for uciok response
@@ -107,16 +103,13 @@ class StockfishService {
           throw TimeoutException('Stockfish failed to respond to UCI');
         },
       );
-      debugPrint('Stockfish: UCI OK received');
 
       // Apply configuration
       await _applyConfig();
-      debugPrint('Stockfish: Config applied');
 
       _setState(StockfishState.ready);
-      debugPrint('Stockfish: Initialization complete');
     } catch (e) {
-      debugPrint('Stockfish: Initialization error - $e');
+      debugPrint('Stockfish initialization error: $e');
       _setState(StockfishState.uninitialized);
       await _cleanup();
       rethrow;
@@ -134,7 +127,6 @@ class StockfishService {
 
     while (stopwatch.elapsed < maxWait) {
       final stateValue = _stockfish!.state.value;
-      debugPrint('Stockfish: Waiting for binary, current state: $stateValue');
 
       // StockfishState from the package: starting, ready, disposed
       if (stateValue.name == 'ready') {
@@ -151,7 +143,6 @@ class StockfishService {
   }
 
   void _handleStdout(String line) {
-    debugPrint('Stockfish output: $line');
     _outputController.add(line);
 
     // Handle initialization response
@@ -330,7 +321,6 @@ class StockfishService {
     if (_stockfish == null) return;
     // Only send if stockfish is ready
     if (_stockfish!.state.value.name != 'ready') {
-      debugPrint('Stockfish: Cannot send "$command" - engine not ready');
       return;
     }
     _stockfish!.stdin = command;
@@ -355,7 +345,7 @@ class StockfishService {
     await _readyCompleter!.future.timeout(
       const Duration(seconds: 5),
       onTimeout: () {
-        debugPrint('Stockfish: Config apply timeout');
+        // Config apply timeout - proceed anyway
       },
     );
   }

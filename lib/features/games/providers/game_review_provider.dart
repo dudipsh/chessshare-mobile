@@ -156,7 +156,6 @@ class GameReviewNotifier extends StateNotifier<GameReviewState> {
       state = state.copyWith(isLoading: false);
       await analyzeGame(game);
     } catch (e) {
-      debugPrint('Error loading review: $e');
       state = state.copyWith(
         isLoading: false,
         error: e.toString(),
@@ -198,6 +197,12 @@ class GameReviewNotifier extends StateNotifier<GameReviewState> {
           final san = moveData['san'] as String;
           // Compute UCI from FEN and SAN (server doesn't store UCI)
           final uci = ChessPositionUtils.sanToUci(fen, san) ?? '';
+
+          // Validate and convert best move - ensure it's legal for this position
+          final rawBestMove = moveData['best_move'] as String?;
+          final (validatedBestMove, bestMoveUci) =
+              ChessPositionUtils.validateAndConvertBestMove(fen, rawBestMove);
+
           moves.add(AnalyzedMove(
             id: '${reviewId}_${moveData['move_index']}',
             gameReviewId: reviewId,
@@ -211,7 +216,8 @@ class GameReviewNotifier extends StateNotifier<GameReviewState> {
             ),
             evalBefore: moveData['evaluation_before'] as int?,
             evalAfter: moveData['evaluation_after'] as int?,
-            bestMove: moveData['best_move'] as String?,
+            bestMove: validatedBestMove,
+            bestMoveUci: bestMoveUci,
             centipawnLoss: moveData['centipawn_loss'] as int? ?? 0,
           ));
         }
@@ -245,10 +251,8 @@ class GameReviewNotifier extends StateNotifier<GameReviewState> {
       // Cache to local database for offline access
       await _cacheReviewLocally(review);
 
-      debugPrint('Loaded game review from server: ${review.id}');
       return review;
-    } catch (e) {
-      debugPrint('Error loading review from server: $e');
+    } catch (_) {
       return null;
     }
   }
@@ -276,8 +280,8 @@ class GameReviewNotifier extends StateNotifier<GameReviewState> {
       await LocalDatabase.saveAnalyzedMoves(
         review.moves.map((m) => m.toJson()).toList(),
       );
-    } catch (e) {
-      debugPrint('Error caching review locally: $e');
+    } catch (_) {
+      // Caching failed - non-critical error
     }
   }
 
@@ -421,7 +425,6 @@ class GameReviewNotifier extends StateNotifier<GameReviewState> {
   /// Cancel ongoing analysis
   void cancelAnalysis() {
     if (_analysisService.isAnalyzing) {
-      debugPrint('GameReviewNotifier: Cancelling analysis...');
       _analysisService.cancelAnalysis();
       state = state.copyWith(
         isAnalyzing: false,

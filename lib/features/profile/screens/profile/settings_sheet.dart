@@ -159,8 +159,14 @@ class _SettingsSheetContent extends ConsumerWidget {
       ),
       trailing: const Icon(Icons.chevron_right),
       onTap: () {
-        Navigator.pop(context);
-        showManageAccountsSheet(context, ref);
+        // Get the navigator before popping
+        final navigator = Navigator.of(context);
+        final rootContext = navigator.context;
+        navigator.pop();
+        // Use a post-frame callback to ensure the pop completes
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          showManageAccountsSheet(rootContext, ref);
+        });
       },
     );
   }

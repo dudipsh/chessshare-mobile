@@ -292,4 +292,68 @@ abstract class ChessPositionUtils {
     }
     return null;
   }
+
+  /// Validate if a move (SAN or UCI) is legal for a given FEN position
+  /// Returns the validated SAN notation if valid, null otherwise
+  static String? validateMove(String fen, String move) {
+    if (move.isEmpty || fen.isEmpty) return null;
+
+    try {
+      final position = Chess.fromSetup(Setup.parseFen(fen));
+
+      // Try parsing as SAN first
+      final sanMove = position.parseSan(move);
+      if (sanMove != null) {
+        // Move is valid, return SAN
+        return position.makeSan(sanMove).$2;
+      }
+
+      // Try parsing as UCI
+      final uciMove = parseUciMove(move);
+      if (uciMove != null && position.isLegal(uciMove)) {
+        return position.makeSan(uciMove).$2;
+      }
+    } catch (e) {
+      // Invalid move
+    }
+    return null;
+  }
+
+  /// Validate and get both SAN and UCI for a best move
+  /// Returns (san, uci) tuple if valid, (null, null) otherwise
+  static (String?, String?) validateAndConvertBestMove(String fen, String? bestMove) {
+    if (bestMove == null || bestMove.isEmpty || fen.isEmpty) {
+      return (null, null);
+    }
+
+    try {
+      final position = Chess.fromSetup(Setup.parseFen(fen));
+
+      // Try parsing as SAN first
+      final sanMove = position.parseSan(bestMove);
+      if (sanMove != null && position.isLegal(sanMove)) {
+        final san = position.makeSan(sanMove).$2;
+        String uci;
+        if (sanMove is NormalMove) {
+          final promo = sanMove.promotion != null
+              ? sanMove.promotion!.name[0].toLowerCase()
+              : '';
+          uci = '${sanMove.from.name}${sanMove.to.name}$promo';
+        } else {
+          uci = bestMove;
+        }
+        return (san, uci);
+      }
+
+      // Try parsing as UCI
+      final uciMove = parseUciMove(bestMove);
+      if (uciMove != null && position.isLegal(uciMove)) {
+        final san = position.makeSan(uciMove).$2;
+        return (san, bestMove);
+      }
+    } catch (e) {
+      // Invalid move
+    }
+    return (null, null);
+  }
 }

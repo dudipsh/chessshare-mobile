@@ -277,6 +277,19 @@ class _GameReviewScreenState extends ConsumerState<GameReviewScreen> {
                        move.classification == MoveClassification.great;
     if (isBestMove) return const SizedBox.shrink();
 
+    // Validate that best move is actually legal for this position
+    // This is a safety check - validation should already be done in provider
+    if (move.fen.isNotEmpty) {
+      final validatedSan = ChessPositionUtils.validateMove(
+        move.fen,
+        move.bestMoveUci ?? move.bestMove!,
+      );
+      if (validatedSan == null) {
+        // Best move is not valid for this position - don't show hint
+        return const SizedBox.shrink();
+      }
+    }
+
     // Format best move with piece icon
     final isWhite = move.color == 'white';
     String formattedBestMove;

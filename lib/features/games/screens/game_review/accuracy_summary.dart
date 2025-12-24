@@ -22,7 +22,7 @@ class AccuracySummary extends StatelessWidget {
     final opponentSummary = review.opponentSummary;
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       decoration: BoxDecoration(
         color: isDark ? Colors.grey[850] : Colors.grey[100],
         border: Border(
@@ -39,12 +39,12 @@ class AccuracySummary extends StatelessWidget {
             ),
           ),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
             child: Text(
               'vs',
               style: TextStyle(
                 color: isDark ? Colors.grey[500] : Colors.grey[600],
-                fontSize: 14,
+                fontSize: 12,
               ),
             ),
           ),
@@ -83,27 +83,40 @@ class _PlayerAccuracy extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: isPlayer ? CrossAxisAlignment.start : CrossAxisAlignment.end,
+    return Row(
+      mainAxisAlignment: isPlayer ? MainAxisAlignment.start : MainAxisAlignment.end,
       children: [
+        if (!isPlayer) ...[
+          Text(
+            '${accuracy.toStringAsFixed(1)}%',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: _getAccuracyColor(accuracy),
+            ),
+          ),
+          const SizedBox(width: 8),
+        ],
         Text(
           username,
           style: TextStyle(
-            fontSize: 14,
+            fontSize: 13,
             fontWeight: FontWeight.w500,
             color: isPlayer ? AppColors.primary : null,
           ),
           overflow: TextOverflow.ellipsis,
         ),
-        const SizedBox(height: 4),
-        Text(
-          '${accuracy.toStringAsFixed(1)}%',
-          style: TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
-            color: _getAccuracyColor(accuracy),
+        if (isPlayer) ...[
+          const SizedBox(width: 8),
+          Text(
+            '${accuracy.toStringAsFixed(1)}%',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: _getAccuracyColor(accuracy),
+            ),
           ),
-        ),
+        ],
       ],
     );
   }
