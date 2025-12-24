@@ -609,3 +609,35 @@ final gamesStatsProvider = Provider<Map<String, dynamic>>((ref) {
     'winRate': (wins / games.length * 100),
   };
 });
+
+/// Stats provider filtered by platform (null = all platforms)
+final filteredGamesStatsProvider = Provider.family<Map<String, dynamic>, GamePlatform?>((ref, platform) {
+  final allGames = ref.watch(gamesProvider).games;
+
+  // Filter by platform if specified
+  final games = platform != null
+      ? allGames.where((g) => g.platform == platform).toList()
+      : allGames;
+
+  if (games.isEmpty) {
+    return {
+      'total': 0,
+      'wins': 0,
+      'losses': 0,
+      'draws': 0,
+      'winRate': 0.0,
+    };
+  }
+
+  final wins = games.where((g) => g.result == GameResult.win).length;
+  final losses = games.where((g) => g.result == GameResult.loss).length;
+  final draws = games.where((g) => g.result == GameResult.draw).length;
+
+  return {
+    'total': games.length,
+    'wins': wins,
+    'losses': losses,
+    'draws': draws,
+    'winRate': (wins / games.length * 100),
+  };
+});

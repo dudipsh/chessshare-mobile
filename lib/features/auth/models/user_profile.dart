@@ -58,14 +58,16 @@ class UserProfile {
     String? lichessUsername,
     String? subscriptionType,
     DateTime? subscriptionEndDate,
+    bool clearChessComUsername = false,
+    bool clearLichessUsername = false,
   }) {
     return UserProfile(
       id: id,
       email: email,
       fullName: fullName ?? this.fullName,
       avatarUrl: avatarUrl ?? this.avatarUrl,
-      chessComUsername: chessComUsername ?? this.chessComUsername,
-      lichessUsername: lichessUsername ?? this.lichessUsername,
+      chessComUsername: clearChessComUsername ? null : (chessComUsername ?? this.chessComUsername),
+      lichessUsername: clearLichessUsername ? null : (lichessUsername ?? this.lichessUsername),
       subscriptionType: subscriptionType ?? this.subscriptionType,
       subscriptionEndDate: subscriptionEndDate ?? this.subscriptionEndDate,
       createdAt: createdAt,

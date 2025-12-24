@@ -8,6 +8,7 @@ import '../../../../core/subscription/subscription_provider.dart';
 import '../../../../core/subscription/subscription_tier.dart';
 import '../../../auth/providers/auth_provider.dart';
 import '../../widgets/subscription_sheet.dart';
+import 'manage_accounts_sheet.dart';
 
 void showProfileSettingsSheet(BuildContext context, WidgetRef ref) {
   final themeState = ref.watch(themeProvider);
@@ -66,6 +67,9 @@ class _SettingsSheetContent extends ConsumerWidget {
           const SizedBox(height: 16),
           _buildSectionHeader('Appearance'),
           _buildDarkModeToggle(context, ref, themeState),
+          const SizedBox(height: 16),
+          _buildSectionHeader('Chess Accounts'),
+          _buildLinkedAccountsTile(context, ref),
           const SizedBox(height: 16),
           _buildSectionHeader('Legal & Support'),
           _buildLegalLinks(context),
@@ -134,6 +138,30 @@ class _SettingsSheetContent extends ConsumerWidget {
              MediaQuery.platformBrightnessOf(context) == Brightness.dark),
         onChanged: (v) => ref.read(themeProvider.notifier).setDarkMode(v),
       ),
+    );
+  }
+
+  Widget _buildLinkedAccountsTile(BuildContext context, WidgetRef ref) {
+    final authState = ref.watch(authProvider);
+    final profile = authState.profile;
+    final linkedCount = [
+      profile?.chessComUsername,
+      profile?.lichessUsername,
+    ].where((u) => u != null).length;
+
+    return ListTile(
+      leading: const Icon(Icons.link, color: AppColors.primary),
+      title: const Text('Linked Accounts'),
+      subtitle: Text(
+        linkedCount == 0
+            ? 'No accounts linked'
+            : '$linkedCount account${linkedCount > 1 ? 's' : ''} linked',
+      ),
+      trailing: const Icon(Icons.chevron_right),
+      onTap: () {
+        Navigator.pop(context);
+        showManageAccountsSheet(context, ref);
+      },
     );
   }
 

@@ -524,6 +524,69 @@ class AuthNotifier extends StateNotifier<AppAuthState> {
     }
   }
 
+  /// Delete linked chess account from Supabase
+  Future<void> _deleteLinkedChessAccount(String platform) async {
+    try {
+      await SupabaseService.client
+          .from('linked_chess_accounts')
+          .delete()
+          .eq('platform', platform);
+      debugPrint('Deleted linked $platform account');
+    } catch (e) {
+      debugPrint('Failed to delete linked chess account: $e');
+    }
+  }
+
+  /// Unlink Chess.com account
+  Future<void> unlinkChessComAccount() async {
+    if (state.profile == null) return;
+
+    try {
+      // Update local database
+      await LocalDatabase.updateUserProfile(
+        state.profile!.id,
+        {'chess_com_username': null},
+      );
+
+      // Delete from linked_chess_accounts table
+      if (state.user != null) {
+        await _deleteLinkedChessAccount('chesscom');
+      }
+
+      state = state.copyWith(
+        profile: state.profile!.copyWith(chessComUsername: null, clearChessComUsername: true),
+      );
+    } catch (e) {
+      debugPrint('Error unlinking Chess.com account: $e');
+      state = state.copyWith(error: e.toString());
+    }
+  }
+
+  /// Unlink Lichess account
+  Future<void> unlinkLichessAccount() async {
+    if (state.profile == null) return;
+
+    try {
+      // Update local database
+      await LocalDatabase.updateUserProfile(
+        state.profile!.id,
+        {'lichess_username': null},
+      );
+
+      // Delete from linked_chess_accounts table
+      if (state.user != null) {
+        await _deleteLinkedChessAccount('lichess');
+      }
+
+      state = state.copyWith(
+        profile: state.profile!.copyWith(lichessUsername: null, clearLichessUsername: true),
+      );
+    } catch (e) {
+      debugPrint('Error unlinking Lichess account: $e');
+      state = state.copyWith(error: e.toString());
+    }
+  }
+
   @override
   void dispose() {
     _authSubscription?.cancel();

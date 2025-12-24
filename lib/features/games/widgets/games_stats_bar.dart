@@ -2,15 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/colors.dart';
+import '../models/chess_game.dart';
 import '../providers/games_provider.dart';
 
 /// Stats bar showing games statistics - styled to match Profile
 class GamesStatsBar extends ConsumerWidget {
-  const GamesStatsBar({super.key});
+  final GamePlatform? selectedPlatform;
+
+  const GamesStatsBar({super.key, this.selectedPlatform});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final stats = ref.watch(gamesStatsProvider);
+    final stats = ref.watch(filteredGamesStatsProvider(selectedPlatform));
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Container(

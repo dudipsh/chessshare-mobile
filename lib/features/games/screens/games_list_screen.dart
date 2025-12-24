@@ -140,7 +140,7 @@ class _GamesListScreenState extends ConsumerState<GamesListScreen> {
 
     return Column(
       children: [
-        const GamesStatsBar(),
+        GamesStatsBar(selectedPlatform: _selectedPlatform),
         // Platform switcher for filtering between accounts
         PlatformSwitcher(
           chessComUsername: gamesState.activeChessComUsername,
