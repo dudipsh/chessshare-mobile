@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../app/theme/colors.dart';
+import '../../../../core/widgets/piece_icon.dart';
 import '../../models/analyzed_move.dart';
-import '../../utils/chess_position_utils.dart';
 
 class MoveStrip extends StatefulWidget {
   final List<AnalyzedMove> moves;
@@ -115,7 +116,7 @@ class _MoveStripState extends State<MoveStrip> {
   }
 }
 
-class _MoveChip extends StatelessWidget {
+class _MoveChip extends ConsumerWidget {
   final AnalyzedMove move;
   final int moveNumber;
   final bool isWhite;
@@ -133,7 +134,7 @@ class _MoveChip extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final hasClassification = move.classification != MoveClassification.none;
     final classColor = hasClassification ? move.classification.color : AppColors.primary;
 
@@ -167,15 +168,15 @@ class _MoveChip extends StatelessWidget {
               ),
             if (isWhite) const SizedBox(width: 2),
             // Move SAN with piece icon
-            Text(
-              ChessPositionUtils.formatMoveWithIcon(move.san, isWhite: isWhite),
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                color: isSelected
-                    ? classColor
-                    : (isDark ? Colors.white.withValues(alpha: 0.9) : Colors.black87),
-              ),
+            MoveWithPieceIcon(
+              san: move.san,
+              isWhite: isWhite,
+              fontSize: 13,
+              pieceSize: 16,
+              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+              color: isSelected
+                  ? classColor
+                  : (isDark ? Colors.white.withValues(alpha: 0.9) : Colors.black87),
             ),
             // Classification indicator
             if (hasClassification) ...[

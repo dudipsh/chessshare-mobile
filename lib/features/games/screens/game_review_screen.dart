@@ -9,6 +9,7 @@ import '../../../core/database/local_database.dart';
 import '../../../core/providers/board_settings_provider.dart';
 import '../../../core/services/audio_service.dart';
 import '../../../core/widgets/board_settings_sheet.dart';
+import '../../../core/widgets/piece_icon.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../models/chess_game.dart';
 import '../models/move_classification.dart';
@@ -290,21 +291,16 @@ class _GameReviewScreenState extends ConsumerState<GameReviewScreen> {
       }
     }
 
-    // Format best move with piece icon
+    // Get the best move in SAN notation
     final isWhite = move.color == 'white';
-    String formattedBestMove;
+    String? bestMoveSan;
     if (move.bestMoveUci != null && move.bestMoveUci!.isNotEmpty && move.fen.isNotEmpty) {
-      formattedBestMove = ChessPositionUtils.formatMoveWithIcon(
-        move.bestMoveUci!,
-        fen: move.fen,
-        isWhite: isWhite,
-      );
-    } else {
-      formattedBestMove = ChessPositionUtils.formatMoveWithIcon(
-        move.bestMove!,
-        fen: move.fen,
-        isWhite: isWhite,
-      );
+      bestMoveSan = ChessPositionUtils.uciToSan(move.fen, move.bestMoveUci!);
+    }
+    bestMoveSan ??= move.bestMove;
+
+    if (bestMoveSan == null || bestMoveSan.isEmpty) {
+      return const SizedBox.shrink();
     }
 
     return Container(
@@ -328,13 +324,13 @@ class _GameReviewScreenState extends ConsumerState<GameReviewScreen> {
               color: isDark ? Colors.grey[400] : Colors.grey[600],
             ),
           ),
-          Text(
-            formattedBestMove,
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-              color: Colors.green[isDark ? 400 : 700],
-            ),
+          MoveWithPieceIcon(
+            san: bestMoveSan,
+            isWhite: isWhite,
+            fontSize: 14,
+            pieceSize: 20,
+            fontWeight: FontWeight.bold,
+            color: Colors.green[isDark ? 400 : 700],
           ),
           const Spacer(),
           Text(

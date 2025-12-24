@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/widgets/piece_icon.dart';
 import '../../models/analyzed_move.dart';
 import '../../utils/chess_position_utils.dart';
 
-class MoveInfoPanel extends StatelessWidget {
+class MoveInfoPanel extends ConsumerWidget {
   final AnalyzedMove move;
   final bool isDark;
 
@@ -13,55 +15,29 @@ class MoveInfoPanel extends StatelessWidget {
     required this.isDark,
   });
 
-  /// Get the best move formatted with piece icon
-  String _getFormattedBestMove() {
+  /// Get the best move in SAN notation
+  String? _getBestMoveSan() {
     final bestMove = move.bestMove;
     final bestMoveUci = move.bestMoveUci;
 
     if (bestMove == null || bestMove.isEmpty) {
-      return '';
+      return null;
     }
 
-    // Determine if it's white's move (for piece icon color)
-    final isWhite = move.color == 'white';
-
-    // Try to format with icon - use UCI if we have it and FEN
+    // Try to convert UCI to SAN if we have it and FEN
     if (bestMoveUci != null && bestMoveUci.isNotEmpty && move.fen.isNotEmpty) {
-      return ChessPositionUtils.formatMoveWithIcon(
-        bestMoveUci,
-        fen: move.fen,
-        isWhite: isWhite,
-      );
+      final san = ChessPositionUtils.uciToSan(move.fen, bestMoveUci);
+      if (san != null) return san;
     }
 
-    // If bestMove looks like SAN, format it with icon
-    return ChessPositionUtils.formatMoveWithIcon(
-      bestMove,
-      fen: move.fen,
-      isWhite: isWhite,
-    );
-  }
-
-  /// Get the played move formatted with piece icon
-  String _getFormattedPlayedMove() {
-    final san = move.san;
-    if (san.isEmpty) return move.displayString;
-
-    final isWhite = move.color == 'white';
-    final formattedSan = ChessPositionUtils.formatMoveWithIcon(
-      san,
-      isWhite: isWhite,
-    );
-
-    if (isWhite) {
-      return '${move.fullMoveNumber}. $formattedSan';
-    } else {
-      return '${move.fullMoveNumber}... $formattedSan';
-    }
+    return bestMove;
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isWhite = move.color == 'white';
+    final bestMoveSan = _getBestMoveSan();
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
@@ -98,16 +74,28 @@ class MoveInfoPanel extends StatelessWidget {
           ),
           const SizedBox(width: 12),
           // Move notation with piece icon
-          Text(
-            _getFormattedPlayedMove(),
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                isWhite ? '${move.fullMoveNumber}. ' : '${move.fullMoveNumber}... ',
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              MoveWithPieceIcon(
+                san: move.san,
+                isWhite: isWhite,
+                fontSize: 18,
+                pieceSize: 22,
+                fontWeight: FontWeight.bold,
+              ),
+            ],
           ),
           const Spacer(),
           // Best move suggestion if different
-          if (move.bestMove != null && move.bestMove != move.san && !move.classification.isGood)
+          if (bestMoveSan != null && bestMoveSan != move.san && !move.classification.isGood)
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
@@ -122,13 +110,13 @@ class MoveInfoPanel extends StatelessWidget {
                         fontWeight: FontWeight.w500,
                       ),
                     ),
-                    Text(
-                      _getFormattedBestMove(),
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: MoveClassification.best.color,
-                        fontWeight: FontWeight.bold,
-                      ),
+                    MoveWithPieceIcon(
+                      san: bestMoveSan,
+                      isWhite: isWhite,
+                      fontSize: 14,
+                      pieceSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: MoveClassification.best.color,
                     ),
                   ],
                 ),

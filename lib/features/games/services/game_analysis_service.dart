@@ -492,6 +492,10 @@ class GameAnalysisService {
       return _evalCache[fen]!;
     }
 
+    // Determine whose turn it is from the FEN
+    // FEN format: pieces turn castling enpassant halfmove fullmove
+    final isBlackToMove = fen.split(' ').length > 1 && fen.split(' ')[1] == 'b';
+
     final depth = isCritical ? config.criticalDepth : config.quickDepth;
     final completer = Completer<_EvalResult>();
     StreamSubscription<String>? subscription;
@@ -502,9 +506,13 @@ class GameAnalysisService {
         final parsed = UciParser.parseInfo(line);
         if (parsed?.pv?.evaluation != null) {
           final eval = parsed!.pv!.evaluation;
+          // Stockfish reports score from side-to-move's perspective
+          // We need to normalize to White's perspective (positive = good for White)
+          final cp = eval.centipawns;
+          final mate = eval.mateInMoves;
           lastResult = _EvalResult(
-            centipawns: eval.centipawns,
-            mateInMoves: eval.mateInMoves,
+            centipawns: isBlackToMove && cp != null ? -cp : cp,
+            mateInMoves: isBlackToMove && mate != null ? -mate : mate,
           );
 
           // Check if we reached target depth

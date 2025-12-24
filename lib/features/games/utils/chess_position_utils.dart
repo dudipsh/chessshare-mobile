@@ -212,6 +212,12 @@ abstract class ChessPositionUtils {
       final converted = uciToSan(fen, move);
       if (converted != null) {
         san = converted;
+      } else {
+        // Fallback: if conversion failed, at least show just the destination square for pawns
+        // This is better than showing "e2e4" - just show "e4"
+        final destSquare = move.substring(2, 4);
+        final promo = move.length > 4 ? '=${move[4].toUpperCase()}' : '';
+        san = '$destSquare$promo';
       }
     }
 
