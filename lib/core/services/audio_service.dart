@@ -101,10 +101,21 @@ class AudioService {
 
   /// Trigger vibration - instant, non-blocking
   void _vibrate() {
-    if (!_vibrationEnabled || _hasVibrator != true) return;
+    debugPrint('[Vibration] _vibrate called - enabled: $_vibrationEnabled, hasVibrator: $_hasVibrator, initialized: $_isInitialized');
 
-    // Short vibration for move feedback
-    Vibration.vibrate(duration: 10, amplitude: 64);
+    if (!_vibrationEnabled) {
+      debugPrint('[Vibration] Skipped - vibration disabled');
+      return;
+    }
+
+    if (_hasVibrator != true) {
+      debugPrint('[Vibration] Skipped - no vibrator detected');
+      return;
+    }
+
+    // Short vibration for move feedback (50ms is more noticeable than 10ms)
+    debugPrint('[Vibration] Triggering vibration...');
+    Vibration.vibrate(duration: 50, amplitude: 128);
   }
 
   // Public sound methods

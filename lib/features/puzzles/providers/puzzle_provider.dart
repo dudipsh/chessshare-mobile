@@ -204,8 +204,11 @@ class PuzzleSolveNotifier extends StateNotifier<PuzzleSolveState> {
 
     // Convert standard castling notation to dartchess format
     // dartchess uses king-to-rook (e1h1), but user clicks king-to-final (e1g1)
+    // Also handle Lichess-style: user clicks ROOK and moves to king's destination
     var actualMove = move;
     final king = _position.board.kingOf(_position.turn);
+
+    // Check if user clicked the KING and moved to castling destination
     if (king != null && move.from == king) {
       // White kingside: e1g1 -> e1h1
       if (move.from == Square.e1 && move.to == Square.g1) {
@@ -224,8 +227,46 @@ class PuzzleSolveNotifier extends StateNotifier<PuzzleSolveState> {
         actualMove = NormalMove(from: Square.e8, to: Square.a8);
       }
     }
+    // Check if user clicked the ROOK and moved to king's destination (Lichess style)
+    else {
+      // White kingside: h1 -> g1 means castle kingside (convert to e1h1)
+      if (move.from == Square.h1 && move.to == Square.g1 && king == Square.e1) {
+        actualMove = NormalMove(from: Square.e1, to: Square.h1);
+      }
+      // White queenside: a1 -> c1 means castle queenside (convert to e1a1)
+      else if (move.from == Square.a1 && move.to == Square.c1 && king == Square.e1) {
+        actualMove = NormalMove(from: Square.e1, to: Square.a1);
+      }
+      // Black kingside: h8 -> g8 means castle kingside (convert to e8h8)
+      else if (move.from == Square.h8 && move.to == Square.g8 && king == Square.e8) {
+        actualMove = NormalMove(from: Square.e8, to: Square.h8);
+      }
+      // Black queenside: a8 -> c8 means castle queenside (convert to e8a8)
+      else if (move.from == Square.a8 && move.to == Square.c8 && king == Square.e8) {
+        actualMove = NormalMove(from: Square.e8, to: Square.a8);
+      }
+    }
 
     final uci = '${actualMove.from.name}${actualMove.to.name}${actualMove.promotion?.letter ?? ''}';
+
+    // For castling, determine the display move (king's movement) and marker position
+    NormalMove displayMove = move;
+    Square markerPosition = move.to;
+
+    // If this is rook-based castling, convert display move to king's movement
+    if (move.from == Square.h1 && move.to == Square.g1 && king == Square.e1) {
+      displayMove = NormalMove(from: Square.e1, to: Square.g1);
+      markerPosition = Square.g1;
+    } else if (move.from == Square.a1 && move.to == Square.c1 && king == Square.e1) {
+      displayMove = NormalMove(from: Square.e1, to: Square.c1);
+      markerPosition = Square.c1;
+    } else if (move.from == Square.h8 && move.to == Square.g8 && king == Square.e8) {
+      displayMove = NormalMove(from: Square.e8, to: Square.g8);
+      markerPosition = Square.g8;
+    } else if (move.from == Square.a8 && move.to == Square.c8 && king == Square.e8) {
+      displayMove = NormalMove(from: Square.e8, to: Square.c8);
+      markerPosition = Square.c8;
+    }
 
     // Check if this is the correct move
     if (puzzle.isCorrectMove(uci, state.currentMoveIndex)) {
@@ -239,12 +280,12 @@ class PuzzleSolveNotifier extends StateNotifier<PuzzleSolveState> {
         state = state.copyWith(
           currentFen: _position.fen,
           currentMoveIndex: newIndex,
-          lastMove: move,
+          lastMove: displayMove,
           state: PuzzleState.completed,
           validMoves: IMap(),
           feedback: 'Excellent!',
           markerType: PuzzleMarkerType.correct,
-          markerSquare: move.to,
+          markerSquare: markerPosition,
         );
 
         // Award XP for solving the puzzle (regular puzzle, not daily)
@@ -257,11 +298,11 @@ class PuzzleSolveNotifier extends StateNotifier<PuzzleSolveState> {
         state = state.copyWith(
           currentFen: _position.fen,
           currentMoveIndex: newIndex,
-          lastMove: move,
+          lastMove: displayMove,
           state: PuzzleState.correct,
           feedback: 'Correct!',
           markerType: PuzzleMarkerType.correct,
-          markerSquare: move.to,
+          markerSquare: markerPosition,
         );
 
         // Schedule opponent move - clear marker when opponent moves
@@ -445,24 +486,38 @@ class PuzzleSolveNotifier extends StateNotifier<PuzzleSolveState> {
     final king = _position.board.kingOf(_position.turn);
     if (king != null && result.containsKey(king)) {
       final kingMoves = result[king]!.toSet();
-      final Set<Square> additionalMoves = {};
+      final Set<Square> additionalKingMoves = {};
 
       // Check if king can castle kingside (add g1/g8)
       final kingsideRook = _position.turn == Side.white ? Square.h1 : Square.h8;
       final kingsideDest = _position.turn == Side.white ? Square.g1 : Square.g8;
       if (kingMoves.contains(kingsideRook)) {
-        additionalMoves.add(kingsideDest);
+        additionalKingMoves.add(kingsideDest);
+        // Also add castling destination to the ROOK (Lichess style)
+        // Rook can move to king's destination square
+        if (result.containsKey(kingsideRook)) {
+          result[kingsideRook] = ISet({...result[kingsideRook]!.toSet(), kingsideDest});
+        } else {
+          result[kingsideRook] = ISet({kingsideDest});
+        }
       }
 
       // Check if king can castle queenside (add c1/c8)
       final queensideRook = _position.turn == Side.white ? Square.a1 : Square.a8;
       final queensideDest = _position.turn == Side.white ? Square.c1 : Square.c8;
       if (kingMoves.contains(queensideRook)) {
-        additionalMoves.add(queensideDest);
+        additionalKingMoves.add(queensideDest);
+        // Also add castling destination to the ROOK (Lichess style)
+        // Rook can move to king's destination square
+        if (result.containsKey(queensideRook)) {
+          result[queensideRook] = ISet({...result[queensideRook]!.toSet(), queensideDest});
+        } else {
+          result[queensideRook] = ISet({queensideDest});
+        }
       }
 
-      if (additionalMoves.isNotEmpty) {
-        result[king] = ISet({...kingMoves, ...additionalMoves});
+      if (additionalKingMoves.isNotEmpty) {
+        result[king] = ISet({...kingMoves, ...additionalKingMoves});
       }
     }
 

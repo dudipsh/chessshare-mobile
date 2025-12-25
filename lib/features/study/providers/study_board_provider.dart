@@ -255,18 +255,45 @@ class StudyBoardNotifier extends StateNotifier<StudyBoardState> {
     // Save original FEN before any move attempt
     final originalFen = state.currentFen;
 
+    // Convert rook-based castling to king-based (Lichess style)
+    var actualMove = move;
+    final king = _position.board.kingOf(_position.turn);
+
+    // Check if user clicked the ROOK and moved to king's destination
+    if (move.from == Square.h1 && move.to == Square.g1 && king == Square.e1) {
+      actualMove = NormalMove(from: Square.e1, to: Square.h1);
+    } else if (move.from == Square.a1 && move.to == Square.c1 && king == Square.e1) {
+      actualMove = NormalMove(from: Square.e1, to: Square.a1);
+    } else if (move.from == Square.h8 && move.to == Square.g8 && king == Square.e8) {
+      actualMove = NormalMove(from: Square.e8, to: Square.h8);
+    } else if (move.from == Square.a8 && move.to == Square.c8 && king == Square.e8) {
+      actualMove = NormalMove(from: Square.e8, to: Square.a8);
+    }
+    // Also handle king-based castling to standard format
+    else if (king != null && move.from == king) {
+      if (move.from == Square.e1 && move.to == Square.g1) {
+        actualMove = NormalMove(from: Square.e1, to: Square.h1);
+      } else if (move.from == Square.e1 && move.to == Square.c1) {
+        actualMove = NormalMove(from: Square.e1, to: Square.a1);
+      } else if (move.from == Square.e8 && move.to == Square.g8) {
+        actualMove = NormalMove(from: Square.e8, to: Square.h8);
+      } else if (move.from == Square.e8 && move.to == Square.c8) {
+        actualMove = NormalMove(from: Square.e8, to: Square.a8);
+      }
+    }
+
     final expectedSan = state.expectedMoves.isNotEmpty && state.moveIndex < state.expectedMoves.length
         ? state.expectedMoves[state.moveIndex]
         : null;
 
     if (expectedSan == null) {
       // Free play after line is done
-      _executeMove(move, isExpected: true);
+      _executeMove(actualMove, isExpected: true);
       return;
     }
 
     // Get the SAN of the user's move
-    final (_, userSan) = _position.makeSan(move);
+    final (_, userSan) = _position.makeSan(actualMove);
 
     // Normalize both for comparison (remove + and # symbols)
     final normalizedExpected = expectedSan.replaceAll('+', '').replaceAll('#', '');
@@ -274,10 +301,10 @@ class StudyBoardNotifier extends StateNotifier<StudyBoardState> {
 
     if (normalizedUser == normalizedExpected) {
       // Correct move!
-      _executeMove(move, isExpected: true);
+      _executeMove(actualMove, isExpected: true);
     } else {
       // Wrong move - show the move, then revert
-      _handleWrongMove(move, originalFen);
+      _handleWrongMove(actualMove, originalFen);
     }
   }
 
@@ -626,6 +653,44 @@ class StudyBoardNotifier extends StateNotifier<StudyBoardState> {
       }
       result[entry.key] = ISet(squares);
     }
+
+    // Add standard castling destinations for the king and rook (Lichess style)
+    final king = _position.board.kingOf(_position.turn);
+    if (king != null && result.containsKey(king)) {
+      final kingMoves = result[king]!.toSet();
+      final Set<Square> additionalKingMoves = {};
+
+      // Check if king can castle kingside (add g1/g8)
+      final kingsideRook = _position.turn == Side.white ? Square.h1 : Square.h8;
+      final kingsideDest = _position.turn == Side.white ? Square.g1 : Square.g8;
+      if (kingMoves.contains(kingsideRook)) {
+        additionalKingMoves.add(kingsideDest);
+        // Also add castling destination to the ROOK
+        if (result.containsKey(kingsideRook)) {
+          result[kingsideRook] = ISet({...result[kingsideRook]!.toSet(), kingsideDest});
+        } else {
+          result[kingsideRook] = ISet({kingsideDest});
+        }
+      }
+
+      // Check if king can castle queenside (add c1/c8)
+      final queensideRook = _position.turn == Side.white ? Square.a1 : Square.a8;
+      final queensideDest = _position.turn == Side.white ? Square.c1 : Square.c8;
+      if (kingMoves.contains(queensideRook)) {
+        additionalKingMoves.add(queensideDest);
+        // Also add castling destination to the ROOK
+        if (result.containsKey(queensideRook)) {
+          result[queensideRook] = ISet({...result[queensideRook]!.toSet(), queensideDest});
+        } else {
+          result[queensideRook] = ISet({queensideDest});
+        }
+      }
+
+      if (additionalKingMoves.isNotEmpty) {
+        result[king] = ISet({...kingMoves, ...additionalKingMoves});
+      }
+    }
+
     return IMap(result);
   }
 
