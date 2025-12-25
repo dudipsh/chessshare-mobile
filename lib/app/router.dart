@@ -241,9 +241,9 @@ class MainShell extends ConsumerWidget {
             label: 'Daily',
           ),
           const NavigationDestination(
-            icon: Icon(Icons.menu_book_outlined),
-            selectedIcon: Icon(Icons.menu_book),
-            label: 'Study',
+            icon: Icon(Icons.home_outlined),
+            selectedIcon: Icon(Icons.home),
+            label: 'Home',
           ),
           const NavigationDestination(
             icon: Icon(Icons.person_outline),

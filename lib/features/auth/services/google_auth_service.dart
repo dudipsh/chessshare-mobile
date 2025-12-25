@@ -47,6 +47,12 @@ class GoogleAuthService {
   /// Check if native Google Sign-In configuration exists
   static Future<bool> _checkNativeConfiguration() async {
     try {
+      // macOS is not supported - Google Sign-In crashes on macOS
+      if (Platform.isMacOS) {
+        debugPrint('Google Sign-In not supported on macOS');
+        return false;
+      }
+
       if (Platform.isIOS) {
         // On iOS, check if the app has Google Sign-In configured
         // by checking for the GIDClientID in Info.plist via a method channel
@@ -95,6 +101,12 @@ class GoogleAuthService {
 
   /// Sign in with Google and return account for token extraction
   static Future<GoogleSignInAccount?> signInForToken() async {
+    // Skip on unsupported platforms
+    if (Platform.isMacOS || Platform.isLinux || Platform.isWindows) {
+      debugPrint('Google Sign-In not supported on this platform');
+      return null;
+    }
+
     // Create GoogleSignIn with serverClientId for ID token
     _googleSignIn ??= GoogleSignIn(
       scopes: ['email', 'profile'],
@@ -115,6 +127,12 @@ class GoogleAuthService {
   /// Try to get Google credentials silently (for re-authentication)
   /// Returns null if user needs to sign in interactively
   static Future<GoogleSignInAccount?> getCredentialsSilently() async {
+    // Skip on unsupported platforms
+    if (Platform.isMacOS || Platform.isLinux || Platform.isWindows) {
+      debugPrint('Google Sign-In not supported on this platform');
+      return null;
+    }
+
     // Create GoogleSignIn with serverClientId for ID token
     _googleSignIn ??= GoogleSignIn(
       scopes: ['email', 'profile'],
