@@ -3,8 +3,12 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
 
+import 'package:shared_preferences/shared_preferences.dart';
+
 import '../../../core/api/supabase_service.dart';
 import '../../../core/database/local_database.dart';
+import '../../games/services/games_cache_service.dart';
+import '../../profile/services/profile_cache_service.dart';
 import '../models/user_profile.dart';
 import '../services/google_auth_service.dart';
 
@@ -442,20 +446,47 @@ class AuthNotifier extends StateNotifier<AppAuthState> {
   /// Sign out
   Future<void> signOut() async {
     try {
+      // Clear all caches before signing out
+      await Future.wait([
+        GamesCacheService.clearCache(),
+        ProfileCacheService.clearCache(),
+        _clearDailyPuzzleCache(),
+      ]);
+      debugPrint('Auth: Cleared all caches');
+
       await GoogleAuthService.signOut();
       await SupabaseService.client.auth.signOut();
     } catch (e) {
-      // Ignore errors during sign out
+      debugPrint('Auth: Error during sign out: $e');
     }
     state = AppAuthState();
+  }
+
+  /// Clear daily puzzle cached data
+  Future<void> _clearDailyPuzzleCache() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('daily_puzzle_last_solved');
+      await prefs.remove('daily_puzzle_streak');
+      await prefs.remove('daily_puzzle_solved_dates');
+      debugPrint('Auth: Cleared daily puzzle cache');
+    } catch (e) {
+      debugPrint('Auth: Error clearing daily puzzle cache: $e');
+    }
   }
 
   /// Delete account and all data
   Future<void> deleteAccount() async {
     try {
+      // Clear all caches
+      await Future.wait([
+        GamesCacheService.clearCache(),
+        ProfileCacheService.clearCache(),
+        _clearDailyPuzzleCache(),
+      ]);
       await GoogleAuthService.disconnect();
     } catch (e) {
-      // Ignore errors
+      debugPrint('Auth: Error during account deletion: $e');
     }
     state = AppAuthState();
   }

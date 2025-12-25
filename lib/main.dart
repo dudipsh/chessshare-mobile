@@ -8,8 +8,10 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'app/app.dart';
 import 'core/api/supabase_service.dart';
 import 'core/notifications/local_notification_service.dart';
+import 'core/notifications/notification_navigation.dart';
 import 'core/services/app_init_service.dart';
 import 'core/services/global_stockfish_manager.dart';
+import 'features/analysis/services/stockfish_types.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -48,9 +50,10 @@ void _preInitializeStockfish() {
   // Run in background - don't await
   Future.delayed(const Duration(seconds: 2), () async {
     try {
-      debugPrint('Pre-initializing Stockfish engine...');
+      final config = StockfishConfig.forMobile();
+      debugPrint('Pre-initializing Stockfish engine with ${config.threads} threads...');
       // Use 'shared' owner so any screen can use the pre-loaded instance
-      await GlobalStockfishManager.instance.acquire('shared');
+      await GlobalStockfishManager.instance.acquire('shared', config: config);
       debugPrint('Stockfish engine pre-initialized successfully');
     } catch (e) {
       debugPrint('Stockfish pre-initialization failed (will retry on first use): $e');
@@ -64,26 +67,15 @@ Future<void> _initializeNotifications() async {
 
     // Set up notification tap handler
     LocalNotificationService.onNotificationTap = (payload) {
-      debugPrint('Handling notification tap: $payload');
-      // Navigation will be handled by the app when it gets the payload
-      // The router will read this and navigate accordingly
-      _pendingNotificationPayload = payload;
+      debugPrint('main.dart: Handling notification tap: $payload');
+      // Use navigation service to handle the tap
+      NotificationNavigationService().onNotificationTapped(payload);
     };
 
     debugPrint('Local notifications initialized');
   } catch (e) {
     debugPrint('Failed to initialize notifications: $e');
   }
-}
-
-/// Pending notification payload for navigation
-String? _pendingNotificationPayload;
-
-/// Get and clear pending notification payload
-String? consumePendingNotificationPayload() {
-  final payload = _pendingNotificationPayload;
-  _pendingNotificationPayload = null;
-  return payload;
 }
 
 Future<void> _initializeSupabase() async {

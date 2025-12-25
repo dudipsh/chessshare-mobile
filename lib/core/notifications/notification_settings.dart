@@ -3,97 +3,108 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Types of notifications
-enum NotificationType {
-  dailyPuzzle('daily_puzzle', 'Daily Puzzle'),
-  studyReminder('study_reminder', 'Study Reminder'),
-  streakWarning('streak_warning', 'Streak Warning'),
-  weeklyDigest('weekly_digest', 'Weekly Summary');
+import 'notification_types.dart';
 
-  final String code;
-  final String displayName;
+/// Settings for a single notification type
+class NotificationTypeSettings {
+  final bool enabled;
+  final TimeOfDay time;
+  final int ignoreCount;
 
-  const NotificationType(this.code, this.displayName);
+  const NotificationTypeSettings({
+    this.enabled = true,
+    required this.time,
+    this.ignoreCount = 0,
+  });
+
+  NotificationTypeSettings copyWith({
+    bool? enabled,
+    TimeOfDay? time,
+    int? ignoreCount,
+  }) {
+    return NotificationTypeSettings(
+      enabled: enabled ?? this.enabled,
+      time: time ?? this.time,
+      ignoreCount: ignoreCount ?? this.ignoreCount,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'enabled': enabled,
+        'hour': time.hour,
+        'minute': time.minute,
+        'ignoreCount': ignoreCount,
+      };
+
+  factory NotificationTypeSettings.fromJson(Map<String, dynamic> json, TimeOfDay defaultTime) {
+    return NotificationTypeSettings(
+      enabled: json['enabled'] as bool? ?? true,
+      time: TimeOfDay(
+        hour: json['hour'] as int? ?? defaultTime.hour,
+        minute: json['minute'] as int? ?? defaultTime.minute,
+      ),
+      ignoreCount: json['ignoreCount'] as int? ?? 0,
+    );
+  }
+
+  factory NotificationTypeSettings.defaultFor(NotificationType type) {
+    return NotificationTypeSettings(
+      enabled: true,
+      time: type.defaultTime,
+      ignoreCount: 0,
+    );
+  }
 }
 
 /// User notification preferences
 class NotificationSettings {
-  /// Daily puzzle reminder
-  final bool dailyPuzzleEnabled;
-  final TimeOfDay dailyPuzzleTime;
-
-  /// Study reminder
-  final bool studyReminderEnabled;
-  final TimeOfDay studyReminderTime;
-
-  /// Streak warning (sent in evening if user hasn't logged in)
-  final bool streakWarningEnabled;
-  final TimeOfDay streakWarningTime;
-
-  /// Weekly digest
-  final bool weeklyDigestEnabled;
-
   /// Master switch
   final bool notificationsEnabled;
 
-  /// Smart dismissal tracking
-  final int dailyPuzzleIgnoreCount;
-  final int studyReminderIgnoreCount;
-  final int streakWarningIgnoreCount;
+  /// Settings per notification type
+  final Map<NotificationType, NotificationTypeSettings> typeSettings;
+
+  /// Smart dismissal
   final bool smartDismissalEnabled;
   final DateTime? lastNotificationDate;
   final DateTime? lastAppOpenDate;
-
-  /// Whether user has been shown the "we understand" message
   final bool shownDismissalMessage;
 
   const NotificationSettings({
-    this.dailyPuzzleEnabled = true,
-    this.dailyPuzzleTime = const TimeOfDay(hour: 9, minute: 0),
-    this.studyReminderEnabled = true,
-    this.studyReminderTime = const TimeOfDay(hour: 19, minute: 0),
-    this.streakWarningEnabled = true,
-    this.streakWarningTime = const TimeOfDay(hour: 20, minute: 0),
-    this.weeklyDigestEnabled = true,
     this.notificationsEnabled = true,
-    this.dailyPuzzleIgnoreCount = 0,
-    this.studyReminderIgnoreCount = 0,
-    this.streakWarningIgnoreCount = 0,
+    this.typeSettings = const {},
     this.smartDismissalEnabled = true,
     this.lastNotificationDate,
     this.lastAppOpenDate,
     this.shownDismissalMessage = false,
   });
 
+  /// Get settings for a specific type (with defaults)
+  NotificationTypeSettings getTypeSettings(NotificationType type) {
+    return typeSettings[type] ?? NotificationTypeSettings.defaultFor(type);
+  }
+
+  /// Check if a specific notification type is enabled
+  bool isTypeEnabled(NotificationType type) {
+    return notificationsEnabled && getTypeSettings(type).enabled;
+  }
+
+  /// Get time for a specific notification type
+  TimeOfDay getTypeTime(NotificationType type) {
+    return getTypeSettings(type).time;
+  }
+
   NotificationSettings copyWith({
-    bool? dailyPuzzleEnabled,
-    TimeOfDay? dailyPuzzleTime,
-    bool? studyReminderEnabled,
-    TimeOfDay? studyReminderTime,
-    bool? streakWarningEnabled,
-    TimeOfDay? streakWarningTime,
-    bool? weeklyDigestEnabled,
     bool? notificationsEnabled,
-    int? dailyPuzzleIgnoreCount,
-    int? studyReminderIgnoreCount,
-    int? streakWarningIgnoreCount,
+    Map<NotificationType, NotificationTypeSettings>? typeSettings,
     bool? smartDismissalEnabled,
     DateTime? lastNotificationDate,
     DateTime? lastAppOpenDate,
     bool? shownDismissalMessage,
   }) {
     return NotificationSettings(
-      dailyPuzzleEnabled: dailyPuzzleEnabled ?? this.dailyPuzzleEnabled,
-      dailyPuzzleTime: dailyPuzzleTime ?? this.dailyPuzzleTime,
-      studyReminderEnabled: studyReminderEnabled ?? this.studyReminderEnabled,
-      studyReminderTime: studyReminderTime ?? this.studyReminderTime,
-      streakWarningEnabled: streakWarningEnabled ?? this.streakWarningEnabled,
-      streakWarningTime: streakWarningTime ?? this.streakWarningTime,
-      weeklyDigestEnabled: weeklyDigestEnabled ?? this.weeklyDigestEnabled,
       notificationsEnabled: notificationsEnabled ?? this.notificationsEnabled,
-      dailyPuzzleIgnoreCount: dailyPuzzleIgnoreCount ?? this.dailyPuzzleIgnoreCount,
-      studyReminderIgnoreCount: studyReminderIgnoreCount ?? this.studyReminderIgnoreCount,
-      streakWarningIgnoreCount: streakWarningIgnoreCount ?? this.streakWarningIgnoreCount,
+      typeSettings: typeSettings ?? this.typeSettings,
       smartDismissalEnabled: smartDismissalEnabled ?? this.smartDismissalEnabled,
       lastNotificationDate: lastNotificationDate ?? this.lastNotificationDate,
       lastAppOpenDate: lastAppOpenDate ?? this.lastAppOpenDate,
@@ -101,20 +112,50 @@ class NotificationSettings {
     );
   }
 
+  /// Update settings for a specific type
+  NotificationSettings updateType(
+    NotificationType type,
+    NotificationTypeSettings settings,
+  ) {
+    final newTypeSettings = Map<NotificationType, NotificationTypeSettings>.from(typeSettings);
+    newTypeSettings[type] = settings;
+    return copyWith(typeSettings: newTypeSettings);
+  }
+
+  /// Toggle a specific type on/off
+  NotificationSettings toggleType(NotificationType type, bool enabled) {
+    final current = getTypeSettings(type);
+    return updateType(type, current.copyWith(enabled: enabled));
+  }
+
+  /// Set time for a specific type
+  NotificationSettings setTypeTime(NotificationType type, TimeOfDay time) {
+    final current = getTypeSettings(type);
+    return updateType(type, current.copyWith(time: time));
+  }
+
+  /// Increment ignore count for a type
+  NotificationSettings incrementIgnoreCount(NotificationType type) {
+    final current = getTypeSettings(type);
+    return updateType(type, current.copyWith(ignoreCount: current.ignoreCount + 1));
+  }
+
+  /// Reset ignore count for a type
+  NotificationSettings resetIgnoreCount(NotificationType type) {
+    final current = getTypeSettings(type);
+    return updateType(type, current.copyWith(ignoreCount: 0));
+  }
+
   /// Convert to JSON for storage
   Map<String, dynamic> toJson() {
+    final typeSettingsJson = <String, dynamic>{};
+    for (final entry in typeSettings.entries) {
+      typeSettingsJson[entry.key.code] = entry.value.toJson();
+    }
+
     return {
-      'dailyPuzzleEnabled': dailyPuzzleEnabled,
-      'dailyPuzzleTime': {'hour': dailyPuzzleTime.hour, 'minute': dailyPuzzleTime.minute},
-      'studyReminderEnabled': studyReminderEnabled,
-      'studyReminderTime': {'hour': studyReminderTime.hour, 'minute': studyReminderTime.minute},
-      'streakWarningEnabled': streakWarningEnabled,
-      'streakWarningTime': {'hour': streakWarningTime.hour, 'minute': streakWarningTime.minute},
-      'weeklyDigestEnabled': weeklyDigestEnabled,
       'notificationsEnabled': notificationsEnabled,
-      'dailyPuzzleIgnoreCount': dailyPuzzleIgnoreCount,
-      'studyReminderIgnoreCount': studyReminderIgnoreCount,
-      'streakWarningIgnoreCount': streakWarningIgnoreCount,
+      'typeSettings': typeSettingsJson,
       'smartDismissalEnabled': smartDismissalEnabled,
       'lastNotificationDate': lastNotificationDate?.toIso8601String(),
       'lastAppOpenDate': lastAppOpenDate?.toIso8601String(),
@@ -124,18 +165,19 @@ class NotificationSettings {
 
   /// Create from JSON
   factory NotificationSettings.fromJson(Map<String, dynamic> json) {
+    final typeSettingsJson = json['typeSettings'] as Map<String, dynamic>? ?? {};
+    final typeSettings = <NotificationType, NotificationTypeSettings>{};
+
+    for (final type in NotificationType.values) {
+      final typeJson = typeSettingsJson[type.code] as Map<String, dynamic>?;
+      if (typeJson != null) {
+        typeSettings[type] = NotificationTypeSettings.fromJson(typeJson, type.defaultTime);
+      }
+    }
+
     return NotificationSettings(
-      dailyPuzzleEnabled: json['dailyPuzzleEnabled'] as bool? ?? true,
-      dailyPuzzleTime: _parseTimeOfDay(json['dailyPuzzleTime']) ?? const TimeOfDay(hour: 9, minute: 0),
-      studyReminderEnabled: json['studyReminderEnabled'] as bool? ?? true,
-      studyReminderTime: _parseTimeOfDay(json['studyReminderTime']) ?? const TimeOfDay(hour: 19, minute: 0),
-      streakWarningEnabled: json['streakWarningEnabled'] as bool? ?? true,
-      streakWarningTime: _parseTimeOfDay(json['streakWarningTime']) ?? const TimeOfDay(hour: 20, minute: 0),
-      weeklyDigestEnabled: json['weeklyDigestEnabled'] as bool? ?? true,
       notificationsEnabled: json['notificationsEnabled'] as bool? ?? true,
-      dailyPuzzleIgnoreCount: json['dailyPuzzleIgnoreCount'] as int? ?? 0,
-      studyReminderIgnoreCount: json['studyReminderIgnoreCount'] as int? ?? 0,
-      streakWarningIgnoreCount: json['streakWarningIgnoreCount'] as int? ?? 0,
+      typeSettings: typeSettings,
       smartDismissalEnabled: json['smartDismissalEnabled'] as bool? ?? true,
       lastNotificationDate: _parseDateTime(json['lastNotificationDate']),
       lastAppOpenDate: _parseDateTime(json['lastAppOpenDate']),
@@ -150,21 +192,19 @@ class NotificationSettings {
     return null;
   }
 
-  static TimeOfDay? _parseTimeOfDay(dynamic value) {
-    if (value is Map) {
-      final hour = value['hour'] as int?;
-      final minute = value['minute'] as int?;
-      if (hour != null && minute != null) {
-        return TimeOfDay(hour: hour, minute: minute);
-      }
+  /// Default settings with all types enabled
+  factory NotificationSettings.defaults() {
+    final typeSettings = <NotificationType, NotificationTypeSettings>{};
+    for (final type in NotificationType.values) {
+      typeSettings[type] = NotificationTypeSettings.defaultFor(type);
     }
-    return null;
+    return NotificationSettings(typeSettings: typeSettings);
   }
 }
 
 /// Repository for notification settings
 class NotificationSettingsRepository {
-  static const _key = 'notification_settings';
+  static const _key = 'notification_settings_v2';
 
   /// Load settings from local storage
   Future<NotificationSettings> loadSettings() async {
@@ -177,10 +217,10 @@ class NotificationSettingsRepository {
         return NotificationSettings.fromJson(json);
       }
     } catch (e) {
-      print('NotificationSettingsRepository: Error loading settings: $e');
+      // ignore error, return defaults
     }
 
-    return const NotificationSettings();
+    return NotificationSettings.defaults();
   }
 
   /// Save settings to local storage
@@ -190,7 +230,7 @@ class NotificationSettingsRepository {
       final jsonString = jsonEncode(settings.toJson());
       await prefs.setString(_key, jsonString);
     } catch (e) {
-      print('NotificationSettingsRepository: Error saving settings: $e');
+      // ignore error
     }
   }
 }

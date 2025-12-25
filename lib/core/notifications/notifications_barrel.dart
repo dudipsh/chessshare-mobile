@@ -1,35 +1,30 @@
 /// Local Notifications System
 ///
-/// Handles scheduling and managing local notifications for:
-/// - Daily puzzle reminders
-/// - Study reminders
-/// - Streak warnings
-/// - Weekly digest
-/// - Analysis complete notifications
+/// Modular notification system with easy extensibility.
+///
+/// To add a new notification type:
+/// 1. Add enum value in notification_types.dart
+/// 2. Add content in notification_content.dart
+/// 3. Settings are automatically handled
 ///
 /// Example usage:
 /// ```dart
-/// // Initialize in main.dart
-/// await LocalNotificationService().initialize();
+/// // Toggle a specific notification type
+/// ref.read(notificationProvider.notifier).toggleType(NotificationType.dailyPuzzle, true);
 ///
-/// // Toggle notifications in settings
-/// ref.read(notificationProvider.notifier).toggleNotifications(true);
-///
-/// // Set reminder time
-/// ref.read(notificationProvider.notifier).setDailyPuzzleTime(
+/// // Set time for a type
+/// ref.read(notificationProvider.notifier).setTypeTime(
+///   NotificationType.dailyPuzzle,
 ///   TimeOfDay(hour: 9, minute: 0),
 /// );
 ///
-/// // Cancel streak warning when user completes an activity
-/// ref.read(notificationProvider.notifier).cancelTodaysStreakWarning();
-///
-/// // Show analysis complete notification
-/// ref.read(notificationProvider.notifier).showAnalysisComplete(
-///   gameId: 'abc123',
-///   accuracy: 85.5,
-/// );
+/// // Test a notification
+/// ref.read(notificationProvider.notifier).showTestNotification(NotificationType.dailyPuzzle);
 /// ```
 
-export 'notification_settings.dart';
 export 'local_notification_service.dart';
+export 'notification_content.dart';
+export 'notification_navigation.dart';
 export 'notification_provider.dart';
+export 'notification_settings.dart';
+export 'notification_types.dart';

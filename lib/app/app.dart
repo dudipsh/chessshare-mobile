@@ -1,6 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/notifications/local_notification_service.dart';
+import '../core/notifications/notification_navigation.dart';
 import '../features/auth/providers/auth_provider.dart';
 import '../features/gamification/providers/gamification_provider.dart';
 import '../features/gamification/widgets/gamification_listener.dart';
@@ -17,6 +21,50 @@ class ChessShareApp extends ConsumerStatefulWidget {
 
 class _ChessShareAppState extends ConsumerState<ChessShareApp> {
   String? _lastUserId;
+  StreamSubscription<String>? _notificationSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    _setupNotificationNavigation();
+  }
+
+  @override
+  void dispose() {
+    _notificationSubscription?.cancel();
+    super.dispose();
+  }
+
+  void _setupNotificationNavigation() {
+    final navService = NotificationNavigationService();
+
+    // Listen for notification taps while app is running
+    _notificationSubscription = navService.navigationStream.listen((payload) {
+      debugPrint('App: Received notification tap payload: $payload');
+      // Wait for next frame to ensure router is available
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final context = rootNavigatorKey.currentContext;
+        debugPrint('App: Navigator context available: ${context != null}');
+        if (context != null) {
+          NotificationNavigationService.navigateFromPayload(context, payload);
+        }
+      });
+    });
+
+    // Check for launch payload from cold start (app was killed)
+    // Need to wait a bit for router to be ready after auth redirect
+    Future.delayed(const Duration(milliseconds: 500), () {
+      final launchPayload = LocalNotificationService.launchPayload;
+      if (launchPayload != null) {
+        debugPrint('Processing launch payload: $launchPayload');
+        LocalNotificationService.launchPayload = null; // Clear it
+        final context = rootNavigatorKey.currentContext;
+        if (context != null) {
+          NotificationNavigationService.navigateFromPayload(context, launchPayload);
+        }
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {

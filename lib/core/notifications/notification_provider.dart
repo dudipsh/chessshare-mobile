@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'local_notification_service.dart';
 import 'notification_settings.dart';
+import 'notification_types.dart';
 
 /// Provider for the NotificationSettingsRepository
 final notificationSettingsRepositoryProvider = Provider<NotificationSettingsRepository>((ref) {
@@ -20,16 +21,12 @@ class NotificationState {
   final bool isLoading;
   final bool permissionGranted;
   final String? error;
-  final bool showSmartDismissalDialog;
-  final NotificationType? dismissedNotificationType;
 
   const NotificationState({
-    this.settings = const NotificationSettings(),
+    required this.settings,
     this.isLoading = false,
     this.permissionGranted = false,
     this.error,
-    this.showSmartDismissalDialog = false,
-    this.dismissedNotificationType,
   });
 
   NotificationState copyWith({
@@ -37,16 +34,12 @@ class NotificationState {
     bool? isLoading,
     bool? permissionGranted,
     String? error,
-    bool? showSmartDismissalDialog,
-    NotificationType? dismissedNotificationType,
   }) {
     return NotificationState(
       settings: settings ?? this.settings,
       isLoading: isLoading ?? this.isLoading,
       permissionGranted: permissionGranted ?? this.permissionGranted,
       error: error,
-      showSmartDismissalDialog: showSmartDismissalDialog ?? this.showSmartDismissalDialog,
-      dismissedNotificationType: dismissedNotificationType ?? this.dismissedNotificationType,
     );
   }
 }
@@ -60,22 +53,19 @@ class NotificationNotifier extends StateNotifier<NotificationState> {
   static const int _maxIgnoreCount = 3;
 
   NotificationNotifier(this._repository, this._service)
-      : super(const NotificationState(isLoading: true)) {
+      : super(NotificationState(
+          settings: NotificationSettings.defaults(),
+          isLoading: true,
+        )) {
     _initialize();
   }
 
   Future<void> _initialize() async {
     try {
-      // Initialize service
       await _service.initialize();
-
-      // Load settings
       var settings = await _repository.loadSettings();
-
-      // Request permissions
       final permissionGranted = await _service.requestPermissions();
 
-      // Check for ignored notifications (smart dismissal)
       settings = await _checkSmartDismissal(settings);
 
       state = NotificationState(
@@ -84,7 +74,6 @@ class NotificationNotifier extends StateNotifier<NotificationState> {
         permissionGranted: permissionGranted,
       );
 
-      // Schedule notifications if enabled and permitted
       if (permissionGranted && settings.notificationsEnabled) {
         await _service.scheduleAllNotifications(settings);
       }
@@ -96,135 +85,21 @@ class NotificationNotifier extends StateNotifier<NotificationState> {
     }
   }
 
-  /// Check if user has been ignoring notifications and handle smart dismissal
+  /// Check if user has been ignoring notifications
   Future<NotificationSettings> _checkSmartDismissal(NotificationSettings settings) async {
     if (!settings.smartDismissalEnabled) return settings;
 
     final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final lastOpen = settings.lastAppOpenDate;
-    final lastNotification = settings.lastNotificationDate;
-
-    // Update last app open date
     var newSettings = settings.copyWith(lastAppOpenDate: now);
-
-    // If there was a notification sent and user didn't open the app that day
-    if (lastNotification != null && lastOpen != null) {
-      final notificationDate = DateTime(
-        lastNotification.year,
-        lastNotification.month,
-        lastNotification.day,
-      );
-      final lastOpenDate = DateTime(
-        lastOpen.year,
-        lastOpen.month,
-        lastOpen.day,
-      );
-
-      // If notification was sent on a day before user opened the app
-      // and they're opening the app now (not on the notification day)
-      if (notificationDate.isBefore(today) && lastOpenDate.isBefore(notificationDate)) {
-        // User ignored the notification - increment ignore count
-        final newDailyIgnoreCount = newSettings.dailyPuzzleEnabled
-            ? newSettings.dailyPuzzleIgnoreCount + 1
-            : newSettings.dailyPuzzleIgnoreCount;
-
-        newSettings = newSettings.copyWith(
-          dailyPuzzleIgnoreCount: newDailyIgnoreCount,
-        );
-
-        // Check if we've hit the limit
-        if (newDailyIgnoreCount >= _maxIgnoreCount && !newSettings.shownDismissalMessage) {
-          // Show the dismissal dialog and disable notifications
-          newSettings = newSettings.copyWith(
-            dailyPuzzleEnabled: false,
-            shownDismissalMessage: true,
-          );
-
-          state = state.copyWith(
-            showSmartDismissalDialog: true,
-            dismissedNotificationType: NotificationType.dailyPuzzle,
-          );
-        }
-      }
-    }
-
-    // Save updated settings
     await _repository.saveSettings(newSettings);
     return newSettings;
   }
 
-  /// Record that a notification was sent today
-  Future<void> recordNotificationSent() async {
-    final newSettings = state.settings.copyWith(
-      lastNotificationDate: DateTime.now(),
-    );
-    await updateSettings(newSettings);
-  }
-
-  /// Dismiss the smart dismissal dialog
-  void dismissSmartDismissalDialog() {
-    state = state.copyWith(showSmartDismissalDialog: false);
-  }
-
-  /// Re-enable notifications after smart dismissal
-  Future<void> reEnableNotifications(NotificationType type) async {
-    NotificationSettings newSettings;
-    switch (type) {
-      case NotificationType.dailyPuzzle:
-        newSettings = state.settings.copyWith(
-          dailyPuzzleEnabled: true,
-          dailyPuzzleIgnoreCount: 0,
-          shownDismissalMessage: false,
-        );
-        break;
-      case NotificationType.studyReminder:
-        newSettings = state.settings.copyWith(
-          studyReminderEnabled: true,
-          studyReminderIgnoreCount: 0,
-        );
-        break;
-      case NotificationType.streakWarning:
-        newSettings = state.settings.copyWith(
-          streakWarningEnabled: true,
-          streakWarningIgnoreCount: 0,
-        );
-        break;
-      case NotificationType.weeklyDigest:
-        newSettings = state.settings.copyWith(weeklyDigestEnabled: true);
-        break;
-    }
-    await updateSettings(newSettings);
-  }
-
-  /// Reset ignore count when user opens via notification
-  Future<void> resetIgnoreCount(NotificationType type) async {
-    NotificationSettings newSettings;
-    switch (type) {
-      case NotificationType.dailyPuzzle:
-        newSettings = state.settings.copyWith(dailyPuzzleIgnoreCount: 0);
-        break;
-      case NotificationType.studyReminder:
-        newSettings = state.settings.copyWith(studyReminderIgnoreCount: 0);
-        break;
-      case NotificationType.streakWarning:
-        newSettings = state.settings.copyWith(streakWarningIgnoreCount: 0);
-        break;
-      case NotificationType.weeklyDigest:
-        newSettings = state.settings;
-        break;
-    }
-    await updateSettings(newSettings);
-  }
-
-  /// Update notification settings
+  /// Update settings and reschedule notifications
   Future<void> updateSettings(NotificationSettings settings) async {
     state = state.copyWith(settings: settings);
-
-    // Save to storage
     await _repository.saveSettings(settings);
 
-    // Reschedule notifications
     if (state.permissionGranted) {
       await _service.scheduleAllNotifications(settings);
     }
@@ -232,68 +107,22 @@ class NotificationNotifier extends StateNotifier<NotificationState> {
 
   /// Toggle master notifications switch
   Future<void> toggleNotifications(bool enabled) async {
-    final newSettings = state.settings.copyWith(notificationsEnabled: enabled);
-    await updateSettings(newSettings);
+    await updateSettings(state.settings.copyWith(notificationsEnabled: enabled));
   }
 
-  /// Toggle daily puzzle reminder
-  Future<void> toggleDailyPuzzle(bool enabled) async {
-    final newSettings = state.settings.copyWith(dailyPuzzleEnabled: enabled);
-    await updateSettings(newSettings);
+  /// Toggle a specific notification type
+  Future<void> toggleType(NotificationType type, bool enabled) async {
+    await updateSettings(state.settings.toggleType(type, enabled));
   }
 
-  /// Set daily puzzle time
-  Future<void> setDailyPuzzleTime(TimeOfDay time) async {
-    final newSettings = state.settings.copyWith(dailyPuzzleTime: time);
-    await updateSettings(newSettings);
+  /// Set time for a specific notification type
+  Future<void> setTypeTime(NotificationType type, TimeOfDay time) async {
+    await updateSettings(state.settings.setTypeTime(type, time));
   }
 
-  /// Toggle study reminder
-  Future<void> toggleStudyReminder(bool enabled) async {
-    final newSettings = state.settings.copyWith(studyReminderEnabled: enabled);
-    await updateSettings(newSettings);
-  }
-
-  /// Set study reminder time
-  Future<void> setStudyReminderTime(TimeOfDay time) async {
-    final newSettings = state.settings.copyWith(studyReminderTime: time);
-    await updateSettings(newSettings);
-  }
-
-  /// Toggle streak warning
-  Future<void> toggleStreakWarning(bool enabled) async {
-    final newSettings = state.settings.copyWith(streakWarningEnabled: enabled);
-    await updateSettings(newSettings);
-  }
-
-  /// Set streak warning time
-  Future<void> setStreakWarningTime(TimeOfDay time) async {
-    final newSettings = state.settings.copyWith(streakWarningTime: time);
-    await updateSettings(newSettings);
-  }
-
-  /// Toggle weekly digest
-  Future<void> toggleWeeklyDigest(bool enabled) async {
-    final newSettings = state.settings.copyWith(weeklyDigestEnabled: enabled);
-    await updateSettings(newSettings);
-  }
-
-  /// Show analysis complete notification
-  Future<void> showAnalysisComplete({
-    required String gameId,
-    required double accuracy,
-  }) async {
-    if (!state.settings.notificationsEnabled) return;
-
-    await _service.showAnalysisComplete(
-      gameId: gameId,
-      accuracy: accuracy,
-    );
-  }
-
-  /// Cancel streak warning for today
-  Future<void> cancelTodaysStreakWarning() async {
-    await _service.cancelTodaysStreakWarning();
+  /// Reset ignore count when user opens via notification
+  Future<void> resetIgnoreCount(NotificationType type) async {
+    await updateSettings(state.settings.resetIgnoreCount(type));
   }
 
   /// Request permissions again
@@ -306,6 +135,24 @@ class NotificationNotifier extends StateNotifier<NotificationState> {
     }
 
     return granted;
+  }
+
+  /// Show test notification for a type
+  Future<void> showTestNotification(NotificationType type) async {
+    await _service.showTestNotification(type);
+  }
+
+  /// Show all test notifications
+  Future<void> showAllTestNotifications() async {
+    for (final type in NotificationType.values) {
+      await _service.showTestNotification(type);
+      await Future.delayed(const Duration(milliseconds: 500));
+    }
+  }
+
+  /// Cancel streak warning (when user completes activity)
+  Future<void> cancelStreakWarning() async {
+    await _service.cancelTypeNotification(NotificationType.streakWarning);
   }
 }
 

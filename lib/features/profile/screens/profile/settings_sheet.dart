@@ -4,11 +4,13 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../app/theme/colors.dart';
 import '../../../../app/theme/theme_provider.dart';
+import '../../../../core/notifications/notification_provider.dart';
 import '../../../../core/subscription/subscription_provider.dart';
 import '../../../../core/subscription/subscription_tier.dart';
 import '../../../auth/providers/auth_provider.dart';
 import '../../widgets/subscription_sheet.dart';
 import 'manage_accounts_sheet.dart';
+import 'notification_settings_sheet.dart';
 
 void showProfileSettingsSheet(BuildContext context, WidgetRef ref) {
   final themeState = ref.watch(themeProvider);
@@ -67,6 +69,9 @@ class _SettingsSheetContent extends ConsumerWidget {
           const SizedBox(height: 16),
           _buildSectionHeader('Appearance'),
           _buildDarkModeToggle(context, ref, themeState),
+          const SizedBox(height: 16),
+          _buildSectionHeader('Notifications'),
+          _buildNotificationsTile(context, ref),
           const SizedBox(height: 16),
           _buildSectionHeader('Chess Accounts'),
           _buildLinkedAccountsTile(context, ref),
@@ -138,6 +143,29 @@ class _SettingsSheetContent extends ConsumerWidget {
              MediaQuery.platformBrightnessOf(context) == Brightness.dark),
         onChanged: (v) => ref.read(themeProvider.notifier).setDarkMode(v),
       ),
+    );
+  }
+
+  Widget _buildNotificationsTile(BuildContext context, WidgetRef ref) {
+    final notificationState = ref.watch(notificationProvider);
+    final isEnabled = notificationState.settings.notificationsEnabled;
+
+    return ListTile(
+      leading: Icon(
+        isEnabled ? Icons.notifications_active : Icons.notifications_off,
+        color: isEnabled ? Colors.green : Colors.grey,
+      ),
+      title: const Text('Notifications'),
+      subtitle: Text(isEnabled ? 'Enabled' : 'Disabled'),
+      trailing: const Icon(Icons.chevron_right),
+      onTap: () {
+        final navigator = Navigator.of(context);
+        final rootContext = navigator.context;
+        navigator.pop();
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          showNotificationSettingsSheet(rootContext, ref);
+        });
+      },
     );
   }
 
