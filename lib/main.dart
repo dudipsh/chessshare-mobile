@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -37,6 +39,12 @@ void main() async {
 /// Pre-initialize Stockfish engine in background
 /// This makes first game analysis much faster
 void _preInitializeStockfish() {
+  // Stockfish only works on iOS and Android
+  if (!Platform.isIOS && !Platform.isAndroid) {
+    debugPrint('Stockfish not supported on this platform');
+    return;
+  }
+
   // Run in background - don't await
   Future.delayed(const Duration(seconds: 2), () async {
     try {
