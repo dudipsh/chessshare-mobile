@@ -173,13 +173,36 @@ class AnalysisNotifier extends StateNotifier<AnalysisState> {
   }
 
   void onUserMove(NormalMove move, {bool? isDrop}) {
+    // Convert standard castling notation to dartchess format
+    // dartchess uses king-to-rook (e1h1), but user clicks king-to-final (e1g1)
+    var actualMove = move;
+    final king = _position.board.kingOf(_position.turn);
+    if (king != null && move.from == king) {
+      // White kingside: e1g1 -> e1h1
+      if (move.from == Square.e1 && move.to == Square.g1) {
+        actualMove = NormalMove(from: Square.e1, to: Square.h1);
+      }
+      // White queenside: e1c1 -> e1a1
+      else if (move.from == Square.e1 && move.to == Square.c1) {
+        actualMove = NormalMove(from: Square.e1, to: Square.a1);
+      }
+      // Black kingside: e8g8 -> e8h8
+      else if (move.from == Square.e8 && move.to == Square.g8) {
+        actualMove = NormalMove(from: Square.e8, to: Square.h8);
+      }
+      // Black queenside: e8c8 -> e8a8
+      else if (move.from == Square.e8 && move.to == Square.c8) {
+        actualMove = NormalMove(from: Square.e8, to: Square.a8);
+      }
+    }
+
     // Check if it's a valid move using legalMoves map
-    final validDests = _position.legalMoves[move.from];
-    final isLegal = validDests != null && validDests.has(move.to);
+    final validDests = _position.legalMoves[actualMove.from];
+    final isLegal = validDests != null && validDests.has(actualMove.to);
 
     if (isLegal) {
-      final (_, san) = _position.makeSan(move);
-      _position = _position.play(move) as Chess;
+      final (_, san) = _position.makeSan(actualMove);
+      _position = _position.play(actualMove) as Chess;
 
       // If we're at the end of the current line, just append
       if (state.isAtEnd) {
@@ -212,6 +235,7 @@ class AnalysisNotifier extends StateNotifier<AnalysisState> {
   }
 
   /// Convert dartchess SquareSet to chessground ISet<Square>
+  /// Also adds standard castling destinations (g1/c1, g8/c8)
   ValidMoves _convertToValidMoves(IMap<Square, SquareSet> dartchessMoves) {
     final Map<Square, ISet<Square>> result = {};
     for (final entry in dartchessMoves.entries) {
@@ -221,6 +245,33 @@ class AnalysisNotifier extends StateNotifier<AnalysisState> {
       }
       result[entry.key] = ISet(squares);
     }
+
+    // Add standard castling destinations for the king
+    // dartchess returns rook squares (h1/a1), but users expect g1/c1
+    final king = _position.board.kingOf(_position.turn);
+    if (king != null && result.containsKey(king)) {
+      final kingMoves = result[king]!.toSet();
+      final Set<Square> additionalMoves = {};
+
+      // Check if king can castle kingside (add g1/g8)
+      final kingsideRook = _position.turn == Side.white ? Square.h1 : Square.h8;
+      final kingsideDest = _position.turn == Side.white ? Square.g1 : Square.g8;
+      if (kingMoves.contains(kingsideRook)) {
+        additionalMoves.add(kingsideDest);
+      }
+
+      // Check if king can castle queenside (add c1/c8)
+      final queensideRook = _position.turn == Side.white ? Square.a1 : Square.a8;
+      final queensideDest = _position.turn == Side.white ? Square.c1 : Square.c8;
+      if (kingMoves.contains(queensideRook)) {
+        additionalMoves.add(queensideDest);
+      }
+
+      if (additionalMoves.isNotEmpty) {
+        result[king] = ISet({...kingMoves, ...additionalMoves});
+      }
+    }
+
     return IMap(result);
   }
 

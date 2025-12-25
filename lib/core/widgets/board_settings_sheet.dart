@@ -67,7 +67,7 @@ class _BoardSettingsSheet extends ConsumerWidget {
               ),
               const Divider(),
 
-              // Quick Actions
+              // Quick Actions - Row 1
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 child: Row(
@@ -90,12 +90,25 @@ class _BoardSettingsSheet extends ConsumerWidget {
                     Expanded(
                       child: _ActionButton(
                         icon: settings.isMuted ? Icons.volume_off : Icons.volume_up,
-                        label: settings.isMuted ? 'Unmute' : 'Mute',
+                        label: settings.isMuted ? 'Unmute' : 'Sound',
                         onTap: () {
                           ref.read(boardSettingsProvider.notifier).toggleMute();
                         },
                         isDark: isDark,
-                        isActive: settings.isMuted,
+                        isActive: !settings.isMuted,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    // Vibration
+                    Expanded(
+                      child: _ActionButton(
+                        icon: settings.vibrationEnabled ? Icons.vibration : Icons.phone_android,
+                        label: 'Vibrate',
+                        onTap: () {
+                          ref.read(boardSettingsProvider.notifier).toggleVibration();
+                        },
+                        isDark: isDark,
+                        isActive: settings.vibrationEnabled,
                       ),
                     ),
                   ],
@@ -304,7 +317,7 @@ class _ActionButton extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
         decoration: BoxDecoration(
           color: isActive
               ? Theme.of(context).primaryColor.withValues(alpha: 0.2)
@@ -316,23 +329,27 @@ class _ActionButton extends StatelessWidget {
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
               icon,
-              size: 20,
+              size: 18,
               color: isActive
                   ? Theme.of(context).primaryColor
                   : (isDark ? Colors.white70 : Colors.black87),
             ),
-            const SizedBox(width: 8),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: isActive
-                    ? Theme.of(context).primaryColor
-                    : (isDark ? Colors.white70 : Colors.black87),
+            const SizedBox(width: 4),
+            Flexible(
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: isActive
+                      ? Theme.of(context).primaryColor
+                      : (isDark ? Colors.white70 : Colors.black87),
+                ),
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ],

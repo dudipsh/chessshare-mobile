@@ -1,5 +1,51 @@
 # Board Settings & Sounds - Implementation Checklist
 
+---
+
+## 🔴 BUGS TO FIX (Priority)
+
+### 1. Mute Not Working
+- [ ] Mute toggle doesn't actually silence sounds
+- [ ] Check where `setEnabled(false)` is called from UI
+- [ ] Verify `_enabled` flag is respected in `_playSound()`
+- [ ] Check if mute setting is persisted and loaded correctly
+- **Location:** `lib/core/services/audio_service.dart`
+
+### 2. Sound Stuttering on Mobile
+- [ ] Sounds feel choppy/stuttering on mobile devices
+- [ ] Investigate timing - when exactly is the sound triggered?
+- [ ] Consider pre-loading sounds on app start
+- [ ] Try `AudioPlayer.setSource()` to pre-cache audio
+- [ ] Test with `ReleaseMode.stop` vs `ReleaseMode.release`
+- [ ] Test on both iOS and Android physical devices
+
+---
+
+## 🟡 NEW FEATURES TO ADD
+
+### 3. Haptic Feedback (Vibration)
+- [ ] Add vibration option to board settings
+- [ ] Make it reusable across ALL boards (games, puzzles, analysis)
+- [ ] Use the SAME settings wheel that already exists (keep it unified)
+- [ ] Small vibration when making a move
+- [ ] Settings should include:
+  - Sound on/off (existing)
+  - Vibration on/off (NEW)
+- [ ] Use Flutter's `HapticFeedback.lightImpact()` or `vibration` package
+- [ ] Add to `BoardSettingsState` and `board_settings_provider.dart`
+- [ ] Update `board_settings_sheet.dart` to include vibration toggle
+
+### 4. Test Push Notifications
+- [ ] Document how to test push notifications work
+- [ ] Options to test:
+  - Firebase Console → Cloud Messaging → Send test message
+  - Use device token from logs
+  - Supabase Edge Functions trigger
+- [ ] Must test on PHYSICAL device (not simulator for iOS)
+- [ ] Check device token is registered in Supabase `push_tokens` table
+
+---
+
 ## Current State Analysis
 
 ### Screens with Chessboard:
@@ -16,140 +62,55 @@
 
 ---
 
-## What Needs to be Added
+## Technical Notes
 
-### 1. `practice_mistakes_screen.dart`
-**Location:** `lib/features/games/screens/practice_mistakes_screen.dart`
+### Audio Service
+**Location:** `lib/core/services/audio_service.dart`
 
-**Add:**
-- [ ] Import `board_settings_provider.dart`
-- [ ] Import `board_settings_sheet.dart`
-- [ ] Import `audio_service.dart`
-- [ ] AppBar action with settings gear icon
-- [ ] Use `boardSettingsProvider` for board colors/piece set
-- [ ] Call `AudioService.playMoveSound()` on moves
+### Board Settings Provider
+**Location:** `lib/core/providers/board_settings_provider.dart`
 
-### 2. `analysis_screen.dart`
-**Location:** `lib/features/analysis/screens/analysis_screen.dart`
-
-**Add:**
-- [ ] Import `board_settings_provider.dart`
-- [ ] Import `board_settings_sheet.dart`
-- [ ] Import `audio_service.dart`
-- [ ] AppBar action with settings gear icon
-- [ ] Use `boardSettingsProvider` for board colors/piece set
-- [ ] Call `AudioService.playMoveSound()` on moves
-
-### 3. `game_review_screen.dart`
-**Location:** `lib/features/games/screens/game_review_screen.dart`
-
-**Add:**
-- [ ] Import `audio_service.dart`
-- [ ] Call `AudioService.playMoveSound()` when navigating moves
-
-### 4. `puzzle_screen.dart`
-**Location:** `lib/features/puzzles/screens/puzzle_screen.dart`
-
-**Add:**
-- [ ] Import `audio_service.dart`
-- [ ] Call `AudioService.playMoveSound()` on moves
-
-### 5. `daily_puzzle_screen.dart`
-**Location:** `lib/features/puzzles/screens/daily_puzzle_screen.dart`
-
-**Add:**
-- [ ] Import `audio_service.dart`
-- [ ] Call `AudioService.playMoveSound()` on moves
-
-### 6. `play_vs_stockfish_screen.dart`
-**Location:** `lib/features/games/screens/play_vs_stockfish_screen.dart`
-
-**Add:**
-- [ ] Import `audio_service.dart`
-- [ ] Call `AudioService.playMoveSound()` on moves
+### Board Settings Sheet (UI)
+**Location:** `lib/core/widgets/board_settings_sheet.dart`
 
 ---
 
-## Required Imports
+## Haptic Feedback Implementation Plan
 
 ```dart
-// For settings gear
-import '../../../core/providers/board_settings_provider.dart';
-import '../../../core/widgets/board_settings_sheet.dart';
+// In board_settings_provider.dart - add to state:
+final bool vibrationEnabled;
 
-// For sounds
-import '../../../core/services/audio_service.dart';
-```
-
-## Settings Gear Implementation Pattern
-
-```dart
-// In AppBar actions:
-IconButton(
-  icon: const Icon(Icons.settings),
-  onPressed: () => showBoardSettingsSheet(
-    context: context,
-    ref: ref,
-    onFlipBoard: () {
-      setState(() {
-        _orientation = _orientation == Side.white ? Side.black : Side.white;
-      });
-    },
-  ),
-  tooltip: 'Board settings',
+// In board_settings_sheet.dart - add toggle:
+SwitchListTile(
+  title: Text('Vibration'),
+  subtitle: Text('Vibrate on moves'),
+  value: settings.vibrationEnabled,
+  onChanged: (value) => ref.read(boardSettingsProvider.notifier).setVibrationEnabled(value),
 ),
 
-// In build method, get board settings:
-final boardSettings = ref.watch(boardSettingsProvider);
-final lightSquare = boardSettings.colorScheme.lightSquare;
-final darkSquare = boardSettings.colorScheme.darkSquare;
-final pieceAssets = boardSettings.pieceSet.pieceSet.assets;
-```
-
-## Sound Implementation Pattern
-
-```dart
-// Get audio service
-final audioService = ref.read(audioServiceProvider);
-
-// After a move is made, determine move type and play sound:
-void _playMoveSound(NormalMove move, Chess positionBefore, Chess positionAfter) {
-  final san = positionBefore.makeSan(move).$2;
-  final isCapture = san.contains('x');
-  final isCheck = san.contains('+') || san.contains('#');
-  final isCastle = san == 'O-O' || san == 'O-O-O';
-  final isCheckmate = positionAfter.isCheckmate;
-
-  audioService.playMoveSound(
-    isCapture: isCapture,
-    isCheck: isCheck,
-    isCastle: isCastle,
-    isCheckmate: isCheckmate,
-  );
+// When making a move (in all board screens):
+if (boardSettings.vibrationEnabled) {
+  HapticFeedback.lightImpact();
 }
 ```
 
 ---
 
-## Priority Order
-
-1. **High Priority** (missing both settings + sounds):
-   - `practice_mistakes_screen.dart`
-   - `analysis_screen.dart`
-
-2. **Medium Priority** (missing sounds only):
-   - `game_review_screen.dart`
-   - `puzzle_screen.dart`
-   - `daily_puzzle_screen.dart`
-   - `play_vs_stockfish_screen.dart`
-
----
-
-## Sound Files Required
+## Sound Files
 Located in `assets/sounds/`:
 - `move.wav` - Regular move
 - `capture.wav` - Capture
-- `check.wav` - Check
+- `check.wav` - Check (volume: 0.5)
 - `castle.wav` - Castling
 - `illegal.wav` - Illegal move attempt
 - `end-level.wav` - Checkmate/Game end
+
+---
+
+## Priority Order
+
+1. 🔴 **Fix Mute** - Bug, users expect it to work
+2. 🔴 **Fix Stuttering** - Bad UX on mobile
+3. 🟡 **Add Vibration** - Feature request
+4. 🟡 **Test Notifications** - Verification

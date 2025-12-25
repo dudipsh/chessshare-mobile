@@ -32,6 +32,7 @@ class GoogleAuthService {
 
       _googleSignIn = GoogleSignIn(
         scopes: ['email', 'profile'],
+        serverClientId: _webClientId, // Required for idToken on Android
       );
       _isInitialized = true;
       debugPrint('Google Sign-In initialized successfully');

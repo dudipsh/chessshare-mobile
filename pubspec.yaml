@@ -40,8 +40,9 @@ dependencies:
   fl_chart: ^0.66.2
 
   # Audio & Haptics
-  audioplayers: ^5.2.1
+  flutter_soloud: ^3.1.1  # Low-latency audio for games
   haptic_feedback: ^0.5.1+1
+  vibration: ^2.0.0  # More reliable vibration
 
   # Utilities
   intl: ^0.19.0

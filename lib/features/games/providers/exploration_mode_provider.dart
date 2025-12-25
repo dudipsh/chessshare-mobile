@@ -158,11 +158,34 @@ class ExplorationModeNotifier extends StateNotifier<ExplorationState> {
   bool makeMove(NormalMove move, {String? expectedUci}) {
     if (state.currentPosition == null) return false;
 
-    final newPosition = ChessPositionUtils.makeMove(state.currentPosition!, move);
+    // Convert standard castling notation to dartchess format
+    // dartchess uses king-to-rook (e1h1), but user clicks king-to-final (e1g1)
+    var actualMove = move;
+    final king = state.currentPosition!.board.kingOf(state.currentPosition!.turn);
+    if (king != null && move.from == king) {
+      // White kingside: e1g1 -> e1h1
+      if (move.from == Square.e1 && move.to == Square.g1) {
+        actualMove = NormalMove(from: Square.e1, to: Square.h1);
+      }
+      // White queenside: e1c1 -> e1a1
+      else if (move.from == Square.e1 && move.to == Square.c1) {
+        actualMove = NormalMove(from: Square.e1, to: Square.a1);
+      }
+      // Black kingside: e8g8 -> e8h8
+      else if (move.from == Square.e8 && move.to == Square.g8) {
+        actualMove = NormalMove(from: Square.e8, to: Square.h8);
+      }
+      // Black queenside: e8c8 -> e8a8
+      else if (move.from == Square.e8 && move.to == Square.c8) {
+        actualMove = NormalMove(from: Square.e8, to: Square.a8);
+      }
+    }
+
+    final newPosition = ChessPositionUtils.makeMove(state.currentPosition!, actualMove);
     if (newPosition == null) return false;
 
     // Build UCI string for this move
-    final uci = '${move.from.name}${move.to.name}${move.promotion?.letter ?? ''}';
+    final uci = '${actualMove.from.name}${actualMove.to.name}${actualMove.promotion?.letter ?? ''}';
 
     // Check if this matches the expected next move in game history
     if (!state.isExploring && expectedUci != null && uci == expectedUci) {

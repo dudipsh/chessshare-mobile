@@ -14,6 +14,7 @@ import '../models/analyzed_move.dart';
 import '../models/chess_game.dart';
 import '../models/game_review.dart';
 import '../models/move_classification.dart';
+import '../utils/chess_position_utils.dart';
 import 'book_move_detector.dart';
 import 'brilliant_move_classifier.dart';
 
@@ -492,6 +493,11 @@ class GameAnalysisService {
       return _evalCache[fen]!;
     }
 
+    // IMPORTANT: Stop any ongoing analysis before starting new one
+    // This prevents race conditions where old analysis output gets captured
+    _stockfish!.stop();
+    await Future.delayed(const Duration(milliseconds: 10));
+
     // Determine whose turn it is from the FEN
     // FEN format: pieces turn castling enpassant halfmove fullmove
     final isBlackToMove = fen.split(' ').length > 1 && fen.split(' ')[1] == 'b';
@@ -500,8 +506,12 @@ class GameAnalysisService {
     final completer = Completer<_EvalResult>();
     StreamSubscription<String>? subscription;
     _EvalResult? lastResult;
+    bool positionSet = false;
 
     subscription = _stockfish!.outputStream.listen((line) {
+      // Only process output after we've set the position
+      if (!positionSet) return;
+
       if (line.startsWith('info') && line.contains('depth')) {
         final parsed = UciParser.parseInfo(line);
         if (parsed?.pv?.evaluation != null) {
@@ -527,6 +537,7 @@ class GameAnalysisService {
     });
 
     _stockfish!.setPosition(fen);
+    positionSet = true;
     _stockfish!.startAnalysis(moveTimeMs: config.maxMoveTimeMs);
 
     // Use time-based timeout
@@ -546,22 +557,43 @@ class GameAnalysisService {
 
   /// Get best move for a position (fast version)
   Future<_BestMoveResult> _getBestMoveFast(String fen) async {
+    // IMPORTANT: Stop any ongoing analysis and wait for engine to be ready
+    // This prevents race conditions where old analysis output gets captured
+    _stockfish!.stop();
+
+    // Small delay to ensure engine processes the stop command
+    await Future.delayed(const Duration(milliseconds: 20));
+
     final completer = Completer<_BestMoveResult>();
     StreamSubscription<String>? subscription;
     String? bestMoveUci;
+    bool positionSet = false;
 
     subscription = _stockfish!.outputStream.listen((line) {
+      // Only process output after we've set the position
+      if (!positionSet) return;
+
       if (line.startsWith('info') && line.contains('pv')) {
         final parsed = UciParser.parseInfo(line);
         if (parsed?.pv != null && parsed!.pv!.uciMoves.isNotEmpty) {
-          bestMoveUci = parsed.pv!.uciMoves.first;
+          final candidateMove = parsed.pv!.uciMoves.first;
+          // Validate that this move is legal for the current position
+          final validatedSan = ChessPositionUtils.validateMove(fen, candidateMove);
+          if (validatedSan != null) {
+            bestMoveUci = candidateMove;
+          }
         }
       }
 
       if (line.startsWith('bestmove')) {
         final parts = line.split(' ');
         if (parts.length >= 2 && parts[1] != '(none)') {
-          bestMoveUci = parts[1];
+          final candidateMove = parts[1];
+          // Validate the best move is legal for this position
+          final validatedSan = ChessPositionUtils.validateMove(fen, candidateMove);
+          if (validatedSan != null) {
+            bestMoveUci = candidateMove;
+          }
         }
 
         // Convert UCI to SAN
@@ -570,18 +602,19 @@ class GameAnalysisService {
           try {
             final position = Chess.fromSetup(Setup.parseFen(fen));
             final move = _parseUciMove(bestMoveUci!);
-            if (move != null) {
+            if (move != null && position.isLegal(move)) {
               san = position.makeSan(move).$2;
             }
           } catch (_) {
             // Move conversion failed - likely invalid for this position
+            bestMoveUci = null;
           }
         }
 
         if (!completer.isCompleted) {
           completer.complete(_BestMoveResult(
             uci: bestMoveUci ?? '',
-            san: san ?? bestMoveUci ?? '',
+            san: san ?? '',
           ));
         }
         subscription?.cancel();
@@ -589,6 +622,7 @@ class GameAnalysisService {
     });
 
     _stockfish!.setPosition(fen);
+    positionSet = true;
     _stockfish!.startAnalysis(moveTimeMs: config.maxMoveTimeMs);
 
     return completer.future.timeout(

@@ -78,7 +78,7 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> {
       positionAfter = positionBefore.play(move) as Chess;
     } catch (_) {}
 
-    audioService.playMoveSound(
+    audioService.playMoveWithHaptic(
       isCapture: isCapture,
       isCheck: isCheck,
       isCastle: isCastle,

@@ -58,32 +58,26 @@ class GameReviewState {
     final move = currentMove;
     if (move == null) return null;
 
-    // Handle castling - convert rook-destination to standard king destination
-    // dartchess stores castling as king-to-rook (e1h1), but we want king's final square (e1g1)
-    final uci = move.uci;
-    if (uci.length >= 4) {
-      final from = uci.substring(0, 2);
-      final to = uci.substring(2, 4);
+    // Handle castling by SAN - this is the most reliable way
+    // SAN "O-O" = kingside, "O-O-O" = queenside
+    final san = move.san;
+    final isWhite = move.color == 'white';
 
-      // White kingside castling: e1h1 -> e1g1
-      if (from == 'e1' && to == 'h1') {
-        return ChessPositionUtils.parseUciMove('e1g1');
-      }
-      // White queenside castling: e1a1 -> e1c1
-      if (from == 'e1' && to == 'a1') {
-        return ChessPositionUtils.parseUciMove('e1c1');
-      }
-      // Black kingside castling: e8h8 -> e8g8
-      if (from == 'e8' && to == 'h8') {
-        return ChessPositionUtils.parseUciMove('e8g8');
-      }
-      // Black queenside castling: e8a8 -> e8c8
-      if (from == 'e8' && to == 'a8') {
-        return ChessPositionUtils.parseUciMove('e8c8');
-      }
+    if (san == 'O-O') {
+      // Kingside castling: king moves from e-file to g-file
+      return isWhite
+          ? ChessPositionUtils.parseUciMove('e1g1')
+          : ChessPositionUtils.parseUciMove('e8g8');
+    }
+    if (san == 'O-O-O') {
+      // Queenside castling: king moves from e-file to c-file
+      return isWhite
+          ? ChessPositionUtils.parseUciMove('e1c1')
+          : ChessPositionUtils.parseUciMove('e8c8');
     }
 
-    return ChessPositionUtils.parseUciMove(uci);
+    // For non-castling moves, use UCI directly
+    return ChessPositionUtils.parseUciMove(move.uci);
   }
 
   GameReviewState copyWith({

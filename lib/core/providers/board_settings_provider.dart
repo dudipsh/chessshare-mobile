@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../services/audio_service.dart';
+
 /// Available piece sets
 enum ChessPieceSet {
   merida('Merida', PieceSet.merida),
@@ -48,22 +50,26 @@ class BoardSettingsState {
   final ChessPieceSet pieceSet;
   final BoardColorScheme colorScheme;
   final bool isMuted;
+  final bool vibrationEnabled;
 
   const BoardSettingsState({
     this.pieceSet = ChessPieceSet.merida,
     this.colorScheme = BoardColorScheme.green,
     this.isMuted = false,
+    this.vibrationEnabled = true,
   });
 
   BoardSettingsState copyWith({
     ChessPieceSet? pieceSet,
     BoardColorScheme? colorScheme,
     bool? isMuted,
+    bool? vibrationEnabled,
   }) {
     return BoardSettingsState(
       pieceSet: pieceSet ?? this.pieceSet,
       colorScheme: colorScheme ?? this.colorScheme,
       isMuted: isMuted ?? this.isMuted,
+      vibrationEnabled: vibrationEnabled ?? this.vibrationEnabled,
     );
   }
 }
@@ -73,6 +79,7 @@ class BoardSettingsNotifier extends StateNotifier<BoardSettingsState> {
   static const _pieceSetKey = 'board_piece_set';
   static const _colorSchemeKey = 'board_color_scheme';
   static const _isMutedKey = 'board_is_muted';
+  static const _vibrationEnabledKey = 'board_vibration_enabled';
 
   BoardSettingsNotifier() : super(const BoardSettingsState()) {
     _loadSettings();
@@ -85,12 +92,18 @@ class BoardSettingsNotifier extends StateNotifier<BoardSettingsState> {
       final pieceSetIndex = prefs.getInt(_pieceSetKey) ?? 0;
       final colorSchemeIndex = prefs.getInt(_colorSchemeKey) ?? 0;
       final isMuted = prefs.getBool(_isMutedKey) ?? false;
+      final vibrationEnabled = prefs.getBool(_vibrationEnabledKey) ?? true;
 
       state = BoardSettingsState(
         pieceSet: ChessPieceSet.values[pieceSetIndex.clamp(0, ChessPieceSet.values.length - 1)],
         colorScheme: BoardColorScheme.values[colorSchemeIndex.clamp(0, BoardColorScheme.values.length - 1)],
         isMuted: isMuted,
+        vibrationEnabled: vibrationEnabled,
       );
+
+      // Sync audio service with settings
+      AudioService().setSoundEnabled(!isMuted);
+      AudioService().setVibrationEnabled(vibrationEnabled);
     } catch (e) {
       // Use defaults if loading fails
     }
@@ -109,15 +122,42 @@ class BoardSettingsNotifier extends StateNotifier<BoardSettingsState> {
   }
 
   Future<void> toggleMute() async {
-    state = state.copyWith(isMuted: !state.isMuted);
+    final newMuted = !state.isMuted;
+    state = state.copyWith(isMuted: newMuted);
+    // Update audio service
+    AudioService().setSoundEnabled(!newMuted);
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_isMutedKey, state.isMuted);
+    await prefs.setBool(_isMutedKey, newMuted);
   }
 
   Future<void> setMuted(bool isMuted) async {
     state = state.copyWith(isMuted: isMuted);
+    // Update audio service
+    AudioService().setSoundEnabled(!isMuted);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_isMutedKey, isMuted);
+  }
+
+  Future<void> toggleVibration() async {
+    final newVibration = !state.vibrationEnabled;
+    state = state.copyWith(vibrationEnabled: newVibration);
+    // Update audio service
+    AudioService().setVibrationEnabled(newVibration);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_vibrationEnabledKey, newVibration);
+  }
+
+  Future<void> setVibrationEnabled(bool enabled) async {
+    state = state.copyWith(vibrationEnabled: enabled);
+    // Update audio service
+    AudioService().setVibrationEnabled(enabled);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_vibrationEnabledKey, enabled);
+  }
+
+  /// Trigger haptic feedback - delegates to AudioService
+  void triggerHaptic() {
+    AudioService().vibrate();
   }
 }
 

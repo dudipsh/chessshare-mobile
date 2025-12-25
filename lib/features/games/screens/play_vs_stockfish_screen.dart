@@ -202,7 +202,7 @@ class _PlayVsStockfishScreenState extends ConsumerState<PlayVsStockfishScreen> {
         positionAfter = positionBefore.play(move) as Chess;
       } catch (_) {}
 
-      ref.read(audioServiceProvider).playMoveSound(
+      ref.read(audioServiceProvider).playMoveWithHaptic(
         isCapture: isCapture,
         isCheck: isCheck,
         isCastle: isCastle,

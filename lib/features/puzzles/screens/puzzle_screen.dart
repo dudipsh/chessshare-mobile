@@ -78,6 +78,8 @@ class _PuzzleScreenState extends ConsumerState<PuzzleScreen> {
     );
   }
 
+  /// Play move sound and haptic feedback
+  /// Uses SoLoud for instant, non-blocking audio
   void _playMoveSound(NormalMove move, String fen) {
     try {
       final position = Chess.fromSetup(Setup.parseFen(fen));
@@ -91,7 +93,8 @@ class _PuzzleScreenState extends ConsumerState<PuzzleScreen> {
         positionAfter = position.play(move) as Chess;
       } catch (_) {}
 
-      ref.read(audioServiceProvider).playMoveSound(
+      // Single call handles both sound and vibration
+      ref.read(audioServiceProvider).playMoveWithHaptic(
         isCapture: isCapture,
         isCheck: isCheck,
         isCastle: isCastle,
@@ -205,31 +208,37 @@ class _PuzzleScreenState extends ConsumerState<PuzzleScreen> {
     );
 
     if (isPlayable) {
-      return Chessboard(
-        size: boardSize,
-        settings: settings,
-        orientation: state.orientation,
-        fen: state.currentFen,
-        lastMove: state.lastMove,
-        game: GameData(
-          playerSide: state.orientation == Side.white ? PlayerSide.white : PlayerSide.black,
-          sideToMove: notifier.sideToMove,
-          validMoves: state.validMoves,
-          promotionMove: null,
-          onMove: (move, {isDrop}) {
-            _playMoveSound(move, state.currentFen);
-            notifier.makeMove(move);
-          },
-          onPromotionSelection: (role) {},
+      return RepaintBoundary(
+        child: Chessboard(
+          size: boardSize,
+          settings: settings,
+          orientation: state.orientation,
+          fen: state.currentFen,
+          lastMove: state.lastMove,
+          game: GameData(
+            playerSide: state.orientation == Side.white ? PlayerSide.white : PlayerSide.black,
+            sideToMove: notifier.sideToMove,
+            validMoves: state.validMoves,
+            promotionMove: null,
+            onMove: (move, {isDrop}) {
+              // Make the move first (UI update is priority)
+              notifier.makeMove(move);
+              // Then play sound and haptic (instant with SoLoud)
+              _playMoveSound(move, state.currentFen);
+            },
+            onPromotionSelection: (role) {},
+          ),
         ),
       );
     } else {
-      return Chessboard.fixed(
-        size: boardSize,
-        settings: settings,
-        orientation: state.orientation,
-        fen: state.currentFen,
-        lastMove: state.lastMove,
+      return RepaintBoundary(
+        child: Chessboard.fixed(
+          size: boardSize,
+          settings: settings,
+          orientation: state.orientation,
+          fen: state.currentFen,
+          lastMove: state.lastMove,
+        ),
       );
     }
   }

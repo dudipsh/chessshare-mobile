@@ -110,7 +110,7 @@ class _DailyPuzzleScreenState extends ConsumerState<DailyPuzzleScreen> {
         positionAfter = position.play(move) as Chess;
       } catch (_) {}
 
-      ref.read(audioServiceProvider).playMoveSound(
+      ref.read(audioServiceProvider).playMoveWithHaptic(
         isCapture: isCapture,
         isCheck: isCheck,
         isCastle: isCastle,
@@ -348,8 +348,8 @@ class _DailyPuzzleScreenState extends ConsumerState<DailyPuzzleScreen> {
           validMoves: state.validMoves,
           promotionMove: null,
           onMove: (move, {isDrop}) {
-            _playMoveSound(move, state.currentFen);
             notifier.makeMove(move);
+            _playMoveSound(move, state.currentFen);
           },
           onPromotionSelection: (role) {},
         ),

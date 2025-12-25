@@ -162,36 +162,33 @@ class ProfileRepository {
     return rpcResult.data ?? [];
   }
 
-  /// Get another user's public boards - uses direct query
+  /// Get another user's public boards - uses get_user_boards_with_author RPC
   static Future<List<UserBoard>> getUserBoards(
     String userId, {
     int limit = 20,
     int offset = 0,
   }) async {
-    // Query boards table directly for other users (only public boards)
-    final result = await BaseRepository.executeAuth<List<UserBoard>>(
-      operation: 'getUserBoards',
-      query: (client) async {
-        final response = await client
-            .from('boards')
-            .select('id, title, cover_image_url, is_public, views_count, likes_count, created_at')
-            .eq('user_id', userId)
-            .eq('is_public', true) // Only public boards for other users
-            .order('created_at', ascending: false)
-            .range(offset, offset + limit - 1);
-
+    final result = await BaseRepository.executeRpc<List<UserBoard>>(
+      functionName: 'get_user_boards_with_author',
+      params: {'user_id': userId},
+      parser: (response) {
+        if (response == null) return <UserBoard>[];
         final list = response as List;
-        debugPrint('getUserBoards: Direct query returned ${list.length} boards for user $userId');
-        if (list.isEmpty) return <UserBoard>[];
+        debugPrint('getUserBoards: RPC returned ${list.length} boards for user $userId');
         return list.map((e) {
+          final map = e as Map<String, dynamic>;
           return UserBoard(
-            id: e['id'] as String,
-            title: e['title'] as String? ?? 'Untitled Board',
-            coverImageUrl: e['cover_image_url'] as String?,
-            isPublic: e['is_public'] as bool? ?? true,
-            viewsCount: e['views_count'] as int? ?? 0,
-            likesCount: e['likes_count'] as int? ?? 0,
-            createdAt: DateTime.parse(e['created_at'] as String),
+            id: map['id'] as String,
+            title: map['title'] as String? ?? 'Untitled Board',
+            coverImageUrl: map['cover_image_url'] as String?,
+            isPublic: map['is_public'] as bool? ?? true,
+            viewsCount: (map['views_count'] as num?)?.toInt() ?? 0,
+            likesCount: (map['likes_count'] as num?)?.toInt() ?? 0,
+            createdAt: map['created_at'] != null
+                ? DateTime.parse(map['created_at'] as String)
+                : DateTime.now(),
+            authorName: map['author_name'] as String?,
+            authorAvatarUrl: map['author_avatar_url'] as String?,
           );
         }).toList();
       },

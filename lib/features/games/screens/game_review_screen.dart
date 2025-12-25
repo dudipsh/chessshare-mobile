@@ -482,7 +482,7 @@ class _GameReviewScreenState extends ConsumerState<GameReviewScreen> {
       final isCheckmate = san.contains('#');
       final isCastle = san == 'O-O' || san == 'O-O-O';
 
-      ref.read(audioServiceProvider).playMoveSound(
+      ref.read(audioServiceProvider).playMoveWithHaptic(
         isCapture: isCapture,
         isCheck: isCheck,
         isCastle: isCastle,

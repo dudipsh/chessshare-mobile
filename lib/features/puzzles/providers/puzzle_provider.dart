@@ -202,12 +202,35 @@ class PuzzleSolveNotifier extends StateNotifier<PuzzleSolveState> {
     final puzzle = state.puzzle;
     if (puzzle == null || state.state != PuzzleState.playing) return;
 
-    final uci = '${move.from.name}${move.to.name}${move.promotion?.letter ?? ''}';
+    // Convert standard castling notation to dartchess format
+    // dartchess uses king-to-rook (e1h1), but user clicks king-to-final (e1g1)
+    var actualMove = move;
+    final king = _position.board.kingOf(_position.turn);
+    if (king != null && move.from == king) {
+      // White kingside: e1g1 -> e1h1
+      if (move.from == Square.e1 && move.to == Square.g1) {
+        actualMove = NormalMove(from: Square.e1, to: Square.h1);
+      }
+      // White queenside: e1c1 -> e1a1
+      else if (move.from == Square.e1 && move.to == Square.c1) {
+        actualMove = NormalMove(from: Square.e1, to: Square.a1);
+      }
+      // Black kingside: e8g8 -> e8h8
+      else if (move.from == Square.e8 && move.to == Square.g8) {
+        actualMove = NormalMove(from: Square.e8, to: Square.h8);
+      }
+      // Black queenside: e8c8 -> e8a8
+      else if (move.from == Square.e8 && move.to == Square.c8) {
+        actualMove = NormalMove(from: Square.e8, to: Square.a8);
+      }
+    }
+
+    final uci = '${actualMove.from.name}${actualMove.to.name}${actualMove.promotion?.letter ?? ''}';
 
     // Check if this is the correct move
     if (puzzle.isCorrectMove(uci, state.currentMoveIndex)) {
       // Correct move!
-      _position = _position.play(move) as Chess;
+      _position = _position.play(actualMove) as Chess;
 
       final newIndex = state.currentMoveIndex + 1;
 
@@ -416,6 +439,33 @@ class PuzzleSolveNotifier extends StateNotifier<PuzzleSolveState> {
       }
       result[entry.key] = ISet(squares);
     }
+
+    // Add standard castling destinations for the king
+    // dartchess returns rook squares (h1/a1), but users expect g1/c1
+    final king = _position.board.kingOf(_position.turn);
+    if (king != null && result.containsKey(king)) {
+      final kingMoves = result[king]!.toSet();
+      final Set<Square> additionalMoves = {};
+
+      // Check if king can castle kingside (add g1/g8)
+      final kingsideRook = _position.turn == Side.white ? Square.h1 : Square.h8;
+      final kingsideDest = _position.turn == Side.white ? Square.g1 : Square.g8;
+      if (kingMoves.contains(kingsideRook)) {
+        additionalMoves.add(kingsideDest);
+      }
+
+      // Check if king can castle queenside (add c1/c8)
+      final queensideRook = _position.turn == Side.white ? Square.a1 : Square.a8;
+      final queensideDest = _position.turn == Side.white ? Square.c1 : Square.c8;
+      if (kingMoves.contains(queensideRook)) {
+        additionalMoves.add(queensideDest);
+      }
+
+      if (additionalMoves.isNotEmpty) {
+        result[king] = ISet({...kingMoves, ...additionalMoves});
+      }
+    }
+
     return IMap(result);
   }
 

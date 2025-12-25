@@ -3,7 +3,6 @@ import 'package:chessground/chessground.dart' show ValidMoves;
 import 'package:fast_immutable_collections/fast_immutable_collections.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:haptic_feedback/haptic_feedback.dart';
 
 import '../../../core/services/audio_service.dart';
 import '../../gamification/models/xp_models.dart';
@@ -286,16 +285,13 @@ class StudyBoardNotifier extends StateNotifier<StudyBoardState> {
     final moveInfo = _getMoveInfo(move);
     _position = _position.play(move) as Chess;
 
-    // Play sound
-    _audioService.playMoveSound(
+    // Play sound with haptic feedback
+    _audioService.playMoveWithHaptic(
       isCapture: moveInfo.isCapture,
       isCheck: moveInfo.isCheck,
       isCastle: moveInfo.isCastle,
       isCheckmate: moveInfo.isCheckmate,
     );
-
-    // Haptic feedback
-    Haptics.vibrate(HapticsType.light);
 
     final newMoveIndex = state.moveIndex + 1;
     final isComplete = newMoveIndex >= state.expectedMoves.length;
@@ -303,7 +299,7 @@ class StudyBoardNotifier extends StateNotifier<StudyBoardState> {
     if (isComplete) {
       // Line completed!
       _audioService.playEndLevel();
-      Haptics.vibrate(HapticsType.success);
+      _audioService.vibrate();
 
       state = state.copyWith(
         currentFen: _position.fen,
@@ -360,9 +356,9 @@ class StudyBoardNotifier extends StateNotifier<StudyBoardState> {
   }
 
   void _handleWrongMove(NormalMove move, String originalFen) {
-    // Play wrong move sound
+    // Play wrong move sound with haptic
     _audioService.playIllegal();
-    Haptics.vibrate(HapticsType.error);
+    _audioService.vibrate();
 
     // Temporarily execute the move to show it on the board
     try {
@@ -417,8 +413,8 @@ class StudyBoardNotifier extends StateNotifier<StudyBoardState> {
         final moveInfo = _getMoveInfo(move);
         _position = _position.play(move) as Chess;
 
-        // Play sound
-        _audioService.playMoveSound(
+        // Play sound with haptic
+        _audioService.playMoveWithHaptic(
           isCapture: moveInfo.isCapture,
           isCheck: moveInfo.isCheck,
           isCastle: moveInfo.isCastle,
@@ -469,7 +465,7 @@ class StudyBoardNotifier extends StateNotifier<StudyBoardState> {
     try {
       final move = _position.parseSan(san);
       if (move != null && move is NormalMove) {
-        Haptics.vibrate(HapticsType.light);
+        _audioService.vibrate();
 
         state = state.copyWith(
           feedback: 'Hint: Move from ${move.from.name}',
@@ -544,7 +540,7 @@ class StudyBoardNotifier extends StateNotifier<StudyBoardState> {
         final moveInfo = _getMoveInfo(move);
         _position = _position.play(move) as Chess;
 
-        _audioService.playMoveSound(
+        _audioService.playMoveWithHaptic(
           isCapture: moveInfo.isCapture,
           isCheck: moveInfo.isCheck,
           isCastle: moveInfo.isCastle,
