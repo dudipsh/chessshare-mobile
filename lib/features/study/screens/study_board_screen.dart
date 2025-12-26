@@ -9,6 +9,7 @@ import '../../../core/providers/captured_pieces_provider.dart';
 import '../../../core/widgets/board_settings_factory.dart';
 import '../../../core/widgets/board_settings_sheet.dart';
 import '../../../core/widgets/chess_board_shell.dart';
+import '../../analysis/providers/engine_provider.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../models/study_board.dart';
 import '../providers/study_board_provider.dart';
@@ -31,11 +32,22 @@ class StudyBoardScreen extends ConsumerStatefulWidget {
 
 class _StudyBoardScreenState extends ConsumerState<StudyBoardScreen> {
   bool _isLoading = true;
+  String? _lastAnalyzedFen;
+  bool _wasEngineReady = false;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _loadBoardWithProgress());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadBoardWithProgress();
+      _initializeEngine();
+    });
+  }
+
+  Future<void> _initializeEngine() async {
+    // Initialize engine for position evaluation
+    final engineNotifier = ref.read(engineAnalysisProvider.notifier);
+    await engineNotifier.initialize();
   }
 
   Future<void> _loadBoardWithProgress() async {
@@ -52,12 +64,34 @@ class _StudyBoardScreenState extends ConsumerState<StudyBoardScreen> {
     }
   }
 
+  void _analyzeCurrentPosition(String fen, bool isEngineReady) {
+    if (!isEngineReady) return;
+
+    // Analyze if position changed OR if engine just became ready
+    final engineJustBecameReady = isEngineReady && !_wasEngineReady;
+    final positionChanged = fen != _lastAnalyzedFen;
+
+    if (positionChanged || engineJustBecameReady) {
+      _lastAnalyzedFen = fen;
+      ref.read(engineAnalysisProvider.notifier).analyzePosition(fen);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(studyBoardProvider);
+    final engineState = ref.watch(engineAnalysisProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final screenWidth = MediaQuery.of(context).size.width;
     final boardSize = screenWidth - 16;
+
+    // Analyze position when it changes or engine becomes ready
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (state.currentFen.isNotEmpty) {
+        _analyzeCurrentPosition(state.currentFen, engineState.isReady);
+        _wasEngineReady = engineState.isReady;
+      }
+    });
 
     if (_isLoading) {
       return Scaffold(
@@ -67,7 +101,7 @@ class _StudyBoardScreenState extends ConsumerState<StudyBoardScreen> {
     }
 
     return Scaffold(
-      appBar: _buildAppBar(state, isDark),
+      appBar: _buildAppBar(state, isDark, engineState),
       body: SafeArea(
         child: SingleChildScrollView(
           child: Column(
@@ -134,11 +168,22 @@ class _StudyBoardScreenState extends ConsumerState<StudyBoardScreen> {
     );
   }
 
-  AppBar _buildAppBar(StudyBoardState state, bool isDark) {
+  AppBar _buildAppBar(StudyBoardState state, bool isDark, EngineAnalysisState engineState) {
     return AppBar(
-      title: Text(widget.board.title, style: const TextStyle(fontSize: 17)),
+      title: Row(
+        children: [
+          _buildEvaluationBadge(engineState, isDark),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              widget.board.title,
+              style: const TextStyle(fontSize: 17),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
       actions: [
-        // Removed hamburger icon (Icons.list) - line name is now clickable
         IconButton(
           icon: const Icon(Icons.settings),
           onPressed: () => showBoardSettingsSheet(
@@ -149,6 +194,65 @@ class _StudyBoardScreenState extends ConsumerState<StudyBoardScreen> {
           tooltip: 'Board settings',
         ),
       ],
+    );
+  }
+
+  Widget _buildEvaluationBadge(EngineAnalysisState engineState, bool isDark) {
+    final evaluation = engineState.evaluation;
+
+    // Default values for when no evaluation is available
+    String text = '0.0';
+    Color bgColor = isDark ? Colors.grey.shade600 : Colors.grey.shade400;
+    Color textColor = isDark ? Colors.white : Colors.black87;
+
+    if (evaluation != null) {
+      // Format: show sign only when needed, max 1 decimal
+      final cp = evaluation.centipawns;
+      final mate = evaluation.mateInMoves;
+
+      if (mate != null) {
+        // Mate score
+        text = mate > 0 ? 'M$mate' : 'M$mate';
+        bgColor = mate > 0 ? Colors.white : Colors.grey.shade800;
+        textColor = mate > 0 ? Colors.black87 : Colors.white;
+      } else if (cp != null) {
+        // Centipawn score - convert to pawns with 1 decimal
+        final pawns = cp / 100;
+        if (pawns > 0) {
+          text = '+${pawns.toStringAsFixed(1)}';
+          bgColor = Colors.white;
+          textColor = Colors.black87;
+        } else if (pawns < 0) {
+          text = pawns.toStringAsFixed(1); // Already has minus sign
+          bgColor = Colors.grey.shade800;
+          textColor = Colors.white;
+        } else {
+          text = '0.0';
+        }
+      }
+    }
+
+    // Fixed width container to keep consistent layout
+    return Container(
+      width: 52, // Fixed width for consistent positioning
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: isDark ? Colors.grey.shade600 : Colors.grey.shade400,
+          width: 1,
+        ),
+      ),
+      child: Text(
+        text,
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+          color: textColor,
+        ),
+      ),
     );
   }
 

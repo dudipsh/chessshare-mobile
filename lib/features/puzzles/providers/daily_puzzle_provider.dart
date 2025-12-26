@@ -151,30 +151,32 @@ class DailyPuzzleNotifier extends StateNotifier<DailyPuzzleState> {
 
   /// Load puzzle for a specific date
   Future<void> _loadPuzzleForDate(DateTime date) async {
-    final dateKey = '${date.year}-${date.month}-${date.day}';
-    final isSolved = state.solvedDates[dateKey] ?? false;
+    final dateKey = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+    final localSolved = state.solvedDates[dateKey] ?? false;
 
     state = state.copyWith(
       selectedDate: date,
       isLoading: true,
-      isSolved: isSolved,
+      isSolved: localSolved,
       puzzle: null,
       clearError: true,
     );
 
     try {
       // Generate a deterministic puzzle based on the date with timeout
-      final puzzle = await _fetchPuzzleForDate(date).timeout(
+      final result = await _fetchPuzzleForDateWithContext(date).timeout(
         const Duration(seconds: 10),
         onTimeout: () {
           debugPrint('Timeout loading puzzle for date $dateKey');
-          return _createDefaultPuzzle(date);
+          return (puzzle: _createDefaultPuzzle(date), isSolved: localSolved, streak: state.streak);
         },
       );
       if (!mounted) return;
       state = state.copyWith(
-        puzzle: puzzle,
+        puzzle: result.puzzle,
         isLoading: false,
+        isSolved: result.isSolved,
+        streak: result.streak,
       );
     } catch (e) {
       debugPrint('Error loading puzzle for date $dateKey: $e');
@@ -187,9 +189,11 @@ class DailyPuzzleNotifier extends StateNotifier<DailyPuzzleState> {
     }
   }
 
-  /// Fetch puzzle for a specific date (uses date as seed for consistent puzzle)
-  Future<Puzzle> _fetchPuzzleForDate(DateTime date) async {
-    final dateKey = '${date.year}-${date.month}-${date.day}';
+  /// Fetch puzzle for a specific date with full context (solved status, streak)
+  Future<({Puzzle puzzle, bool isSolved, int streak})> _fetchPuzzleForDateWithContext(DateTime date) async {
+    // Format date as YYYY-MM-DD (with leading zeros)
+    final dateKey = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+    final localSolved = state.solvedDates[dateKey] ?? false;
 
     // Try to get from server first
     final userId = _userId;
@@ -200,12 +204,26 @@ class DailyPuzzleNotifier extends StateNotifier<DailyPuzzleState> {
           'get_daily_puzzle_with_context',
           params: {
             'p_date': dateKey,
+            'p_user_id': userId,
           },
         );
 
-        if (response != null) {
-          final puzzle = _parsePuzzle(response);
-          if (puzzle != null) return puzzle;
+        debugPrint('Daily puzzle response for $dateKey: $response');
+
+        if (response != null && response is Map) {
+          // Response format: { puzzle: {...}, userAttempt: {...}, userStreak: {...} }
+          final puzzleData = response['puzzle'] as Map<String, dynamic>?;
+          final userAttempt = response['userAttempt'] as Map<String, dynamic>?;
+          final userStreak = response['userStreak'] as Map<String, dynamic>?;
+
+          if (puzzleData != null) {
+            final puzzle = _parsePuzzle(puzzleData);
+            if (puzzle != null) {
+              final isSolved = userAttempt?['solved'] as bool? ?? localSolved;
+              final currentStreak = userStreak?['current_streak'] as int? ?? state.streak;
+              return (puzzle: puzzle, isSolved: isSolved, streak: currentStreak);
+            }
+          }
         }
       } catch (e) {
         debugPrint('Server daily puzzle not available: $e');
@@ -224,14 +242,16 @@ class DailyPuzzleNotifier extends StateNotifier<DailyPuzzleState> {
           // Use seed to pick consistent puzzle for this date
           final index = seed % response.length;
           final puzzle = _parsePuzzle(response[index]);
-          if (puzzle != null) return puzzle;
+          if (puzzle != null) {
+            return (puzzle: puzzle, isSolved: localSolved, streak: state.streak);
+          }
         }
       } catch (e) {
         debugPrint('Error loading user puzzle: $e');
       }
     }
 
-    return _createDefaultPuzzle(date);
+    return (puzzle: _createDefaultPuzzle(date), isSolved: localSolved, streak: state.streak);
   }
 
   /// Mark the daily puzzle as solved

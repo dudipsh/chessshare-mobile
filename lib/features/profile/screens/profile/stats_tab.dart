@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../app/theme/colors.dart';
+import '../../../games/providers/games_provider.dart';
 import '../../models/profile_data.dart';
 import '../../providers/profile_provider.dart';
 import 'widgets/section_card.dart';
 import 'widgets/stat_box.dart';
 
-class StatsTab extends StatelessWidget {
+class StatsTab extends ConsumerWidget {
   final ProfileState state;
   final bool isDark;
 
@@ -17,8 +20,9 @@ class StatsTab extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final avgAccuracy = state.averageAccuracy;
+    final games = ref.watch(gamesProvider).games;
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -48,7 +52,18 @@ class StatsTab extends StatelessWidget {
             title: 'Recent Analyzed Games',
             isDark: isDark,
             child: Column(
-              children: state.gameReviews.take(5).map((r) => _GameReviewRow(review: r, isDark: isDark)).toList(),
+              children: state.gameReviews.take(5).map((r) {
+                // Find the game to get opponent name
+                final game = games.where((g) => g.externalId == r.externalGameId).firstOrNull;
+                return _GameReviewRow(
+                  review: r,
+                  isDark: isDark,
+                  opponentName: game?.opponentUsername,
+                  onTap: game != null ? () {
+                    context.pushNamed('game-review', extra: game);
+                  } : null,
+                );
+              }).toList(),
             ),
           ),
         ],
@@ -85,8 +100,15 @@ class StatsTab extends StatelessWidget {
 class _GameReviewRow extends StatelessWidget {
   final GameReviewSummary review;
   final bool isDark;
+  final VoidCallback? onTap;
+  final String? opponentName;
 
-  const _GameReviewRow({required this.review, required this.isDark});
+  const _GameReviewRow({
+    required this.review,
+    required this.isDark,
+    this.onTap,
+    this.opponentName,
+  });
 
   Color _getAccuracyColor(double acc) {
     if (acc >= 90) return AppColors.best;
@@ -106,40 +128,61 @@ class _GameReviewRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final accuracy = review.accuracyWhite ?? review.accuracyBlack ?? 0;
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: isDark ? Colors.grey[800] : Colors.white,
+    // Use opponent name if available, otherwise fall back to truncated game ID
+    final displayName = opponentName ?? 'Game ${review.externalGameId.substring(0, 8)}...';
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: _getAccuracyColor(accuracy).withValues(alpha: 0.2),
-            ),
-            child: Center(
-              child: Text(
-                '${accuracy.toInt()}%',
-                style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: _getAccuracyColor(accuracy)),
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: isDark ? Colors.grey[800] : Colors.white,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: _getAccuracyColor(accuracy).withValues(alpha: 0.2),
+                ),
+                child: Center(
+                  child: Text(
+                    '${accuracy.toInt()}%',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: _getAccuracyColor(accuracy)),
+                  ),
+                ),
               ),
-            ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      opponentName != null ? 'vs $displayName' : displayName,
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    Text(_formatDate(review.reviewedAt), style: TextStyle(fontSize: 11, color: Colors.grey[500])),
+                  ],
+                ),
+              ),
+              // Arrow indicator to show it's clickable
+              if (onTap != null)
+                Icon(
+                  Icons.chevron_right,
+                  size: 20,
+                  color: isDark ? Colors.grey[600] : Colors.grey[400],
+                ),
+            ],
           ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Game ${review.externalGameId.substring(0, 8)}...', style: const TextStyle(fontSize: 13)),
-                Text(_formatDate(review.reviewedAt), style: TextStyle(fontSize: 11, color: Colors.grey[500])),
-              ],
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

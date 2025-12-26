@@ -10,12 +10,15 @@ class ReviewMoveMarker extends StatelessWidget {
   final AnalyzedMove move;
   final double boardSize;
   final Side orientation;
+  /// Offset from top to account for captured pieces slot (default 24px)
+  final double topOffset;
 
   const ReviewMoveMarker({
     super.key,
     required this.move,
     required this.boardSize,
     required this.orientation,
+    this.topOffset = 24.0, // Height of captured pieces slot
   });
 
   @override
@@ -44,7 +47,8 @@ class ReviewMoveMarker extends StatelessWidget {
     double y = orientation == Side.black ? rank.toDouble() : (7 - rank).toDouble();
 
     final left = x * squareSize + squareSize - markerSize * 1.1;
-    final top = y * squareSize + markerSize * 0.1;
+    // Add topOffset to account for captured pieces slot above the board
+    final top = topOffset + y * squareSize + markerSize * 0.1;
 
     return Positioned(
       left: left,

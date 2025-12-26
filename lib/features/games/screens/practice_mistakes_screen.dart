@@ -312,11 +312,14 @@ class _PracticeMistakesScreenState extends ConsumerState<PracticeMistakesScreen>
     final markerSize = squareSize * 0.45;
     final toSquare = _lastMove!.to;
 
+    // Account for the captured pieces slot at the top (24px default height in ChessBoardShell)
+    const capturedPiecesSlotHeight = 24.0;
+
     double x = _orientation == Side.black ? (7 - toSquare.file).toDouble() : toSquare.file.toDouble();
     double y = _orientation == Side.black ? toSquare.rank.toDouble() : (7 - toSquare.rank).toDouble();
 
     final left = x * squareSize + squareSize - markerSize * 1.1;
-    final top = y * squareSize + markerSize * 0.1;
+    final top = capturedPiecesSlotHeight + y * squareSize + markerSize * 0.1;
 
     return Positioned(
       left: left,

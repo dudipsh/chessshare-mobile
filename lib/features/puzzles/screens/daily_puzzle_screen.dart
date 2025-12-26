@@ -5,7 +5,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/colors.dart';
 import '../../../core/providers/board_settings_provider.dart';
+import '../../../core/providers/captured_pieces_provider.dart';
 import '../../../core/services/audio_service.dart';
+import '../../../core/widgets/board_settings_factory.dart';
+import '../../../core/widgets/chess_board_shell.dart';
 import '../models/puzzle.dart';
 import '../providers/daily_puzzle_provider.dart';
 import '../providers/puzzle_provider.dart';
@@ -301,46 +304,22 @@ class _DailyPuzzleScreenState extends ConsumerState<DailyPuzzleScreen> {
   Widget _buildChessboard(WidgetRef ref, PuzzleSolveState state, double boardSize) {
     final notifier = ref.read(puzzleSolveProvider.notifier);
     final boardSettings = ref.watch(boardSettingsProvider);
+    final settings = BoardSettingsFactory.create(boardSettings: boardSettings);
     final isPlayable = state.state == PuzzleState.playing;
+    final fen = state.currentFen;
 
-    final settings = ChessboardSettings(
-      pieceAssets: boardSettings.pieceSet.pieceSet.assets,
-      colorScheme: ChessboardColorScheme(
-        lightSquare: boardSettings.colorScheme.lightSquare,
-        darkSquare: boardSettings.colorScheme.darkSquare,
-        background: SolidColorChessboardBackground(
-          lightSquare: boardSettings.colorScheme.lightSquare,
-          darkSquare: boardSettings.colorScheme.darkSquare,
-        ),
-        whiteCoordBackground: SolidColorChessboardBackground(
-          lightSquare: boardSettings.colorScheme.lightSquare,
-          darkSquare: boardSettings.colorScheme.darkSquare,
-          coordinates: true,
-        ),
-        blackCoordBackground: SolidColorChessboardBackground(
-          lightSquare: boardSettings.colorScheme.lightSquare,
-          darkSquare: boardSettings.colorScheme.darkSquare,
-          coordinates: true,
-          orientation: Side.black,
-        ),
-        lastMove: HighlightDetails(solidColor: AppColors.lastMove),
-        selected: HighlightDetails(solidColor: AppColors.highlight),
-        validMoves: Colors.black.withValues(alpha: 0.15),
-        validPremoves: Colors.blue.withValues(alpha: 0.2),
-      ),
-      showValidMoves: true,
-      showLastMove: true,
-      animationDuration: const Duration(milliseconds: 150),
-      dragFeedbackScale: 2.0,
-      dragFeedbackOffset: const Offset(0, -1),
-    );
+    // Update captured pieces
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(capturedPiecesProvider.notifier).updateFromFen(fen);
+    });
 
+    Widget chessBoard;
     if (isPlayable) {
-      return Chessboard(
+      chessBoard = Chessboard(
         size: boardSize,
         settings: settings,
         orientation: state.orientation,
-        fen: state.currentFen,
+        fen: fen,
         lastMove: state.lastMove,
         game: GameData(
           playerSide: state.orientation == Side.white ? PlayerSide.white : PlayerSide.black,
@@ -349,19 +328,27 @@ class _DailyPuzzleScreenState extends ConsumerState<DailyPuzzleScreen> {
           promotionMove: null,
           onMove: (move, {isDrop}) {
             notifier.makeMove(move);
-            _playMoveSound(move, state.currentFen);
+            _playMoveSound(move, fen);
           },
           onPromotionSelection: (role) {},
         ),
       );
     } else {
-      return Chessboard.fixed(
+      chessBoard = Chessboard.fixed(
         size: boardSize,
         settings: settings,
         orientation: state.orientation,
-        fen: state.currentFen,
+        fen: fen,
         lastMove: state.lastMove,
       );
     }
+
+    return ChessBoardShell(
+      board: chessBoard,
+      orientation: state.orientation,
+      fen: fen,
+      showCapturedPieces: true,
+      padding: EdgeInsets.zero,
+    );
   }
 }

@@ -90,14 +90,17 @@ class StudyBoardNotifier extends StateNotifier<StudyBoardState> {
 
     final originalFen = state.currentFen;
     final king = _position.board.kingOf(_position.turn);
-    final actualMove = StudyCastlingUtils.convertCastlingMove(move, king);
+    final castlingResult = StudyCastlingUtils.convertCastlingMove(move, king);
+    final actualMove = castlingResult?.actualMove ?? move;
+    // For castling, marker should be on king's final position, not rook's
+    final markerSquare = castlingResult?.markerPosition ?? move.to;
 
     final expectedSan = state.moveIndex < state.expectedMoves.length
         ? state.expectedMoves[state.moveIndex]
         : null;
 
     if (expectedSan == null) {
-      _executeMove(actualMove);
+      _executeMove(actualMove, markerSquare: markerSquare);
       return;
     }
 
@@ -106,13 +109,13 @@ class StudyBoardNotifier extends StateNotifier<StudyBoardState> {
     final normalizedUser = userSan.replaceAll('+', '').replaceAll('#', '');
 
     if (normalizedUser == normalizedExpected) {
-      _executeMove(actualMove);
+      _executeMove(actualMove, markerSquare: markerSquare);
     } else {
       _handleWrongMove(actualMove, originalFen);
     }
   }
 
-  void _executeMove(NormalMove move) {
+  void _executeMove(NormalMove move, {Square? markerSquare}) {
     final moveInfo = StudyMoveUtils.getMoveInfo(move, _position);
     _position = _position.play(move) as Chess;
 
@@ -125,6 +128,8 @@ class StudyBoardNotifier extends StateNotifier<StudyBoardState> {
 
     final newMoveIndex = state.moveIndex + 1;
     final isComplete = newMoveIndex >= state.expectedMoves.length;
+    // Use provided markerSquare (for castling) or default to move.to
+    final effectiveMarkerSquare = markerSquare ?? move.to;
 
     if (isComplete) {
       _audioService.playEndLevel();
@@ -138,7 +143,7 @@ class StudyBoardNotifier extends StateNotifier<StudyBoardState> {
         validMoves: IMap(),
         feedback: 'Line completed!',
         markerType: MarkerType.valid,
-        markerSquare: move.to,
+        markerSquare: effectiveMarkerSquare,
         completedMoves: state.completedMoves + 1,
       );
 
@@ -154,7 +159,7 @@ class StudyBoardNotifier extends StateNotifier<StudyBoardState> {
         state: StudyState.correct,
         feedback: 'Correct!',
         markerType: MarkerType.valid,
-        markerSquare: move.to,
+        markerSquare: effectiveMarkerSquare,
         completedMoves: state.completedMoves + 1,
       );
 

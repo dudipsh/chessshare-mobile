@@ -9,6 +9,10 @@ import 'package:stockfish/stockfish.dart' hide StockfishState;
 import '../stockfish_types.dart';
 
 class StockfishService {
+  // Singleton instance
+  static StockfishService? _instance;
+  static int _refCount = 0;
+
   Stockfish? _stockfish;
   StockfishState _state = StockfishState.uninitialized;
   StockfishConfig _config;
@@ -30,13 +34,30 @@ class StockfishService {
   /// Current configuration
   StockfishConfig get config => _config;
 
-  StockfishService({StockfishConfig? config})
+  StockfishService._internal({StockfishConfig? config})
       : _config = config ?? const StockfishConfig();
+
+  factory StockfishService({StockfishConfig? config}) {
+    _refCount++;
+    if (_instance == null) {
+      _instance = StockfishService._internal(config: config);
+    } else if (config != null) {
+      _instance!._config = config;
+    }
+    return _instance!;
+  }
 
   /// Initialize the Stockfish engine
   Future<void> initialize() async {
+    // Already initialized and ready - just return
+    if (_state == StockfishState.ready || _state == StockfishState.analyzing) {
+      return;
+    }
+
+    // Not in a state that allows initialization
     if (_state != StockfishState.uninitialized &&
-        _state != StockfishState.disposed) {
+        _state != StockfishState.disposed &&
+        _state != StockfishState.error) {
       return;
     }
 
@@ -257,8 +278,19 @@ class StockfishService {
   }
 
   /// Dispose the engine and release resources
+  /// Uses reference counting - only actually disposes when all references are released
   Future<void> dispose() async {
+    _refCount--;
+
+    // Only actually dispose when no more references
+    if (_refCount > 0) {
+      debugPrint('Stockfish: Skipping dispose, refCount=$_refCount');
+      return;
+    }
+
     if (_state == StockfishState.disposed) return;
+
+    debugPrint('Stockfish: Actually disposing, refCount=$_refCount');
 
     // Only send commands if engine is ready
     if (_stockfish != null && _stockfish!.state.value.name == 'ready') {
@@ -291,6 +323,7 @@ class StockfishService {
     }
 
     _setState(StockfishState.disposed);
+    _instance = null;
   }
 
   void _send(String command) {

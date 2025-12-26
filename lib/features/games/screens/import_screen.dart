@@ -101,10 +101,11 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
       await gamesNotifier.importFromLichess(username);
     }
 
-    // Check if import was successful
+    // Check if import was successful - navigate to games instead of pop
+    // This ensures user stays on games screen even if state changed during import
     final state = ref.read(gamesProvider);
     if (!state.isImporting && state.error == null && mounted) {
-      context.pop();
+      context.go('/games');
     }
   }
 

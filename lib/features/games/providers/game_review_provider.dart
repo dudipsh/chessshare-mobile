@@ -76,8 +76,24 @@ class GameReviewState {
           : ChessPositionUtils.parseUciMove('e8c8');
     }
 
-    // For non-castling moves, use UCI directly
-    return ChessPositionUtils.parseUciMove(move.uci);
+    // Try to use UCI directly first
+    if (move.uci.isNotEmpty) {
+      final parsedMove = ChessPositionUtils.parseUciMove(move.uci);
+      if (parsedMove != null) {
+        return parsedMove;
+      }
+    }
+
+    // Fallback: compute UCI from FEN and SAN if stored UCI is empty/invalid
+    // This handles cases where UCI wasn't properly stored (e.g., loaded from server)
+    if (move.fen.isNotEmpty && move.san.isNotEmpty) {
+      final computedUci = ChessPositionUtils.sanToUci(move.fen, move.san);
+      if (computedUci != null) {
+        return ChessPositionUtils.parseUciMove(computedUci);
+      }
+    }
+
+    return null;
   }
 
   GameReviewState copyWith({
@@ -216,7 +232,12 @@ class GameReviewNotifier extends StateNotifier<GameReviewState> {
           final fen = moveData['fen'] as String;
           final san = moveData['san'] as String;
           // Compute UCI from FEN and SAN (server doesn't store UCI)
-          final uci = ChessPositionUtils.sanToUci(fen, san) ?? '';
+          // Use the FEN (position BEFORE the move) to parse the SAN and get proper UCI
+          String uci = '';
+          if (fen.isNotEmpty && san.isNotEmpty) {
+            final computedUci = ChessPositionUtils.sanToUci(fen, san);
+            uci = computedUci ?? '';
+          }
 
           // Validate and convert best move - ensure it's legal for this position
           final rawBestMove = moveData['best_move'] as String?;

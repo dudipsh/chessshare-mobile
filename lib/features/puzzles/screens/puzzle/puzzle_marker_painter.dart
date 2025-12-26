@@ -8,6 +8,8 @@ class PuzzleMarkerOverlay extends StatelessWidget {
   final Square markerSquare;
   final Side orientation;
   final double boardSize;
+  /// Offset from top to account for captured pieces slot (default 24px)
+  final double topOffset;
 
   const PuzzleMarkerOverlay({
     super.key,
@@ -15,6 +17,7 @@ class PuzzleMarkerOverlay extends StatelessWidget {
     required this.markerSquare,
     required this.orientation,
     required this.boardSize,
+    this.topOffset = 24.0, // Height of captured pieces slot
   });
 
   @override
@@ -32,10 +35,10 @@ class PuzzleMarkerOverlay extends StatelessWidget {
 
     if (orientation == Side.black) {
       left = (7 - file) * squareSize;
-      top = rank * squareSize;
+      top = topOffset + rank * squareSize;
     } else {
       left = file * squareSize;
-      top = (7 - rank) * squareSize;
+      top = topOffset + (7 - rank) * squareSize;
     }
 
     final markerSize = squareSize * 0.4;
