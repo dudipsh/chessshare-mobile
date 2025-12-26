@@ -101,23 +101,31 @@ class _StudyBoardScreenState extends ConsumerState<StudyBoardScreen> {
                 onReset: () => ref.read(studyBoardProvider.notifier).resetVariation(),
                 isDark: isDark,
               ),
-              if (state.feedback != null) _buildFeedback(state, isDark),
+              // Fixed height container for feedback + instructions to prevent layout shifts
+              SizedBox(
+                height: 80,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    if (state.feedback != null) _buildFeedback(state, isDark),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                      child: Text(
+                        _getInstructions(state),
+                        style: TextStyle(fontSize: 15, color: isDark ? Colors.white70 : Colors.grey.shade700),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (state.state == StudyState.completed) _buildCompletedActions(state),
               StudyStats(
                 completedMoves: state.completedMoves,
                 hintsUsed: state.hintsUsed,
                 mistakesMade: state.mistakesMade,
                 isDark: isDark,
               ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: Text(
-                  _getInstructions(state),
-                  style: TextStyle(fontSize: 15, color: isDark ? Colors.white70 : Colors.grey.shade700),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-              const SizedBox(height: 16),
-              if (state.state == StudyState.completed) _buildCompletedActions(state),
               const SizedBox(height: 8),
             ],
           ),
@@ -182,101 +190,41 @@ class _StudyBoardScreenState extends ConsumerState<StudyBoardScreen> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Evaluation display (A3) - left side
-              _buildEvaluationBadge(state, isDark),
-              const SizedBox(width: 12),
               // Line name - center (clickable)
-              Expanded(
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Flexible(
-                      child: Text(
-                        currentVariation.name,
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: isDark ? Colors.white : Colors.black87,
-                          decoration: hasMultipleVariations ? TextDecoration.underline : null,
-                          decorationColor: isDark ? Colors.white38 : Colors.black38,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                        maxLines: 1,
-                      ),
-                    ),
-                    if (hasMultipleVariations) ...[
-                      const SizedBox(width: 8),
-                      Text(
-                        '${state.currentVariationIndex + 1}/${variations.length}',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: isDark ? Colors.white54 : Colors.grey.shade600,
-                        ),
-                      ),
-                      Icon(
-                        Icons.keyboard_arrow_down,
-                        size: 18,
-                        color: isDark ? Colors.white54 : Colors.grey.shade600,
-                      ),
-                    ],
-                  ],
+              Flexible(
+                child: Text(
+                  currentVariation.name,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? Colors.white : Colors.black87,
+                    decoration: hasMultipleVariations ? TextDecoration.underline : null,
+                    decorationColor: isDark ? Colors.white38 : Colors.black38,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
                 ),
               ),
-              // Spacer to balance the evaluation badge
-              const SizedBox(width: 48),
+              if (hasMultipleVariations) ...[
+                const SizedBox(width: 8),
+                Text(
+                  '${state.currentVariationIndex + 1}/${variations.length}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isDark ? Colors.white54 : Colors.grey.shade600,
+                  ),
+                ),
+                Icon(
+                  Icons.keyboard_arrow_down,
+                  size: 18,
+                  color: isDark ? Colors.white54 : Colors.grey.shade600,
+                ),
+              ],
             ],
           ),
         ),
       ),
     );
-  }
-
-  /// Builds the progress badge showing line completion percentage
-  Widget _buildEvaluationBadge(StudyBoardState state, bool isDark) {
-    // Show progress percentage for the current variation
-    final progressText = _getProgressText(state);
-    final progressColor = _getProgressColor(state, isDark);
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: progressColor.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(
-          color: progressColor.withValues(alpha: 0.3),
-          width: 1,
-        ),
-      ),
-      child: Text(
-        progressText,
-        style: TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.bold,
-          color: progressColor,
-          fontFamily: 'monospace',
-        ),
-      ),
-    );
-  }
-
-  String _getProgressText(StudyBoardState state) {
-    if (state.totalMoves == 0) return '0%';
-    final percentage = ((state.moveIndex / state.totalMoves) * 100).round();
-    return '$percentage%';
-  }
-
-  Color _getProgressColor(StudyBoardState state, bool isDark) {
-    if (state.state == StudyState.completed) {
-      return Colors.green.shade600;
-    }
-    final progress = state.totalMoves > 0 ? state.moveIndex / state.totalMoves : 0.0;
-    if (progress >= 0.7) {
-      return Colors.green.shade600;
-    } else if (progress >= 0.3) {
-      return Colors.amber.shade700;
-    }
-    return isDark ? Colors.grey.shade400 : Colors.grey.shade600;
   }
 
   Widget _buildChessboard(StudyBoardState state, double boardSize) {

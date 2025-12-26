@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../app/theme/colors.dart';
 import '../../../auth/providers/auth_provider.dart';
+import '../../../games/models/chess_game.dart';
 import '../../../games/providers/games_provider.dart';
+import '../../../games/services/games_cache_service.dart';
 import '../../providers/profile_provider.dart';
 import 'link_account_sheet.dart';
 
@@ -74,6 +76,7 @@ class ManageAccountsSheet extends ConsumerWidget {
                       ref,
                       'Chess.com',
                       chessComUsername,
+                      GamePlatform.chesscom,
                       () => ref.read(authProvider.notifier).unlinkChessComAccount(),
                     )
                 : null,
@@ -99,6 +102,7 @@ class ManageAccountsSheet extends ConsumerWidget {
                       ref,
                       'Lichess',
                       lichessUsername,
+                      GamePlatform.lichess,
                       () => ref.read(authProvider.notifier).unlinkLichessAccount(),
                     )
                 : null,
@@ -130,6 +134,7 @@ class ManageAccountsSheet extends ConsumerWidget {
     WidgetRef ref,
     String platformName,
     String username,
+    GamePlatform gamePlatform,
     Future<void> Function() onConfirm,
   ) {
     final scaffoldMessenger = ScaffoldMessenger.of(context);
@@ -140,7 +145,7 @@ class ManageAccountsSheet extends ConsumerWidget {
         title: Text('Unlink $platformName?'),
         content: Text(
           'Are you sure you want to unlink "$username"?\n\n'
-          'Your imported games will remain, but you won\'t be able to import new games from this account.',
+          'All games imported from this account will be removed.',
         ),
         actions: [
           TextButton(
@@ -150,6 +155,9 @@ class ManageAccountsSheet extends ConsumerWidget {
           TextButton(
             onPressed: () async {
               Navigator.pop(dialogContext); // Close dialog only
+
+              // Clear games from this platform
+              await GamesCacheService.clearGamesByPlatform(gamePlatform);
 
               await onConfirm();
 
@@ -166,7 +174,7 @@ class ManageAccountsSheet extends ConsumerWidget {
               // User can close it manually with swipe or X button
 
               scaffoldMessenger.showSnackBar(
-                SnackBar(content: Text('$platformName account unlinked')),
+                SnackBar(content: Text('$platformName account unlinked and games removed')),
               );
             },
             style: TextButton.styleFrom(foregroundColor: Colors.red),

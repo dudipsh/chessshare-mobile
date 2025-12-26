@@ -63,6 +63,17 @@ class GamesCacheService {
     }
   }
 
+  /// Clear games by platform (when unlinking an account)
+  static Future<void> clearGamesByPlatform(GamePlatform platform) async {
+    try {
+      final existingGames = await getCachedGames();
+      final filteredGames = existingGames.where((g) => g.platform != platform).toList();
+      await cacheGames(filteredGames);
+    } catch (e) {
+      // Ignore errors
+    }
+  }
+
   /// Add games to existing cache (for incremental updates)
   static Future<void> addGamesToCache(List<ChessGame> newGames) async {
     try {

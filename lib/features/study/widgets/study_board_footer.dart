@@ -36,48 +36,46 @@ class StudyBoardFooter extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(top: 6),
-      child: SizedBox(
-        height: 48, // Fixed height to prevent overflow
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Row 1: Avatar + Creator name
-            Row(
-              children: [
-                _buildAvatar(context),
-                const SizedBox(width: 8),
-                if (ownerName != null)
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: ownerId != null ? () => _navigateToAuthorProfile(context) : null,
-                      child: Text(
-                        ownerName!,
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                          color: isDark ? Colors.grey[300] : Colors.grey[700],
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Row 1: Avatar + Creator name
+          Row(
+            children: [
+              _buildAvatar(context),
+              const SizedBox(width: 8),
+              if (ownerName != null)
+                Expanded(
+                  child: GestureDetector(
+                    onTap: ownerId != null ? () => _navigateToAuthorProfile(context) : null,
+                    child: Text(
+                      ownerName!,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: isDark ? Colors.grey[300] : Colors.grey[700],
                       ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
-              ],
+                ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          // Row 2: Opening/Study name
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: isDark ? Colors.white : Colors.black87,
             ),
-            const SizedBox(height: 4),
-            // Row 2: Opening/Study name
-            Text(
-              title,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: isDark ? Colors.white : Colors.black87,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
-        ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
       ),
     );
   }
