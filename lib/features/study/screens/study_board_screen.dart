@@ -102,6 +102,12 @@ class _StudyBoardScreenState extends ConsumerState<StudyBoardScreen> {
                 isDark: isDark,
               ),
               if (state.feedback != null) _buildFeedback(state, isDark),
+              StudyStats(
+                completedMoves: state.completedMoves,
+                hintsUsed: state.hintsUsed,
+                mistakesMade: state.mistakesMade,
+                isDark: isDark,
+              ),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 child: Text(
@@ -112,12 +118,6 @@ class _StudyBoardScreenState extends ConsumerState<StudyBoardScreen> {
               ),
               const SizedBox(height: 16),
               if (state.state == StudyState.completed) _buildCompletedActions(state),
-              StudyStats(
-                completedMoves: state.completedMoves,
-                hintsUsed: state.hintsUsed,
-                mistakesMade: state.mistakesMade,
-                isDark: isDark,
-              ),
               const SizedBox(height: 8),
             ],
           ),
@@ -232,75 +232,49 @@ class _StudyBoardScreenState extends ConsumerState<StudyBoardScreen> {
     );
   }
 
-  /// Builds the evaluation badge showing position assessment (A3)
+  /// Builds the progress badge showing line completion percentage
   Widget _buildEvaluationBadge(StudyBoardState state, bool isDark) {
-    // For study mode, we show a static evaluation based on move progress
-    // In a full implementation, this would come from engine analysis
-    final evaluation = _calculateStudyEvaluation(state);
+    // Show progress percentage for the current variation
+    final progressText = _getProgressText(state);
+    final progressColor = _getProgressColor(state, isDark);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: _getEvaluationColor(evaluation, isDark).withValues(alpha: 0.15),
+        color: progressColor.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(6),
         border: Border.all(
-          color: _getEvaluationColor(evaluation, isDark).withValues(alpha: 0.3),
+          color: progressColor.withValues(alpha: 0.3),
           width: 1,
         ),
       ),
       child: Text(
-        evaluation,
+        progressText,
         style: TextStyle(
           fontSize: 12,
           fontWeight: FontWeight.bold,
-          color: _getEvaluationColor(evaluation, isDark),
+          color: progressColor,
           fontFamily: 'monospace',
         ),
       ),
     );
   }
 
-  String _calculateStudyEvaluation(StudyBoardState state) {
-    // For study lines, we calculate a simplified evaluation based on position
-    // This is a placeholder - in production, this would use engine analysis
-    try {
-      final fen = state.currentFen;
-
-      // Simple material count from FEN string
-      int whiteMaterial = 0;
-      int blackMaterial = 0;
-
-      final pieceValues = {
-        'P': 1, 'N': 3, 'B': 3, 'R': 5, 'Q': 9,
-        'p': 1, 'n': 3, 'b': 3, 'r': 5, 'q': 9,
-      };
-
-      final fenBoard = fen.split(' ').first;
-      for (final char in fenBoard.split('')) {
-        final value = pieceValues[char];
-        if (value != null) {
-          if (char == char.toUpperCase()) {
-            whiteMaterial += value;
-          } else {
-            blackMaterial += value;
-          }
-        }
-      }
-
-      final diff = whiteMaterial - blackMaterial;
-      if (diff == 0) return '0.0';
-      if (diff > 0) return '+${(diff * 0.5).toStringAsFixed(1)}';
-      return (diff * 0.5).toStringAsFixed(1);
-    } catch (e) {
-      return '0.0';
-    }
+  String _getProgressText(StudyBoardState state) {
+    if (state.totalMoves == 0) return '0%';
+    final percentage = ((state.moveIndex / state.totalMoves) * 100).round();
+    return '$percentage%';
   }
 
-  Color _getEvaluationColor(String eval, bool isDark) {
-    if (eval.startsWith('+')) {
+  Color _getProgressColor(StudyBoardState state, bool isDark) {
+    if (state.state == StudyState.completed) {
       return Colors.green.shade600;
-    } else if (eval.startsWith('-')) {
-      return Colors.red.shade600;
+    }
+    final progress = state.totalMoves > 0 ? state.moveIndex / state.totalMoves : 0.0;
+    if (progress >= 0.7) {
+      return Colors.green.shade600;
+    } else if (progress >= 0.3) {
+      return Colors.amber.shade700;
     }
     return isDark ? Colors.grey.shade400 : Colors.grey.shade600;
   }
@@ -359,8 +333,12 @@ class _StudyBoardScreenState extends ConsumerState<StudyBoardScreen> {
     int file = square.file;
     int rank = square.rank;
 
+    // Account for the captured pieces slot at the top (24px default height in ChessBoardShell)
+    const capturedPiecesSlotHeight = 24.0;
+
     double left = state.orientation == Side.black ? (7 - file) * squareSize : file * squareSize;
     double top = state.orientation == Side.black ? rank * squareSize : (7 - rank) * squareSize;
+    top += capturedPiecesSlotHeight; // Offset for captured pieces slot
 
     return Positioned(
       left: left,
