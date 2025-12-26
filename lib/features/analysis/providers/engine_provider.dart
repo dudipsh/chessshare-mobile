@@ -205,6 +205,10 @@ class EngineAnalysisNotifier extends StateNotifier<EngineAnalysisState> {
     }
   }
 
+  // Minimum depth required before showing evaluation
+  // This ensures the engine sees simple tactics like recaptures
+  static const _minDepthForEvaluation = 8;
+
   void _updatePvLine(PrincipalVariation pv) {
     final pvLines = List<PrincipalVariation>.from(state.pvLines);
 
@@ -216,11 +220,18 @@ class EngineAnalysisNotifier extends StateNotifier<EngineAnalysisState> {
     }
 
     pvLines.sort((a, b) => a.pvNumber.compareTo(b.pvNumber));
-    final evaluation = pvLines.isNotEmpty ? pvLines.first.evaluation : null;
+
+    // Only update evaluation if we've reached minimum depth
+    // This prevents showing misleading shallow evaluations
+    // Keep the previous evaluation until a new one at sufficient depth is available
+    EngineEvaluation? newEvaluation = state.evaluation;
+    if (pvLines.isNotEmpty && pvLines.first.depth >= _minDepthForEvaluation) {
+      newEvaluation = pvLines.first.evaluation;
+    }
 
     state = state.copyWith(
       pvLines: pvLines,
-      evaluation: evaluation,
+      evaluation: newEvaluation,
     );
   }
 

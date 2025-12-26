@@ -1,3 +1,4 @@
+// dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -19,7 +20,7 @@ class CapturedPiecesDisplay extends ConsumerWidget {
   /// Height of the container
   final double height;
 
-  /// Spacing between pieces
+  /// Spacing between pieces (positive for gap, set small for compact display)
   final double spacing;
 
   const CapturedPiecesDisplay({
@@ -27,7 +28,7 @@ class CapturedPiecesDisplay extends ConsumerWidget {
     required this.showCapturedByWhite,
     this.pieceSize = 18,
     this.height = 24,
-    this.spacing = -4, // Slight overlap for compact display
+    this.spacing = 4, // Small gap between pieces; first stays in place
   });
 
   @override
@@ -48,22 +49,24 @@ class CapturedPiecesDisplay extends ConsumerWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Captured pieces with overlap
-          if (pieces.isNotEmpty)
-            ...List.generate(pieces.length, (index) {
-              final piece = pieces[index];
-              return Transform.translate(
-                offset: Offset(index * spacing, 0),
-                child: PieceIcon(
-                  piece: _pieceKindToLetter(piece),
-                  isWhite: !showCapturedByWhite, // Captured pieces are opposite color
-                  size: pieceSize,
-                ),
-              );
-            }),
-          // Spacer to account for overlap
-          if (pieces.isNotEmpty)
-            SizedBox(width: (pieces.length - 1) * spacing.abs() + 4),
+          // Captured pieces: keep first in place, add spacing before each subsequent piece
+          if (pieces.isNotEmpty) ...[
+            PieceIcon(
+              piece: _pieceKindToLetter(pieces[0]),
+              isWhite: !showCapturedByWhite, // Captured pieces are opposite color
+              size: pieceSize,
+            ),
+            for (var i = 1; i < pieces.length; i++) ...[
+              SizedBox(width: spacing),
+              PieceIcon(
+                piece: _pieceKindToLetter(pieces[i]),
+                isWhite: !showCapturedByWhite,
+                size: pieceSize,
+              ),
+            ],
+          ],
+          // Small gap before the advantage text
+          if (showAdvantage && advantage.abs() > 0) const SizedBox(width: 4),
           // Material advantage indicator
           if (showAdvantage && advantage.abs() > 0)
             Padding(
@@ -120,7 +123,7 @@ class CapturedPiecesRow extends StatelessWidget {
   /// Height of the container
   final double height;
 
-  /// Spacing between pieces (negative for overlap)
+  /// Spacing between pieces (positive for gap)
   final double spacing;
 
   const CapturedPiecesRow({
@@ -130,7 +133,7 @@ class CapturedPiecesRow extends StatelessWidget {
     this.materialAdvantage,
     this.pieceSize = 18,
     this.height = 24,
-    this.spacing = -4,
+    this.spacing = 4,
   });
 
   @override
@@ -140,22 +143,23 @@ class CapturedPiecesRow extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Captured pieces with overlap
-          if (pieces.isNotEmpty)
-            ...List.generate(pieces.length, (index) {
-              return Transform.translate(
-                offset: Offset(index * spacing, 0),
-                child: PieceIcon(
-                  piece: pieces[index],
-                  isWhite: isWhite,
-                  size: pieceSize,
-                ),
-              );
-            }),
-          // Spacer to account for overlap
-          if (pieces.isNotEmpty)
-            SizedBox(width: (pieces.length - 1) * spacing.abs() + 4),
-          // Material advantage indicator
+          if (pieces.isNotEmpty) ...[
+            PieceIcon(
+              piece: pieces[0],
+              isWhite: isWhite,
+              size: pieceSize,
+            ),
+            for (var i = 1; i < pieces.length; i++) ...[
+              SizedBox(width: spacing),
+              PieceIcon(
+                piece: pieces[i],
+                isWhite: isWhite,
+                size: pieceSize,
+              ),
+            ],
+          ],
+          if (materialAdvantage != null && materialAdvantage! > 0)
+            const SizedBox(width: 4),
           if (materialAdvantage != null && materialAdvantage! > 0)
             Padding(
               padding: const EdgeInsets.only(left: 2),
