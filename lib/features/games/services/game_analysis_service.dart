@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:dartchess/dartchess.dart';
 import 'package:uuid/uuid.dart';
@@ -13,7 +14,6 @@ import '../../analysis/services/uci_parser.dart';
 import '../models/analyzed_move.dart';
 import '../models/chess_game.dart';
 import '../models/game_review.dart';
-import '../models/move_classification.dart';
 import '../utils/chess_position_utils.dart';
 import 'book_move_detector.dart';
 import 'brilliant_move_classifier.dart';
@@ -29,8 +29,8 @@ class AnalysisConfig {
   /// Max time per move in milliseconds (fallback if depth not reached)
   final int maxMoveTimeMs;
 
-  /// Number of threads for Stockfish
-  final int threads;
+  /// Number of threads for Stockfish (0 = auto-detect based on CPU cores)
+  final int _threads;
 
   /// Hash table size in MB
   final int hashSizeMb;
@@ -39,34 +39,44 @@ class AnalysisConfig {
     this.quickDepth = 12,
     this.criticalDepth = 16,
     this.maxMoveTimeMs = 500,
-    this.threads = 2,
+    int threads = 0,
     this.hashSizeMb = 64,
-  });
+  }) : _threads = threads;
 
-  /// Fast config for quick analysis
+  /// Get optimal thread count based on CPU cores
+  /// Uses half of available cores (leave some for UI), min 2, max 8
+  static int get optimalThreads {
+    final cores = Platform.numberOfProcessors;
+    return (cores ~/ 2).clamp(2, 8);
+  }
+
+  /// Actual threads to use (auto-detect if 0)
+  int get threads => _threads > 0 ? _threads : optimalThreads;
+
+  /// Fast config for quick analysis (uses dynamic thread count via threads=0)
   static const fast = AnalysisConfig(
     quickDepth: 10,
     criticalDepth: 14,
     maxMoveTimeMs: 300,
-    threads: 2,
+    threads: 0, // Auto-detect at runtime
     hashSizeMb: 32,
   );
 
-  /// Balanced config (default)
+  /// Balanced config (default, uses dynamic thread count via threads=0)
   static const balanced = AnalysisConfig(
     quickDepth: 12,
     criticalDepth: 16,
     maxMoveTimeMs: 500,
-    threads: 2,
+    threads: 0, // Auto-detect at runtime
     hashSizeMb: 64,
   );
 
-  /// Deep config for thorough analysis
+  /// Deep config for thorough analysis (uses dynamic thread count via threads=0)
   static const deep = AnalysisConfig(
     quickDepth: 16,
     criticalDepth: 20,
     maxMoveTimeMs: 1000,
-    threads: 4,
+    threads: 0, // Auto-detect at runtime
     hashSizeMb: 128,
   );
 }
@@ -222,8 +232,10 @@ class GameAnalysisService {
           continue;
         }
 
-        // Analyze position BEFORE the move
-        final evalBefore = await _analyzePositionFast(pos.fenBefore, isCritical: i < 5 || i > positions.length - 5);
+        // Analyze position BEFORE the move (with best move in same call - optimization!)
+        // This reduces engine calls from 3 per move to 2 per move
+        final isCritical = i < 5 || i > positions.length - 5;
+        final evalBefore = await _analyzePositionFast(pos.fenBefore, isCritical: isCritical, needBestMove: true);
 
         // Check cancellation after engine analysis
         if (_isCancelled) {
@@ -231,6 +243,7 @@ class GameAnalysisService {
         }
 
         // Analyze position AFTER the move
+        // Note: This result will be cached and reused as evalBefore for the next move
         final evalAfter = await _analyzePositionFast(pos.fenAfter, isCritical: false);
 
         final evalBeforeCp = evalBefore.centipawns;
@@ -238,10 +251,9 @@ class GameAnalysisService {
         final mateBefore = evalBefore.mateInMoves;
         final mateAfter = evalAfter.mateInMoves;
 
-        // Get best move for this position
-        final bestMoveResult = await _getBestMoveFast(pos.fenBefore);
-        final bestMoveUci = bestMoveResult.uci;
-        final bestMoveSan = bestMoveResult.san;
+        // Best move was captured in the evalBefore call (optimization)
+        final bestMoveUci = evalBefore.bestMoveUci ?? '';
+        final bestMoveSan = evalBefore.bestMoveSan ?? '';
 
         // Check if the played move is the best move (case-insensitive like web)
         // Also handle potential whitespace/null issues
@@ -486,11 +498,19 @@ class GameAnalysisService {
     return moves;
   }
 
-  /// Fast position analysis with caching
-  Future<_EvalResult> _analyzePositionFast(String fen, {bool isCritical = false}) async {
-    // Check cache first
+  /// Fast position analysis with caching - captures both eval AND best move in one call
+  /// This is a major optimization: instead of 3 engine calls per move (evalBefore, evalAfter, bestMove),
+  /// we now do 2 calls (evalBefore with bestMove, evalAfter)
+  Future<_EvalResult> _analyzePositionFast(String fen, {bool isCritical = false, bool needBestMove = false}) async {
+    final requiredDepth = isCritical ? config.criticalDepth : config.quickDepth;
+
+    // Check cache - only use if cached at sufficient depth
     if (_evalCache.containsKey(fen)) {
-      return _evalCache[fen]!;
+      final cached = _evalCache[fen]!;
+      // Reuse if cached depth is sufficient and we have best move if needed
+      if (cached.depth >= requiredDepth && (!needBestMove || cached.bestMoveUci != null)) {
+        return cached;
+      }
     }
 
     // IMPORTANT: Stop any ongoing analysis before starting new one
@@ -502,10 +522,12 @@ class GameAnalysisService {
     // FEN format: pieces turn castling enpassant halfmove fullmove
     final isBlackToMove = fen.split(' ').length > 1 && fen.split(' ')[1] == 'b';
 
-    final depth = isCritical ? config.criticalDepth : config.quickDepth;
     final completer = Completer<_EvalResult>();
     StreamSubscription<String>? subscription;
-    _EvalResult? lastResult;
+    int? lastCp;
+    int? lastMate;
+    String? lastBestMoveUci;
+    int lastDepth = 0;
     bool positionSet = false;
 
     subscription = _stockfish!.outputStream.listen((line) {
@@ -520,17 +542,57 @@ class GameAnalysisService {
           // We need to normalize to White's perspective (positive = good for White)
           final cp = eval.centipawns;
           final mate = eval.mateInMoves;
-          lastResult = _EvalResult(
-            centipawns: isBlackToMove && cp != null ? -cp : cp,
-            mateInMoves: isBlackToMove && mate != null ? -mate : mate,
-          );
+          lastCp = isBlackToMove && cp != null ? -cp : cp;
+          lastMate = isBlackToMove && mate != null ? -mate : mate;
+
+          // Capture best move from PV
+          if (parsed.pv!.uciMoves.isNotEmpty) {
+            final candidateMove = parsed.pv!.uciMoves.first;
+            // Validate that this move is legal for the current position
+            if (ChessPositionUtils.validateMove(fen, candidateMove) != null) {
+              lastBestMoveUci = candidateMove;
+            }
+          }
+
+          // Track actual depth reached
+          final depthMatch = RegExp(r'depth (\d+)').firstMatch(line);
+          if (depthMatch != null) {
+            lastDepth = int.parse(depthMatch.group(1)!);
+          }
 
           // Check if we reached target depth
-          if (line.contains('depth $depth')) {
+          if (lastDepth >= requiredDepth) {
             if (!completer.isCompleted) {
-              completer.complete(lastResult);
+              String? bestMoveSan;
+              if (lastBestMoveUci != null) {
+                try {
+                  final position = Chess.fromSetup(Setup.parseFen(fen));
+                  final move = _parseUciMove(lastBestMoveUci!);
+                  if (move != null && position.isLegal(move)) {
+                    bestMoveSan = position.makeSan(move).$2;
+                  }
+                } catch (_) {}
+              }
+              completer.complete(_EvalResult(
+                centipawns: lastCp,
+                mateInMoves: lastMate,
+                bestMoveUci: lastBestMoveUci,
+                bestMoveSan: bestMoveSan,
+                depth: lastDepth,
+              ));
             }
             subscription?.cancel();
+          }
+        }
+      }
+
+      // Also capture bestmove line as backup
+      if (needBestMove && line.startsWith('bestmove') && lastBestMoveUci == null) {
+        final parts = line.split(' ');
+        if (parts.length >= 2 && parts[1] != '(none)') {
+          final candidateMove = parts[1];
+          if (ChessPositionUtils.validateMove(fen, candidateMove) != null) {
+            lastBestMoveUci = candidateMove;
           }
         }
       }
@@ -546,93 +608,31 @@ class GameAnalysisService {
       onTimeout: () {
         subscription?.cancel();
         _stockfish!.stop();
-        return lastResult ?? _EvalResult(centipawns: 0);
+
+        String? bestMoveSan;
+        if (lastBestMoveUci != null) {
+          try {
+            final position = Chess.fromSetup(Setup.parseFen(fen));
+            final move = _parseUciMove(lastBestMoveUci!);
+            if (move != null && position.isLegal(move)) {
+              bestMoveSan = position.makeSan(move).$2;
+            }
+          } catch (_) {}
+        }
+
+        return _EvalResult(
+          centipawns: lastCp ?? 0,
+          mateInMoves: lastMate,
+          bestMoveUci: lastBestMoveUci,
+          bestMoveSan: bestMoveSan,
+          depth: lastDepth,
+        );
       },
     );
 
     // Cache the result
     _evalCache[fen] = result;
     return result;
-  }
-
-  /// Get best move for a position (fast version)
-  Future<_BestMoveResult> _getBestMoveFast(String fen) async {
-    // IMPORTANT: Stop any ongoing analysis and wait for engine to be ready
-    // This prevents race conditions where old analysis output gets captured
-    _stockfish!.stop();
-
-    // Small delay to ensure engine processes the stop command
-    await Future.delayed(const Duration(milliseconds: 20));
-
-    final completer = Completer<_BestMoveResult>();
-    StreamSubscription<String>? subscription;
-    String? bestMoveUci;
-    bool positionSet = false;
-
-    subscription = _stockfish!.outputStream.listen((line) {
-      // Only process output after we've set the position
-      if (!positionSet) return;
-
-      if (line.startsWith('info') && line.contains('pv')) {
-        final parsed = UciParser.parseInfo(line);
-        if (parsed?.pv != null && parsed!.pv!.uciMoves.isNotEmpty) {
-          final candidateMove = parsed.pv!.uciMoves.first;
-          // Validate that this move is legal for the current position
-          final validatedSan = ChessPositionUtils.validateMove(fen, candidateMove);
-          if (validatedSan != null) {
-            bestMoveUci = candidateMove;
-          }
-        }
-      }
-
-      if (line.startsWith('bestmove')) {
-        final parts = line.split(' ');
-        if (parts.length >= 2 && parts[1] != '(none)') {
-          final candidateMove = parts[1];
-          // Validate the best move is legal for this position
-          final validatedSan = ChessPositionUtils.validateMove(fen, candidateMove);
-          if (validatedSan != null) {
-            bestMoveUci = candidateMove;
-          }
-        }
-
-        // Convert UCI to SAN
-        String? san;
-        if (bestMoveUci != null) {
-          try {
-            final position = Chess.fromSetup(Setup.parseFen(fen));
-            final move = _parseUciMove(bestMoveUci!);
-            if (move != null && position.isLegal(move)) {
-              san = position.makeSan(move).$2;
-            }
-          } catch (_) {
-            // Move conversion failed - likely invalid for this position
-            bestMoveUci = null;
-          }
-        }
-
-        if (!completer.isCompleted) {
-          completer.complete(_BestMoveResult(
-            uci: bestMoveUci ?? '',
-            san: san ?? '',
-          ));
-        }
-        subscription?.cancel();
-      }
-    });
-
-    _stockfish!.setPosition(fen);
-    positionSet = true;
-    _stockfish!.startAnalysis(moveTimeMs: config.maxMoveTimeMs);
-
-    return completer.future.timeout(
-      Duration(milliseconds: config.maxMoveTimeMs + 200),
-      onTimeout: () {
-        subscription?.cancel();
-        _stockfish!.stop();
-        return _BestMoveResult(uci: '', san: '');
-      },
-    );
   }
 
   /// Sync analysis results to server (if authenticated)
@@ -850,24 +850,20 @@ class _ParsedMove {
   });
 }
 
-/// Internal class for evaluation results
+/// Internal class for evaluation results (includes best move for efficiency)
 class _EvalResult {
   final int? centipawns;
   final int? mateInMoves;
+  final String? bestMoveUci;
+  final String? bestMoveSan;
+  final int depth;
 
   _EvalResult({
     this.centipawns,
     this.mateInMoves,
+    this.bestMoveUci,
+    this.bestMoveSan,
+    this.depth = 0,
   });
 }
 
-/// Internal class for best move results
-class _BestMoveResult {
-  final String uci;
-  final String san;
-
-  _BestMoveResult({
-    required this.uci,
-    required this.san,
-  });
-}

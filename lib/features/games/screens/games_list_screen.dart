@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/services/global_stockfish_manager.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../models/chess_game.dart';
 import '../providers/games_provider.dart';
@@ -27,6 +28,14 @@ class _GamesListScreenState extends ConsumerState<GamesListScreen> {
   final _searchController = TextEditingController();
   bool _showSearch = false;
   GamePlatform? _selectedPlatform;
+
+  @override
+  void initState() {
+    super.initState();
+    // Pre-warm Stockfish engine in background for faster game analysis
+    // This significantly reduces the time to start analyzing a game
+    GlobalStockfishManager.instance.preWarm();
+  }
 
   @override
   void dispose() {

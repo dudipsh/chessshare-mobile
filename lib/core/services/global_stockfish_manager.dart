@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
@@ -18,6 +19,7 @@ class GlobalStockfishManager {
   StockfishService? _stockfish;
   String? _currentOwner;
   Completer<void>? _initCompleter;
+  bool _isPreWarming = false;
 
   /// Get the current Stockfish service (may be null if not acquired)
   StockfishService? get stockfish => _stockfish;
@@ -111,4 +113,46 @@ class GlobalStockfishManager {
 
   /// Check if a specific owner has the engine
   bool isOwnedBy(String ownerId) => _currentOwner == ownerId;
+
+  /// Whether the engine is currently pre-warming
+  bool get isPreWarming => _isPreWarming;
+
+  /// Whether the engine is ready (pre-warmed or acquired)
+  bool get isReady => _stockfish != null && _currentOwner != null;
+
+  /// Pre-warm the engine in background for faster analysis start
+  /// Call this when user navigates to games list screen
+  /// Uses 'shared' owner so it can be reused by game analysis
+  Future<void> preWarm() async {
+    // Skip if already running or pre-warming
+    if (_stockfish != null || _isPreWarming) {
+      debugPrint('GlobalStockfish: Pre-warm skipped (already ready or warming)');
+      return;
+    }
+
+    _isPreWarming = true;
+    debugPrint('GlobalStockfish: Pre-warming engine...');
+
+    try {
+      // Get optimal thread count based on CPU cores
+      final cores = Platform.numberOfProcessors;
+      final threads = (cores ~/ 2).clamp(2, 8);
+
+      // Pre-warm with shared owner and optimal config for analysis
+      await acquire(
+        'shared',
+        config: StockfishConfig(
+          multiPv: 1,
+          hashSizeMb: 32,
+          threads: threads,
+          maxDepth: 14,
+        ),
+      );
+      debugPrint('GlobalStockfish: Pre-warm complete (threads: $threads)');
+    } catch (e) {
+      debugPrint('GlobalStockfish: Pre-warm failed - $e');
+    } finally {
+      _isPreWarming = false;
+    }
+  }
 }
