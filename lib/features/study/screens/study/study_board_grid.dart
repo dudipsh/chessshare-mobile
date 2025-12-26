@@ -65,15 +65,9 @@ class _StudyBoardGridState extends ConsumerState<StudyBoardGrid> {
 
     return RefreshIndicator(
       onRefresh: () => ref.read(studyListProvider.notifier).refresh(),
-      child: GridView.builder(
+      child: ListView.builder(
         controller: _scrollController,
         padding: const EdgeInsets.all(12),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-          childAspectRatio: 0.72, // Adjusted for footer height
-          crossAxisSpacing: 12,
-          mainAxisSpacing: 12,
-        ),
         itemCount: itemCount,
         itemBuilder: (ctx, i) {
           if (i >= widget.boards.length) {
@@ -84,7 +78,13 @@ class _StudyBoardGridState extends ConsumerState<StudyBoardGrid> {
               ),
             );
           }
-          return StudyBoardCard(board: widget.boards[i]);
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 16),
+            child: SizedBox(
+              height: 220, // Fixed height for consistent card sizing
+              child: StudyBoardCard(board: widget.boards[i]),
+            ),
+          );
         },
       ),
     );

@@ -15,7 +15,6 @@ import '../providers/game_review_provider.dart';
 import 'game_review/accuracy_summary.dart';
 import 'game_review/action_buttons.dart';
 import 'game_review/analyzing_view.dart';
-import 'game_review/best_move_hint.dart';
 import 'game_review/exploration_bar.dart';
 import 'game_review/move_info_panel.dart';
 import 'game_review/move_strip.dart';
@@ -187,22 +186,23 @@ class _GameReviewScreenState extends ConsumerState<GameReviewScreen> {
             ],
           ),
         ),
+        // B3: Reordered - Move history first, then the info panel
+        _buildMoveStrip(state, explorationState, isDark),
         Expanded(
           child: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (state.currentMove != null && !explorationState.isExploring)
-                  BestMoveHint(move: state.currentMove!, isDark: isDark),
+                // B3: Removed BestMoveHint ("best tap to explore" bar)
                 if (explorationState.isExploring)
                   ExplorationBar(explorationState: explorationState, isDark: isDark),
+                // B3: MoveInfoPanel (the "nice bar") now comes after move history
                 if (state.currentMove != null && !explorationState.isExploring)
                   MoveInfoPanel(move: state.currentMove!, isDark: isDark),
               ],
             ),
           ),
         ),
-        _buildMoveStrip(state, explorationState, isDark),
         _buildNavigationControls(state, explorationState),
         ReviewActionButtons(
           mistakesCount: _getMistakesCount(state),

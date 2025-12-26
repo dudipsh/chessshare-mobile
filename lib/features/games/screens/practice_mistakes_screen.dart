@@ -4,14 +4,15 @@ import 'package:fast_immutable_collections/fast_immutable_collections.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../app/theme/colors.dart';
 import '../../../core/providers/board_settings_provider.dart';
+import '../../../core/providers/captured_pieces_provider.dart';
 import '../../../core/services/audio_service.dart';
+import '../../../core/widgets/board_settings_factory.dart';
 import '../../../core/widgets/board_settings_sheet.dart';
+import '../../../core/widgets/chess_board_shell.dart';
 import '../models/analyzed_move.dart';
 import '../models/chess_game.dart';
 import '../widgets/move_markers.dart';
-import 'practice_mistakes/attempt_indicators.dart';
 import 'practice_mistakes/completion_dialog.dart';
 import 'practice_mistakes/feedback_message.dart';
 import 'practice_mistakes/hint_marker.dart';
@@ -41,8 +42,6 @@ class _PracticeMistakesScreenState extends ConsumerState<PracticeMistakesScreen>
   PracticeState _state = PracticeState.ready;
   String? _feedback;
   int _correctCount = 0;
-  int _wrongAttempts = 0;
-  static const int _maxWrongAttempts = 3;
   NormalMove? _lastMove;
   bool _showHint = false;
   MoveClassification? _feedbackMarker;
@@ -62,7 +61,6 @@ class _PracticeMistakesScreenState extends ConsumerState<PracticeMistakesScreen>
     _state = PracticeState.ready;
     _feedback = null;
     _feedbackMarker = null;
-    _wrongAttempts = 0;
     _lastMove = null;
     _showHint = false;
     setState(() {});
@@ -86,60 +84,25 @@ class _PracticeMistakesScreenState extends ConsumerState<PracticeMistakesScreen>
       _position = _position!.play(move) as Chess;
       setState(() {});
     } else {
-      _wrongAttempts++;
       _state = PracticeState.wrong;
       _feedbackMarker = MoveClassification.blunder;
       _lastMove = move;
       _position = _position!.play(move) as Chess;
       setState(() {});
 
-      if (_wrongAttempts >= _maxWrongAttempts) {
-        _feedback = 'The best move was ${currentMistake.bestMove}';
-        Future.delayed(const Duration(milliseconds: 800), () {
-          if (mounted) _showCorrectMove();
-        });
-      } else {
-        _feedback = 'Try again (${_maxWrongAttempts - _wrongAttempts} attempts left)';
-        Future.delayed(const Duration(milliseconds: 800), () {
-          if (mounted && _state == PracticeState.wrong) {
-            setState(() {
-              _position = Chess.fromSetup(Setup.parseFen(currentMistake.fen));
-              _lastMove = null;
-              _state = PracticeState.ready;
-              _feedback = null;
-              _feedbackMarker = null;
-            });
-          }
-        });
-      }
-    }
-  }
-
-  void _showCorrectMove() {
-    final bestMoveUci = currentMistake.bestMoveUci;
-    if (bestMoveUci != null && bestMoveUci.length >= 4) {
-      try {
-        _position = Chess.fromSetup(Setup.parseFen(currentMistake.fen));
-        final from = Square.fromName(bestMoveUci.substring(0, 2));
-        final to = Square.fromName(bestMoveUci.substring(2, 4));
-        Role? promotion;
-        if (bestMoveUci.length > 4) {
-          switch (bestMoveUci[4].toLowerCase()) {
-            case 'q': promotion = Role.queen; break;
-            case 'r': promotion = Role.rook; break;
-            case 'b': promotion = Role.bishop; break;
-            case 'n': promotion = Role.knight; break;
-          }
+      // No limit on attempts - always allow retry
+      _feedback = 'Try again';
+      Future.delayed(const Duration(milliseconds: 800), () {
+        if (mounted && _state == PracticeState.wrong) {
+          setState(() {
+            _position = Chess.fromSetup(Setup.parseFen(currentMistake.fen));
+            _lastMove = null;
+            _state = PracticeState.ready;
+            _feedback = null;
+            _feedbackMarker = null;
+          });
         }
-        final move = NormalMove(from: from, to: to, promotion: promotion);
-        _lastMove = move;
-        _position = _position!.play(move) as Chess;
-        _state = PracticeState.showingSolution;
-        _feedbackMarker = MoveClassification.best;
-        setState(() {});
-      } catch (e) {
-        debugPrint('Error showing correct move: $e');
-      }
+      });
     }
   }
 
@@ -242,7 +205,7 @@ class _PracticeMistakesScreenState extends ConsumerState<PracticeMistakesScreen>
                 ],
               ),
             ),
-            AttemptIndicators(wrongAttempts: _wrongAttempts, maxAttempts: _maxWrongAttempts),
+            // Attempt indicators removed - unlimited attempts now allowed
             if (_state == PracticeState.ready)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -296,14 +259,23 @@ class _PracticeMistakesScreenState extends ConsumerState<PracticeMistakesScreen>
   Widget _buildChessboard(double boardSize) {
     if (_position == null) return SizedBox(width: boardSize, height: boardSize);
 
+    final boardSettings = ref.watch(boardSettingsProvider);
+    final settings = BoardSettingsFactory.create(boardSettings: boardSettings);
     final isPlayable = _state == PracticeState.ready;
+    final fen = _position!.fen;
 
+    // Update captured pieces
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(capturedPiecesProvider.notifier).updateFromFen(fen);
+    });
+
+    Widget chessBoard;
     if (isPlayable) {
-      return Chessboard(
+      chessBoard = Chessboard(
         size: boardSize,
-        settings: _buildBoardSettings(),
+        settings: settings,
         orientation: _orientation,
-        fen: _position!.fen,
+        fen: fen,
         lastMove: _lastMove,
         game: GameData(
           playerSide: _orientation == Side.white ? PlayerSide.white : PlayerSide.black,
@@ -315,14 +287,22 @@ class _PracticeMistakesScreenState extends ConsumerState<PracticeMistakesScreen>
         ),
       );
     } else {
-      return Chessboard.fixed(
+      chessBoard = Chessboard.fixed(
         size: boardSize,
-        settings: _buildBoardSettings(),
+        settings: settings,
         orientation: _orientation,
-        fen: _position!.fen,
+        fen: fen,
         lastMove: _lastMove,
       );
     }
+
+    return ChessBoardShell(
+      board: chessBoard,
+      orientation: _orientation,
+      fen: fen,
+      showCapturedPieces: true,
+      padding: EdgeInsets.zero,
+    );
   }
 
   Widget _buildFeedbackMarker(double boardSize) {
@@ -360,33 +340,6 @@ class _PracticeMistakesScreenState extends ConsumerState<PracticeMistakesScreen>
     } catch (e) {
       return const SizedBox.shrink();
     }
-  }
-
-  ChessboardSettings _buildBoardSettings() {
-    final boardSettings = ref.watch(boardSettingsProvider);
-    final lightSquare = boardSettings.colorScheme.lightSquare;
-    final darkSquare = boardSettings.colorScheme.darkSquare;
-    final pieceAssets = boardSettings.pieceSet.pieceSet.assets;
-
-    return ChessboardSettings(
-      pieceAssets: pieceAssets,
-      colorScheme: ChessboardColorScheme(
-        lightSquare: lightSquare,
-        darkSquare: darkSquare,
-        background: SolidColorChessboardBackground(lightSquare: lightSquare, darkSquare: darkSquare),
-        whiteCoordBackground: SolidColorChessboardBackground(lightSquare: lightSquare, darkSquare: darkSquare, coordinates: true),
-        blackCoordBackground: SolidColorChessboardBackground(lightSquare: lightSquare, darkSquare: darkSquare, coordinates: true, orientation: Side.black),
-        lastMove: HighlightDetails(solidColor: AppColors.lastMove),
-        selected: HighlightDetails(solidColor: AppColors.highlight),
-        validMoves: Colors.black.withValues(alpha: 0.15),
-        validPremoves: Colors.blue.withValues(alpha: 0.2),
-      ),
-      showValidMoves: true,
-      showLastMove: true,
-      animationDuration: const Duration(milliseconds: 150),
-      dragFeedbackScale: 2.0,
-      dragFeedbackOffset: const Offset(0, -1),
-    );
   }
 
   String _getInstructions() {

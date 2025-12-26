@@ -6,11 +6,14 @@ import 'package:fast_immutable_collections/fast_immutable_collections.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/providers/board_settings_provider.dart';
+import '../../../core/providers/captured_pieces_provider.dart';
 import '../../../core/services/audio_service.dart';
 import '../../../core/services/global_stockfish_manager.dart';
+import '../../../core/widgets/board_settings_factory.dart';
+import '../../../core/widgets/chess_board_shell.dart';
 import '../../analysis/services/stockfish_service.dart';
 import 'play_vs_stockfish/action_buttons.dart';
-import 'play_vs_stockfish/board_settings.dart';
 import 'play_vs_stockfish/engine_settings_sheet.dart';
 import 'play_vs_stockfish/game_end_dialog.dart';
 import 'play_vs_stockfish/game_info.dart';
@@ -387,15 +390,24 @@ class _PlayVsStockfishScreenState extends ConsumerState<PlayVsStockfishScreen> {
   }
 
   Widget _buildChessboard(double boardSize) {
+    final boardSettings = ref.watch(boardSettingsProvider);
+    final settings = BoardSettingsFactory.create(boardSettings: boardSettings);
     final isPlayerTurn = (_position.turn == Side.white) == (widget.playerColor == Side.white);
     final isPlayable = isPlayerTurn && !_isThinking && _gameResult == null;
+    final fen = _position.fen;
 
+    // Update captured pieces
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(capturedPiecesProvider.notifier).updateFromFen(fen);
+    });
+
+    Widget chessBoard;
     if (isPlayable) {
-      return Chessboard(
+      chessBoard = Chessboard(
         size: boardSize,
-        settings: buildChessboardSettings(),
+        settings: settings,
         orientation: widget.playerColor,
-        fen: _position.fen,
+        fen: fen,
         lastMove: _lastMove,
         game: GameData(
           playerSide: widget.playerColor == Side.white ? PlayerSide.white : PlayerSide.black,
@@ -407,13 +419,21 @@ class _PlayVsStockfishScreenState extends ConsumerState<PlayVsStockfishScreen> {
         ),
       );
     } else {
-      return Chessboard.fixed(
+      chessBoard = Chessboard.fixed(
         size: boardSize,
-        settings: buildChessboardSettings(),
+        settings: settings,
         orientation: widget.playerColor,
-        fen: _position.fen,
+        fen: fen,
         lastMove: _lastMove,
       );
     }
+
+    return ChessBoardShell(
+      board: chessBoard,
+      orientation: widget.playerColor,
+      fen: fen,
+      showCapturedPieces: true,
+      padding: EdgeInsets.zero,
+    );
   }
 }

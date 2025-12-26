@@ -7,8 +7,11 @@ import 'package:go_router/go_router.dart';
 
 import '../../../app/theme/colors.dart';
 import '../../../core/providers/board_settings_provider.dart';
+import '../../../core/providers/captured_pieces_provider.dart';
 import '../../../core/services/audio_service.dart';
+import '../../../core/widgets/board_settings_factory.dart';
 import '../../../core/widgets/board_settings_sheet.dart';
+import '../../../core/widgets/chess_board_shell.dart';
 import '../../games/models/chess_game.dart';
 import '../../puzzles/providers/puzzle_generator_provider.dart';
 import '../providers/analysis_provider.dart';
@@ -195,13 +198,21 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> {
 
   Widget _buildChessboard(AnalysisState analysisState, double boardSize) {
     final notifier = ref.read(analysisProvider.notifier);
+    final boardSettings = ref.watch(boardSettingsProvider);
+    final settings = BoardSettingsFactory.create(boardSettings: boardSettings);
+    final fen = analysisState.currentFen;
+
+    // Update captured pieces
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(capturedPiecesProvider.notifier).updateFromFen(fen);
+    });
 
     // Board is always interactive - user can move pieces
-    return Chessboard(
+    final chessBoard = Chessboard(
       size: boardSize,
-      settings: _buildBoardSettings(),
+      settings: settings,
       orientation: analysisState.orientation,
-      fen: analysisState.currentFen,
+      fen: fen,
       lastMove: analysisState.lastMove,
       game: GameData(
         playerSide: PlayerSide.both,
@@ -211,7 +222,7 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> {
         onMove: (move, {isDrop}) {
           // Play move sound
           try {
-            final position = Chess.fromSetup(Setup.parseFen(analysisState.currentFen));
+            final position = Chess.fromSetup(Setup.parseFen(fen));
             _playMoveSound(move, position);
           } catch (_) {}
           notifier.onUserMove(move, isDrop: isDrop);
@@ -219,44 +230,13 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> {
         onPromotionSelection: (role) {},
       ),
     );
-  }
 
-  ChessboardSettings _buildBoardSettings() {
-    final boardSettings = ref.watch(boardSettingsProvider);
-    final lightSquare = boardSettings.colorScheme.lightSquare;
-    final darkSquare = boardSettings.colorScheme.darkSquare;
-    final pieceAssets = boardSettings.pieceSet.pieceSet.assets;
-
-    return ChessboardSettings(
-      pieceAssets: pieceAssets,
-      colorScheme: ChessboardColorScheme(
-        lightSquare: lightSquare,
-        darkSquare: darkSquare,
-        background: SolidColorChessboardBackground(
-          lightSquare: lightSquare,
-          darkSquare: darkSquare,
-        ),
-        whiteCoordBackground: SolidColorChessboardBackground(
-          lightSquare: lightSquare,
-          darkSquare: darkSquare,
-          coordinates: true,
-        ),
-        blackCoordBackground: SolidColorChessboardBackground(
-          lightSquare: lightSquare,
-          darkSquare: darkSquare,
-          coordinates: true,
-          orientation: Side.black,
-        ),
-        lastMove: HighlightDetails(solidColor: AppColors.lastMove),
-        selected: HighlightDetails(solidColor: AppColors.highlight),
-        validMoves: Colors.black.withValues(alpha: 0.15),
-        validPremoves: Colors.blue.withValues(alpha: 0.2),
-      ),
-      showValidMoves: true,
-      showLastMove: true,
-      animationDuration: const Duration(milliseconds: 150),
-      dragFeedbackScale: 2.0,
-      dragFeedbackOffset: const Offset(0, -1),
+    return ChessBoardShell(
+      board: chessBoard,
+      orientation: analysisState.orientation,
+      fen: fen,
+      showCapturedPieces: true,
+      padding: EdgeInsets.zero,
     );
   }
 

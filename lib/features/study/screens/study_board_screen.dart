@@ -5,7 +5,10 @@ import 'package:dartchess/dartchess.dart';
 
 import '../../../app/theme/colors.dart';
 import '../../../core/providers/board_settings_provider.dart';
+import '../../../core/providers/captured_pieces_provider.dart';
+import '../../../core/widgets/board_settings_factory.dart';
 import '../../../core/widgets/board_settings_sheet.dart';
+import '../../../core/widgets/chess_board_shell.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../models/study_board.dart';
 import '../providers/study_board_provider.dart';
@@ -127,12 +130,7 @@ class _StudyBoardScreenState extends ConsumerState<StudyBoardScreen> {
     return AppBar(
       title: Text(widget.board.title, style: const TextStyle(fontSize: 17)),
       actions: [
-        if ((state.board?.variations.length ?? 0) > 1)
-          IconButton(
-            icon: const Icon(Icons.list),
-            onPressed: () => _showVariationSelector(state, isDark),
-            tooltip: 'Select variation',
-          ),
+        // Removed hamburger icon (Icons.list) - line name is now clickable
         IconButton(
           icon: const Icon(Icons.settings),
           onPressed: () => showBoardSettingsSheet(
@@ -161,44 +159,168 @@ class _StudyBoardScreenState extends ConsumerState<StudyBoardScreen> {
     if (variations.isEmpty) return const SizedBox.shrink();
 
     final currentVariation = variations[state.currentVariationIndex];
+    final hasMultipleVariations = variations.length > 1;
 
-    return GestureDetector(
-      onTap: () => _showVariationSelector(state, isDark),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Flexible(
-              child: Text(
-                currentVariation.name,
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: isDark ? Colors.white : Colors.black87),
-                overflow: TextOverflow.ellipsis,
-                maxLines: 1,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: hasMultipleVariations ? () => _showVariationSelector(state, isDark) : null,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: isDark ? Colors.grey.shade900 : Colors.grey.shade100,
+            borderRadius: BorderRadius.circular(8),
+            border: hasMultipleVariations
+                ? Border.all(
+                    color: isDark ? Colors.grey.shade700 : Colors.grey.shade300,
+                    width: 1,
+                  )
+                : null,
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // Evaluation display (A3) - left side
+              _buildEvaluationBadge(state, isDark),
+              const SizedBox(width: 12),
+              // Line name - center (clickable)
+              Expanded(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        currentVariation.name,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? Colors.white : Colors.black87,
+                          decoration: hasMultipleVariations ? TextDecoration.underline : null,
+                          decorationColor: isDark ? Colors.white38 : Colors.black38,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      ),
+                    ),
+                    if (hasMultipleVariations) ...[
+                      const SizedBox(width: 8),
+                      Text(
+                        '${state.currentVariationIndex + 1}/${variations.length}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: isDark ? Colors.white54 : Colors.grey.shade600,
+                        ),
+                      ),
+                      Icon(
+                        Icons.keyboard_arrow_down,
+                        size: 18,
+                        color: isDark ? Colors.white54 : Colors.grey.shade600,
+                      ),
+                    ],
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(width: 8),
-            Text(
-              '${state.currentVariationIndex + 1}/${variations.length}',
-              style: TextStyle(fontSize: 12, color: isDark ? Colors.white54 : Colors.grey.shade600),
-            ),
-            const SizedBox(width: 4),
-            Icon(Icons.arrow_drop_down, size: 20, color: isDark ? Colors.white54 : Colors.grey.shade600),
-          ],
+              // Spacer to balance the evaluation badge
+              const SizedBox(width: 48),
+            ],
+          ),
         ),
       ),
     );
   }
 
+  /// Builds the evaluation badge showing position assessment (A3)
+  Widget _buildEvaluationBadge(StudyBoardState state, bool isDark) {
+    // For study mode, we show a static evaluation based on move progress
+    // In a full implementation, this would come from engine analysis
+    final evaluation = _calculateStudyEvaluation(state);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: _getEvaluationColor(evaluation, isDark).withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: _getEvaluationColor(evaluation, isDark).withValues(alpha: 0.3),
+          width: 1,
+        ),
+      ),
+      child: Text(
+        evaluation,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+          color: _getEvaluationColor(evaluation, isDark),
+          fontFamily: 'monospace',
+        ),
+      ),
+    );
+  }
+
+  String _calculateStudyEvaluation(StudyBoardState state) {
+    // For study lines, we calculate a simplified evaluation based on position
+    // This is a placeholder - in production, this would use engine analysis
+    try {
+      final fen = state.currentFen;
+
+      // Simple material count from FEN string
+      int whiteMaterial = 0;
+      int blackMaterial = 0;
+
+      final pieceValues = {
+        'P': 1, 'N': 3, 'B': 3, 'R': 5, 'Q': 9,
+        'p': 1, 'n': 3, 'b': 3, 'r': 5, 'q': 9,
+      };
+
+      final fenBoard = fen.split(' ').first;
+      for (final char in fenBoard.split('')) {
+        final value = pieceValues[char];
+        if (value != null) {
+          if (char == char.toUpperCase()) {
+            whiteMaterial += value;
+          } else {
+            blackMaterial += value;
+          }
+        }
+      }
+
+      final diff = whiteMaterial - blackMaterial;
+      if (diff == 0) return '0.0';
+      if (diff > 0) return '+${(diff * 0.5).toStringAsFixed(1)}';
+      return (diff * 0.5).toStringAsFixed(1);
+    } catch (e) {
+      return '0.0';
+    }
+  }
+
+  Color _getEvaluationColor(String eval, bool isDark) {
+    if (eval.startsWith('+')) {
+      return Colors.green.shade600;
+    } else if (eval.startsWith('-')) {
+      return Colors.red.shade600;
+    }
+    return isDark ? Colors.grey.shade400 : Colors.grey.shade600;
+  }
+
   Widget _buildChessboard(StudyBoardState state, double boardSize) {
     final notifier = ref.read(studyBoardProvider.notifier);
     final isPlayable = state.state == StudyState.playing || state.state == StudyState.correct;
+    final boardSettings = ref.watch(boardSettingsProvider);
+    final settings = BoardSettingsFactory.create(boardSettings: boardSettings);
 
+    // Update captured pieces
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(capturedPiecesProvider.notifier).updateFromFen(state.currentFen);
+    });
+
+    Widget chessBoard;
     if (isPlayable && state.isUserTurn) {
-      return Chessboard(
+      chessBoard = Chessboard(
         size: boardSize,
-        settings: _buildBoardSettings(),
+        settings: settings,
         orientation: state.orientation,
         fen: state.currentFen,
         lastMove: state.lastMove,
@@ -212,14 +334,23 @@ class _StudyBoardScreenState extends ConsumerState<StudyBoardScreen> {
         ),
       );
     } else {
-      return Chessboard.fixed(
+      chessBoard = Chessboard.fixed(
         size: boardSize,
-        settings: _buildBoardSettings(),
+        settings: settings,
         orientation: state.orientation,
         fen: state.currentFen,
         lastMove: state.lastMove,
       );
     }
+
+    // Return board wrapped in shell with captured pieces
+    return ChessBoardShell(
+      board: chessBoard,
+      orientation: state.orientation,
+      fen: state.currentFen,
+      showCapturedPieces: true,
+      padding: EdgeInsets.zero,
+    );
   }
 
   Widget _buildMarkerOverlay(StudyBoardState state, double boardSize) {
@@ -296,33 +427,6 @@ class _StudyBoardScreenState extends ConsumerState<StudyBoardScreen> {
           ],
         ],
       ),
-    );
-  }
-
-  ChessboardSettings _buildBoardSettings() {
-    final boardSettings = ref.watch(boardSettingsProvider);
-    final lightSquare = boardSettings.colorScheme.lightSquare;
-    final darkSquare = boardSettings.colorScheme.darkSquare;
-    final pieceAssets = boardSettings.pieceSet.pieceSet.assets;
-
-    return ChessboardSettings(
-      pieceAssets: pieceAssets,
-      colorScheme: ChessboardColorScheme(
-        lightSquare: lightSquare,
-        darkSquare: darkSquare,
-        background: SolidColorChessboardBackground(lightSquare: lightSquare, darkSquare: darkSquare),
-        whiteCoordBackground: SolidColorChessboardBackground(lightSquare: lightSquare, darkSquare: darkSquare, coordinates: true),
-        blackCoordBackground: SolidColorChessboardBackground(lightSquare: lightSquare, darkSquare: darkSquare, coordinates: true, orientation: Side.black),
-        lastMove: HighlightDetails(solidColor: AppColors.lastMove),
-        selected: HighlightDetails(solidColor: AppColors.highlight),
-        validMoves: Colors.black.withValues(alpha: 0.15),
-        validPremoves: Colors.blue.withValues(alpha: 0.2),
-      ),
-      showValidMoves: true,
-      showLastMove: true,
-      animationDuration: const Duration(milliseconds: 150),
-      dragFeedbackScale: 2.0,
-      dragFeedbackOffset: const Offset(0, -1),
     );
   }
 
