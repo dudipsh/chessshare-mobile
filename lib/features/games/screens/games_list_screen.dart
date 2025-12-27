@@ -147,36 +147,96 @@ class _GamesListScreenState extends ConsumerState<GamesListScreen> {
         ? games.where((g) => g.platform == _selectedPlatform).toList()
         : games;
 
+    return RefreshIndicator(
+      onRefresh: () => ref.read(gamesProvider.notifier).refreshFromSavedProfiles(),
+      child: CustomScrollView(
+        slivers: [
+          // Collapsible header with stats and quick actions
+          SliverToBoxAdapter(
+            child: _CollapsibleHeader(
+              selectedPlatform: _selectedPlatform,
+              gamesState: gamesState,
+              onPlatformSelected: (platform) => setState(() => _selectedPlatform = platform),
+            ),
+          ),
+
+          // Section header
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+              child: Row(
+                children: [
+                  Text(
+                    'RECENT MATCHES',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey.shade500,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    '${filteredByPlatform.length} games',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey.shade500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Games list
+          SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (context, index) {
+                final game = filteredByPlatform[index];
+                return GameCard(
+                  game: game,
+                  onTap: () => context.pushNamed('game-review', extra: game),
+                );
+              },
+              childCount: filteredByPlatform.length,
+            ),
+          ),
+
+          // Bottom padding
+          const SliverToBoxAdapter(
+            child: SizedBox(height: 16),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Collapsible header with stats and quick actions
+class _CollapsibleHeader extends StatelessWidget {
+  final GamePlatform? selectedPlatform;
+  final GamesState gamesState;
+  final ValueChanged<GamePlatform?> onPlatformSelected;
+
+  const _CollapsibleHeader({
+    required this.selectedPlatform,
+    required this.gamesState,
+    required this.onPlatformSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
     return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        GamesStatsBar(selectedPlatform: _selectedPlatform),
-        // Platform switcher for filtering between accounts
+        GamesStatsBar(selectedPlatform: selectedPlatform),
         PlatformSwitcher(
           chessComUsername: gamesState.activeChessComUsername,
           lichessUsername: gamesState.activeLichessUsername,
-          selectedPlatform: _selectedPlatform,
-          onPlatformSelected: (platform) => setState(() => _selectedPlatform = platform),
+          selectedPlatform: selectedPlatform,
+          onPlatformSelected: onPlatformSelected,
         ),
         const QuickAccessButtons(),
-        Expanded(
-          child: RefreshIndicator(
-            onRefresh: () => ref.read(gamesProvider.notifier).refreshFromSavedProfiles(),
-            child: ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: filteredByPlatform.length,
-              itemBuilder: (context, index) {
-                final game = filteredByPlatform[index];
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: GameCard(
-                    game: game,
-                    onTap: () => context.pushNamed('game-review', extra: game),
-                  ),
-                );
-              },
-            ),
-          ),
-        ),
       ],
     );
   }
