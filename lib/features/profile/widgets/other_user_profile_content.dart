@@ -78,11 +78,19 @@ class OtherUserProfileContent extends StatelessWidget {
   }
 
   Widget _buildStatsRow(profile) {
+    // Calculate stats from boards array (more accurate than profile data)
+    final boardsCount = profileState.boards.isNotEmpty
+        ? profileState.boards.length
+        : (profile?.boardsCount ?? 0);
+    final totalViews = profileState.boards.isNotEmpty
+        ? profileState.boards.fold(0, (sum, b) => sum + b.viewsCount)
+        : (profile?.totalViews ?? 0);
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       children: [
-        _buildStatItem('Boards', '${profile?.boardsCount ?? 0}', Icons.dashboard),
-        _buildStatItem('Views', '${profile?.totalViews ?? 0}', Icons.visibility),
+        _buildStatItem('Boards', '$boardsCount', Icons.dashboard),
+        _buildStatItem('Views', '$totalViews', Icons.visibility),
         _buildStatItem('Followers', '${profile?.followersCount ?? 0}', Icons.people),
       ],
     );

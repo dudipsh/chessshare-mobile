@@ -120,8 +120,6 @@ class ProfileRepository {
     final allBoards = [...publicBoards, ...privateBoards];
     allBoards.sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
-    debugPrint('getMyBoards: Combined ${publicBoards.length} public + ${privateBoards.length} private = ${allBoards.length} total boards');
-
     return allBoards.take(limit).toList();
   }
 
@@ -140,7 +138,6 @@ class ProfileRepository {
       parser: (response) {
         if (response == null) return <UserBoard>[];
         final list = response as List;
-        debugPrint('get_my_boards_paginated (isPublic=$isPublic, cursor=$cursor) returned ${list.length} boards');
         return list.map((e) {
           final map = e as Map<String, dynamic>;
           return UserBoard(
@@ -174,7 +171,6 @@ class ProfileRepository {
       parser: (response) {
         if (response == null) return <UserBoard>[];
         final list = response as List;
-        debugPrint('getUserBoards: RPC returned ${list.length} boards for user $userId');
         return list.map((e) {
           final map = e as Map<String, dynamic>;
           return UserBoard(
@@ -232,7 +228,6 @@ class ProfileRepository {
       parser: (response) {
         if (response == null) return null;
         final data = response is List ? response.first : response;
-        debugPrint('ProfileStats response: $data');
         return ProfileStats.fromJson(data as Map<String, dynamic>);
       },
       defaultValue: null,

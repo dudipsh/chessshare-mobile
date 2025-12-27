@@ -152,8 +152,6 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
   /// Load profile data from cache
   Future<bool> _loadFromCache() async {
     try {
-      final isCacheValid = await ProfileCacheService.isCacheValid();
-
       // Load cached data
       final results = await Future.wait([
         ProfileCacheService.getCachedProfile(),
@@ -179,7 +177,6 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
           isLoading: false,
           isFromCache: true,
         );
-        debugPrint('Loaded profile from cache (valid: $isCacheValid)');
         return true;
       }
 
@@ -215,8 +212,6 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
         gameReviews = results[3] as List<GameReviewSummary>;
         stats = results[4] as ProfileStats?;
 
-        debugPrint('ProfileStats from RPC: boards=${stats?.boardsCount}, views=${stats?.totalViews}, likes=${stats?.totalLikes}');
-
         // Also check local database for linked usernames if not from server
         if (linkedAccounts.isEmpty) {
           linkedAccounts = await _getLinkedAccountsFromLocalOrProfile(profile);
@@ -242,14 +237,10 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
 
         // Update boards in state
         state = state.copyWith(boards: boards);
-
-        debugPrint('Loaded other user profile: ${profile?.fullName}, boards: ${boards.length}');
       }
 
       // Update state with fresh data
       if (profile != null) {
-        debugPrint('Profile loaded - boardsCount: ${profile.boardsCount}, totalViews: ${profile.totalViews}');
-
         state = state.copyWith(
           profile: profile,
           stats: stats, // Only set for own profile
@@ -267,13 +258,10 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
             linkedAccounts: linkedAccounts,
             gameReviews: gameReviews,
           );
-          debugPrint('Profile data fetched and cached');
 
-          // Load boards only if stats RPC failed (fallback)
-          if (stats == null) {
-            debugPrint('Stats RPC failed, loading boards as fallback...');
+          // Always load boards for own profile if stats RPC failed (fallback for overview)
+          if (stats == null && state.boards.isEmpty) {
             await loadBoards(forceRefresh: true);
-            debugPrint('Boards loaded: ${state.boards.length} boards, total views: ${state.boards.fold(0, (sum, b) => sum + b.viewsCount)}');
           }
         }
       }
@@ -365,9 +353,7 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
 
   /// Load user boards (lazy loaded when tab is selected)
   Future<void> loadBoards({bool forceRefresh = false}) async {
-    debugPrint('loadBoards called - forceRefresh: $forceRefresh, current boards: ${state.boards.length}, isOwnProfile: $isOwnProfile');
     if (state.boards.isNotEmpty && !forceRefresh) {
-      debugPrint('loadBoards skipped - already have ${state.boards.length} boards');
       return; // Already loaded
     }
 
@@ -382,18 +368,14 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
 
       if (isOwnProfile) {
         // Use get_my_boards_paginated for own profile
-        debugPrint('loadBoards: fetching own boards using getMyBoards()');
         boards = await ProfileService.getMyBoards();
 
         // Update cursors based on returned boards
         _updateCursors(boards);
       } else {
         // Use direct query for other users (public boards only)
-        debugPrint('loadBoards: fetching boards for other user $userId');
         boards = await ProfileService.getUserBoards(userId);
       }
-
-      debugPrint('loadBoards received ${boards.length} boards from API');
 
       state = state.copyWith(
         boards: boards,
@@ -414,11 +396,8 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
   /// Load more boards (pagination)
   Future<void> loadMoreBoards() async {
     if (!isOwnProfile || state.isLoadingMoreBoards || !state.hasMoreBoards) {
-      debugPrint('loadMoreBoards skipped - isOwn: $isOwnProfile, loading: ${state.isLoadingMoreBoards}, hasMore: ${state.hasMoreBoards}');
       return;
     }
-
-    debugPrint('loadMoreBoards: cursorPublic=$_cursorPublic, cursorPrivate=$_cursorPrivate');
 
     state = state.copyWith(isLoadingMoreBoards: true);
 
@@ -427,8 +406,6 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
         cursorPublic: _cursorPublic,
         cursorPrivate: _cursorPrivate,
       );
-
-      debugPrint('loadMoreBoards received ${newBoards.length} more boards');
 
       if (newBoards.isEmpty) {
         state = state.copyWith(
@@ -468,7 +445,6 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
         }
       }
     }
-    debugPrint('Updated cursors: public=$_cursorPublic, private=$_cursorPrivate');
   }
 
   /// Change selected tab

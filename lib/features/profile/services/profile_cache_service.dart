@@ -65,7 +65,6 @@ class ProfileCacheService {
       final jsonString = jsonEncode(profile.toJson());
       await prefs.setString(_profileKey, jsonString);
       await _updateCacheTimestamp();
-      debugPrint('Profile cached successfully');
     } catch (e) {
       debugPrint('Error caching profile: $e');
     }
@@ -95,7 +94,6 @@ class ProfileCacheService {
       final jsonList = links.map((e) => e.toJson()).toList();
       final jsonString = jsonEncode(jsonList);
       await prefs.setString(_bioLinksKey, jsonString);
-      debugPrint('Bio links cached successfully');
     } catch (e) {
       debugPrint('Error caching bio links: $e');
     }
@@ -128,7 +126,6 @@ class ProfileCacheService {
       final jsonList = accounts.map((e) => e.toJson()).toList();
       final jsonString = jsonEncode(jsonList);
       await prefs.setString(_linkedAccountsKey, jsonString);
-      debugPrint('Linked accounts cached successfully');
     } catch (e) {
       debugPrint('Error caching linked accounts: $e');
     }
@@ -160,7 +157,6 @@ class ProfileCacheService {
       final jsonList = boards.map((e) => e.toJson()).toList();
       final jsonString = jsonEncode(jsonList);
       await prefs.setString(_userBoardsKey, jsonString);
-      debugPrint('User boards cached successfully');
     } catch (e) {
       debugPrint('Error caching user boards: $e');
     }
@@ -192,7 +188,6 @@ class ProfileCacheService {
       final jsonList = reviews.map((e) => e.toJson()).toList();
       final jsonString = jsonEncode(jsonList);
       await prefs.setString(_gameReviewsKey, jsonString);
-      debugPrint('Game reviews cached successfully');
     } catch (e) {
       debugPrint('Error caching game reviews: $e');
     }
@@ -246,7 +241,6 @@ class ProfileCacheService {
         prefs.remove(_gameReviewsKey),
         prefs.remove(_cacheTimestampKey),
       ]);
-      debugPrint('Profile cache cleared');
     } catch (e) {
       debugPrint('Error clearing profile cache: $e');
     }
