@@ -42,21 +42,16 @@ void main() async {
 /// This makes first game analysis much faster
 void _preInitializeStockfish() {
   // Stockfish only works on iOS and Android
-  if (!Platform.isIOS && !Platform.isAndroid) {
-    debugPrint('Stockfish not supported on this platform');
-    return;
-  }
+  if (!Platform.isIOS && !Platform.isAndroid) return;
 
   // Run in background - don't await
   Future.delayed(const Duration(seconds: 2), () async {
     try {
       final config = StockfishConfig.forMobile();
-      debugPrint('Pre-initializing Stockfish engine with ${config.threads} threads...');
       // Use 'shared' owner so any screen can use the pre-loaded instance
       await GlobalStockfishManager.instance.acquire('shared', config: config);
-      debugPrint('Stockfish engine pre-initialized successfully');
     } catch (e) {
-      debugPrint('Stockfish pre-initialization failed (will retry on first use): $e');
+      debugPrint('Stockfish pre-initialization failed: $e');
     }
   });
 }
@@ -67,12 +62,9 @@ Future<void> _initializeNotifications() async {
 
     // Set up notification tap handler
     LocalNotificationService.onNotificationTap = (payload) {
-      debugPrint('main.dart: Handling notification tap: $payload');
       // Use navigation service to handle the tap
       NotificationNavigationService().onNotificationTapped(payload);
     };
-
-    debugPrint('Local notifications initialized');
   } catch (e) {
     debugPrint('Failed to initialize notifications: $e');
   }
@@ -86,13 +78,6 @@ Future<void> _initializeSupabase() async {
   // Initialize Supabase
   if (supabaseUrl.isNotEmpty && supabaseKey.isNotEmpty) {
     try {
-      // Debug: Log key info (first 20 chars only for security)
-      debugPrint('Supabase init - URL: $supabaseUrl');
-      if (supabaseKey.length >= 20) {
-        debugPrint('Supabase init - Key starts with: ${supabaseKey.substring(0, 20)}...');
-      }
-      debugPrint('Supabase init - Key length: ${supabaseKey.length}');
-
       await Supabase.initialize(
         url: supabaseUrl,
         anonKey: supabaseKey,
@@ -103,12 +88,8 @@ Future<void> _initializeSupabase() async {
       );
       // Mark Supabase as ready for queries
       SupabaseService.markReady();
-      debugPrint('Supabase initialized with: $supabaseUrl');
     } catch (e) {
       debugPrint('Supabase initialization failed: $e');
     }
-  } else {
-    debugPrint('Supabase not configured - running in offline mode');
-    debugPrint('Missing: ${supabaseUrl.isEmpty ? "SUPABASE_URL" : ""} ${supabaseKey.isEmpty ? "SUPABASE_ANON_KEY" : ""}');
   }
 }

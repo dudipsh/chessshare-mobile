@@ -38,17 +38,13 @@ class GlobalStockfishManager {
     String ownerId, {
     StockfishConfig? config,
   }) async {
-    debugPrint('GlobalStockfish: $ownerId requesting acquisition');
-
     // If another owner has it, release first
     if (_stockfish != null && _currentOwner != null && _currentOwner != ownerId) {
-      debugPrint('GlobalStockfish: Releasing from $_currentOwner for $ownerId');
       await release(_currentOwner!);
     }
 
     // If we already have it for this owner, just return it
     if (_stockfish != null && _currentOwner == ownerId) {
-      debugPrint('GlobalStockfish: Already owned by $ownerId');
       // Update config if needed
       if (config != null) {
         await _stockfish!.updateConfig(config);
@@ -58,18 +54,15 @@ class GlobalStockfishManager {
 
     // Wait if initialization is in progress
     if (_initCompleter != null) {
-      debugPrint('GlobalStockfish: Waiting for current initialization...');
       await _initCompleter!.future;
     }
 
     // Create new instance
     _initCompleter = Completer<void>();
     try {
-      debugPrint('GlobalStockfish: Creating new instance for $ownerId');
       _stockfish = StockfishService(config: config);
       await _stockfish!.initialize();
       _currentOwner = ownerId;
-      debugPrint('GlobalStockfish: Acquired by $ownerId');
       _initCompleter!.complete();
       return _stockfish!;
     } catch (e) {
@@ -87,17 +80,9 @@ class GlobalStockfishManager {
   /// Note: 'shared' owner is never released to allow reuse across screens
   Future<void> release(String ownerId) async {
     // Don't release 'shared' owner - keep it alive for reuse
-    if (ownerId == 'shared') {
-      debugPrint('GlobalStockfish: Keeping shared instance alive');
-      return;
-    }
+    if (ownerId == 'shared') return;
+    if (_currentOwner != ownerId) return;
 
-    if (_currentOwner != ownerId) {
-      debugPrint('GlobalStockfish: $ownerId tried to release but owner is $_currentOwner');
-      return;
-    }
-
-    debugPrint('GlobalStockfish: Releasing from $ownerId');
     await _stockfish?.dispose();
     _stockfish = null;
     _currentOwner = null;
@@ -105,7 +90,6 @@ class GlobalStockfishManager {
 
   /// Force release and dispose (use carefully)
   Future<void> forceRelease() async {
-    debugPrint('GlobalStockfish: Force releasing from $_currentOwner');
     await _stockfish?.dispose();
     _stockfish = null;
     _currentOwner = null;
@@ -125,13 +109,9 @@ class GlobalStockfishManager {
   /// Uses 'shared' owner so it can be reused by game analysis
   Future<void> preWarm() async {
     // Skip if already running or pre-warming
-    if (_stockfish != null || _isPreWarming) {
-      debugPrint('GlobalStockfish: Pre-warm skipped (already ready or warming)');
-      return;
-    }
+    if (_stockfish != null || _isPreWarming) return;
 
     _isPreWarming = true;
-    debugPrint('GlobalStockfish: Pre-warming engine...');
 
     try {
       // Get optimal thread count based on CPU cores
@@ -148,7 +128,6 @@ class GlobalStockfishManager {
           maxDepth: 14,
         ),
       );
-      debugPrint('GlobalStockfish: Pre-warm complete (threads: $threads)');
     } catch (e) {
       debugPrint('GlobalStockfish: Pre-warm failed - $e');
     } finally {

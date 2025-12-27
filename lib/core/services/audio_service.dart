@@ -56,18 +56,15 @@ class AudioService {
         try {
           final source = await _soloud!.loadAsset(entry.value);
           _sounds[entry.key] = source;
-          debugPrint('Loaded sound: ${entry.key}');
         } catch (e) {
-          debugPrint('Failed to load ${entry.key}: $e');
+          debugPrint('Failed to load sound ${entry.key}: $e');
         }
       }
 
       // Check vibration capability once
       _hasVibrator = await Vibration.hasVibrator();
-      debugPrint('Vibration available: $_hasVibrator');
 
       _isInitialized = true;
-      debugPrint('AudioService initialized with SoLoud');
     } catch (e) {
       debugPrint('AudioService init error: $e');
       _isInitialized = false;
@@ -101,20 +98,9 @@ class AudioService {
 
   /// Trigger vibration - instant, non-blocking
   void _vibrate() {
-    debugPrint('[Vibration] _vibrate called - enabled: $_vibrationEnabled, hasVibrator: $_hasVibrator, initialized: $_isInitialized');
+    if (!_vibrationEnabled || _hasVibrator != true) return;
 
-    if (!_vibrationEnabled) {
-      debugPrint('[Vibration] Skipped - vibration disabled');
-      return;
-    }
-
-    if (_hasVibrator != true) {
-      debugPrint('[Vibration] Skipped - no vibrator detected');
-      return;
-    }
-
-    // Short vibration for move feedback (50ms is more noticeable than 10ms)
-    debugPrint('[Vibration] Triggering vibration...');
+    // Short vibration for move feedback
     Vibration.vibrate(duration: 50, amplitude: 128);
   }
 

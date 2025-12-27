@@ -283,14 +283,9 @@ class StockfishService {
     _refCount--;
 
     // Only actually dispose when no more references
-    if (_refCount > 0) {
-      debugPrint('Stockfish: Skipping dispose, refCount=$_refCount');
-      return;
-    }
+    if (_refCount > 0) return;
 
     if (_state == StockfishState.disposed) return;
-
-    debugPrint('Stockfish: Actually disposing, refCount=$_refCount');
 
     // Only send commands if engine is ready
     if (_stockfish != null && _stockfish!.state.value.name == 'ready') {
