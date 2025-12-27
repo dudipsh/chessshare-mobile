@@ -20,6 +20,10 @@ class PuzzleSolveNotifier extends StateNotifier<PuzzleSolveState> {
 
   void loadPuzzle(Puzzle puzzle) {
     debugPrint('=== LOADING PUZZLE: ${puzzle.id} ===');
+    debugPrint('Puzzle FEN: ${puzzle.fen}');
+    debugPrint('Puzzle Solution: ${puzzle.solution}');
+    debugPrint('Puzzle Rating: ${puzzle.rating}');
+    debugPrint('Puzzle Theme: ${puzzle.theme}');
 
     try {
       _position = Chess.fromSetup(Setup.parseFen(puzzle.fen));
@@ -50,27 +54,54 @@ class PuzzleSolveNotifier extends StateNotifier<PuzzleSolveState> {
   }
 
   bool _validatePuzzleSolution(Puzzle puzzle) {
-    if (puzzle.fen.isEmpty || puzzle.solution.isEmpty) return false;
+    debugPrint('Validating puzzle: FEN=${puzzle.fen}, Solution=${puzzle.solution}');
+
+    if (puzzle.fen.isEmpty || puzzle.solution.isEmpty) {
+      debugPrint('Validation failed: FEN or solution empty');
+      return false;
+    }
 
     try {
       Chess pos = Chess.fromSetup(Setup.parseFen(puzzle.fen));
+      debugPrint('Position loaded successfully. Turn: ${pos.turn}');
 
       for (int i = 0; i < puzzle.solution.length; i++) {
-        final move = PuzzleMoveUtils.parseUciMove(puzzle.solution[i]);
-        if (move == null) return false;
+        final moveStr = puzzle.solution[i];
+        debugPrint('Validating move $i: $moveStr');
 
-        if (!pos.legalMoves.containsKey(move.from)) return false;
+        var move = PuzzleMoveUtils.parseUciMove(moveStr);
+        if (move == null) {
+          debugPrint('Failed to parse move: $moveStr');
+          return false;
+        }
+
+        // Convert UCI castling notation to dartchess format
+        // UCI uses e1g1/e1c1 but dartchess expects e1h1/e1a1 (king to rook square)
+        final king = pos.board.kingOf(pos.turn);
+        final castling = PuzzleCastlingUtils.convertCastlingMove(move, king);
+        if (castling != null) {
+          move = castling.actualMove;
+          debugPrint('Converted castling move to: ${move.from.name}${move.to.name}');
+        }
+
+        if (!pos.legalMoves.containsKey(move.from)) {
+          debugPrint('Move from square ${move.from} not in legal moves. Legal: ${pos.legalMoves.keys}');
+          return false;
+        }
 
         final legalTargets = pos.legalMoves[move.from];
         if (legalTargets == null || !legalTargets.squares.contains(move.to)) {
+          debugPrint('Move to square ${move.to} not legal from ${move.from}. Legal targets: ${legalTargets?.squares}');
           return false;
         }
 
         pos = pos.play(move) as Chess;
       }
 
+      debugPrint('Puzzle validation passed!');
       return true;
     } catch (e) {
+      debugPrint('Validation exception: $e');
       return false;
     }
   }

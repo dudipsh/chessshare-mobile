@@ -84,74 +84,22 @@ class _HintMarkerPainter extends CustomPainter {
       ..strokeWidth = 1.0;
     canvas.drawCircle(center, radius, borderPaint);
 
-    // Draw lightbulb icon
-    _drawLightbulb(canvas, center, size);
-  }
-
-  void _drawLightbulb(Canvas canvas, Offset center, Size size) {
-    final paint = Paint()
-      ..color = Colors.white
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = size.width * 0.08
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round;
-
-    // Scale factor for the icon
-    final scale = size.width * 0.35;
-    final offsetY = -size.height * 0.05;
-
-    // Bulb outline (top part - arc)
-    final bulbPath = Path();
-    bulbPath.addArc(
-      Rect.fromCenter(
-        center: Offset(center.dx, center.dy - scale * 0.2 + offsetY),
-        width: scale * 1.2,
-        height: scale * 1.2,
+    // Draw "?" symbol (matching study screen style)
+    final textPainter = TextPainter(
+      text: TextSpan(
+        text: '?',
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: size.width * 0.5,
+          fontWeight: FontWeight.w900,
+        ),
       ),
-      3.14159 * 0.2, // Start angle
-      3.14159 * 1.6, // Sweep angle
+      textDirection: TextDirection.ltr,
     );
-    canvas.drawPath(bulbPath, paint);
-
-    // Bulb base (bottom lines)
-    final baseY = center.dy + scale * 0.35 + offsetY;
-    canvas.drawLine(
-      Offset(center.dx - scale * 0.25, baseY),
-      Offset(center.dx + scale * 0.25, baseY),
-      paint,
-    );
-    canvas.drawLine(
-      Offset(center.dx - scale * 0.18, baseY + scale * 0.2),
-      Offset(center.dx + scale * 0.18, baseY + scale * 0.2),
-      paint,
-    );
-
-    // Light rays
-    final rayPaint = Paint()
-      ..color = Colors.white
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = size.width * 0.06
-      ..strokeCap = StrokeCap.round;
-
-    // Top ray
-    canvas.drawLine(
-      Offset(center.dx, center.dy - scale * 0.9 + offsetY),
-      Offset(center.dx, center.dy - scale * 1.1 + offsetY),
-      rayPaint,
-    );
-
-    // Left ray
-    canvas.drawLine(
-      Offset(center.dx - scale * 0.75, center.dy - scale * 0.2 + offsetY),
-      Offset(center.dx - scale * 0.95, center.dy - scale * 0.2 + offsetY),
-      rayPaint,
-    );
-
-    // Right ray
-    canvas.drawLine(
-      Offset(center.dx + scale * 0.75, center.dy - scale * 0.2 + offsetY),
-      Offset(center.dx + scale * 0.95, center.dy - scale * 0.2 + offsetY),
-      rayPaint,
+    textPainter.layout();
+    textPainter.paint(
+      canvas,
+      Offset(center.dx - textPainter.width / 2, center.dy - textPainter.height / 2),
     );
   }
 

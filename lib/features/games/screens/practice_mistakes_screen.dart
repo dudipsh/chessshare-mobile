@@ -81,12 +81,14 @@ class _PracticeMistakesScreenState extends ConsumerState<PracticeMistakesScreen>
       _feedback = 'Correct! That was the best move.';
       _feedbackMarker = MoveClassification.best;
       _lastMove = move;
+      _showHint = false; // Hide hint after making move
       _position = _position!.play(move) as Chess;
       setState(() {});
     } else {
       _state = PracticeState.wrong;
       _feedbackMarker = MoveClassification.blunder;
       _lastMove = move;
+      _showHint = false; // Hide hint after making move
       _position = _position!.play(move) as Chess;
       setState(() {});
 

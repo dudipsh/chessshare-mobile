@@ -306,20 +306,32 @@ class DailyPuzzleNotifier extends StateNotifier<DailyPuzzleState> {
 
   Puzzle? _parsePuzzle(Map<String, dynamic> data) {
     try {
+      debugPrint('Parsing puzzle data: $data');
+
       final fen = data['fen'] as String?;
-      if (fen == null || fen.isEmpty) return null;
+      debugPrint('Puzzle FEN: $fen');
+      if (fen == null || fen.isEmpty) {
+        debugPrint('Puzzle FEN is null or empty!');
+        return null;
+      }
 
       // Parse solution - handle different formats
       List<String> solution = [];
       List<String> solutionSan = [];
 
       // First, check for solution_sequence (includes all moves with opponent responses)
+      debugPrint('solution_sequence: ${data['solution_sequence']}');
+      debugPrint('solution_uci: ${data['solution_uci']}');
+      debugPrint('solution: ${data['solution']}');
+      debugPrint('moves (lichess format): ${data['moves']}');
+
       if (data['solution_sequence'] != null && data['solution_sequence'] is List) {
         final sequence = data['solution_sequence'] as List;
         solution = sequence
             .map<String>((s) => s['move'] as String)
             .where((move) => move.isNotEmpty)
             .toList();
+        debugPrint('Parsed from solution_sequence: $solution');
       }
 
       // Fallback to solution_uci or solution
@@ -327,6 +339,16 @@ class DailyPuzzleNotifier extends StateNotifier<DailyPuzzleState> {
         final solutionUci = data['solution_uci'] as String? ?? data['solution'] as String?;
         if (solutionUci != null && solutionUci.isNotEmpty) {
           solution = solutionUci.split(' ').where((s) => s.isNotEmpty).toList();
+          debugPrint('Parsed from solution_uci/solution: $solution');
+        }
+      }
+
+      // Try 'moves' field (lichess format)
+      if (solution.isEmpty && data['moves'] != null) {
+        final movesStr = data['moves'] as String?;
+        if (movesStr != null && movesStr.isNotEmpty) {
+          solution = movesStr.split(' ').where((s) => s.isNotEmpty).toList();
+          debugPrint('Parsed from moves: $solution');
         }
       }
 
@@ -336,7 +358,11 @@ class DailyPuzzleNotifier extends StateNotifier<DailyPuzzleState> {
         solutionSan = sanStr.split(' ').where((s) => s.isNotEmpty).toList();
       }
 
-      if (solution.isEmpty) return null;
+      debugPrint('Final solution: $solution');
+      if (solution.isEmpty) {
+        debugPrint('Solution is empty - cannot create puzzle!');
+        return null;
+      }
 
       return Puzzle(
         id: data['id']?.toString() ?? '',
