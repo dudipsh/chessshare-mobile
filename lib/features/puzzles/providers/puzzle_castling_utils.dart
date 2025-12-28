@@ -20,45 +20,41 @@ class PuzzleCastlingUtils {
   static CastlingResult? convertCastlingMove(NormalMove move, Square? king) {
     if (king == null) return null;
 
-    // King-based castling (user clicked king)
+    // King-based castling (user clicked king, then destination OR rook)
     if (move.from == king) {
-      // White kingside: e1g1 -> e1h1
-      if (move.from == Square.e1 && move.to == Square.g1) {
+      // White kingside: e1g1 or e1h1 (clicking destination or rook)
+      if (move.from == Square.e1 && (move.to == Square.g1 || move.to == Square.h1)) {
         return CastlingResult(
           actualMove: NormalMove(from: Square.e1, to: Square.h1),
-          displayMove: move,
+          displayMove: NormalMove(from: Square.e1, to: Square.g1),
           markerPosition: Square.g1,
         );
       }
-      // White queenside: e1c1 -> e1a1
-      if (move.from == Square.e1 && move.to == Square.c1) {
+      // White queenside: e1c1 or e1a1 (clicking destination or rook)
+      if (move.from == Square.e1 && (move.to == Square.c1 || move.to == Square.a1)) {
         return CastlingResult(
           actualMove: NormalMove(from: Square.e1, to: Square.a1),
-          displayMove: move,
+          displayMove: NormalMove(from: Square.e1, to: Square.c1),
           markerPosition: Square.c1,
         );
       }
-      // Black kingside: e8g8 -> e8h8
-      if (move.from == Square.e8 && move.to == Square.g8) {
+      // Black kingside: e8g8 or e8h8 (clicking destination or rook)
+      if (move.from == Square.e8 && (move.to == Square.g8 || move.to == Square.h8)) {
         return CastlingResult(
           actualMove: NormalMove(from: Square.e8, to: Square.h8),
-          displayMove: move,
+          displayMove: NormalMove(from: Square.e8, to: Square.g8),
           markerPosition: Square.g8,
         );
       }
-      // Black queenside: e8c8 -> e8a8
-      if (move.from == Square.e8 && move.to == Square.c8) {
+      // Black queenside: e8c8 or e8a8 (clicking destination or rook)
+      if (move.from == Square.e8 && (move.to == Square.c8 || move.to == Square.a8)) {
         return CastlingResult(
           actualMove: NormalMove(from: Square.e8, to: Square.a8),
-          displayMove: move,
+          displayMove: NormalMove(from: Square.e8, to: Square.c8),
           markerPosition: Square.c8,
         );
       }
     }
-
-    // NOTE: Rook-based castling is intentionally NOT supported.
-    // Castling only happens when the user selects the king first.
-    // If the user selects a rook first, it's treated as a normal rook move.
 
     return null;
   }

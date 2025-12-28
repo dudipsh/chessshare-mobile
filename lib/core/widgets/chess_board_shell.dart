@@ -19,7 +19,7 @@ import 'captured_pieces_display.dart';
 ///
 /// The shell provides:
 /// - Fixed height top slot (opponent's captured pieces / pieces they lost)
-/// - The chess board itself
+/// - The chess board itself (with optional border radius)
 /// - Fixed height bottom slot (player's captured pieces / pieces they took)
 ///
 /// Orientation-aware: When the board is flipped, captured pieces positions adjust
@@ -46,6 +46,9 @@ class ChessBoardShell extends ConsumerWidget {
   /// Padding around the board
   final EdgeInsets padding;
 
+  /// Border radius for the chess board (default: 8)
+  final double boardRadius;
+
   const ChessBoardShell({
     super.key,
     required this.board,
@@ -55,6 +58,7 @@ class ChessBoardShell extends ConsumerWidget {
     this.slotHeight = 24,
     this.overlays,
     this.padding = const EdgeInsets.all(8.0),
+    this.boardRadius = 8.0,
   });
 
   @override
@@ -89,12 +93,15 @@ class ChessBoardShell extends ConsumerWidget {
                   )
                 : null,
           ),
-          // Board with optional overlays
-          Stack(
-            children: [
-              board,
-              if (overlays != null) ...overlays!,
-            ],
+          // Board with optional overlays and border radius
+          ClipRRect(
+            borderRadius: BorderRadius.circular(boardRadius),
+            child: Stack(
+              children: [
+                board,
+                if (overlays != null) ...overlays!,
+              ],
+            ),
           ),
           // Bottom slot - player's captured pieces (pieces they took)
           SizedBox(
