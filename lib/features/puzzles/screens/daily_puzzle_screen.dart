@@ -167,26 +167,18 @@ class _DailyPuzzleScreenState extends ConsumerState<DailyPuzzleScreen> {
     return SingleChildScrollView(
       child: Column(
         children: [
-          // Date navigation with puzzle info
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-            child: Column(
-              children: [
-                DateNavigationHeader(
-                  selectedDate: dailyState.selectedDate,
-                  isToday: dailyState.isToday,
-                  isDark: isDark,
-                  onPrevious: _previousDay,
-                  onNext: _nextDay,
-                ),
-                const SizedBox(height: 4),
-                _buildPuzzleInfo(dailyState, isDark),
-              ],
-            ),
+          const SizedBox(height: 4),
+          // Date navigation
+          DateNavigationHeader(
+            selectedDate: dailyState.selectedDate,
+            isToday: dailyState.isToday,
+            isDark: isDark,
+            onPrevious: _previousDay,
+            onNext: _nextDay,
           ),
 
-          // Side to move
-          _buildSideToMove(dailyState, isDark),
+          // Puzzle info bar (side to move + rating)
+          _buildPuzzleInfoBar(dailyState, isDark),
 
           // Chessboard
           Padding(
@@ -211,7 +203,7 @@ class _DailyPuzzleScreenState extends ConsumerState<DailyPuzzleScreen> {
 
           // Instructions
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             child: Text(
               getInstructions(puzzleState.state),
               style: TextStyle(
@@ -224,18 +216,7 @@ class _DailyPuzzleScreenState extends ConsumerState<DailyPuzzleScreen> {
 
           // Claim reward button
           if (puzzleState.state == PuzzleState.completed)
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: ElevatedButton.icon(
-                onPressed: () => ref.read(dailyPuzzleProvider.notifier).markSolved(),
-                icon: const Icon(Icons.check),
-                label: const Text('Claim Reward'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.success,
-                  minimumSize: const Size(double.infinity, 48),
-                ),
-              ),
-            ),
+            _buildClaimRewardButton(isDark),
 
           SizedBox(height: MediaQuery.of(context).padding.bottom + 16),
         ],
@@ -243,58 +224,145 @@ class _DailyPuzzleScreenState extends ConsumerState<DailyPuzzleScreen> {
     );
   }
 
-  Widget _buildPuzzleInfo(DailyPuzzleState dailyState, bool isDark) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Text(
-          dailyState.puzzle!.theme.displayName,
-          style: TextStyle(
-            fontSize: 14,
-            color: isDark ? Colors.white70 : Colors.grey.shade600,
-          ),
-        ),
-        const SizedBox(width: 12),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-          decoration: BoxDecoration(
-            color: isDark ? Colors.white12 : Colors.grey.shade200,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.star, size: 14, color: Colors.amber.shade600),
-              const SizedBox(width: 4),
-              Text(
-                '${dailyState.puzzle!.rating}',
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+  Widget _buildClaimRewardButton(bool isDark) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => ref.read(dailyPuzzleProvider.notifier).markSolved(),
+          borderRadius: BorderRadius.circular(14),
+          child: Container(
+            height: 48,
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF1C1C1E) : Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.08),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    Colors.amber.withValues(alpha: 0.2),
+                    Colors.orange.withValues(alpha: 0.1),
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(14),
               ),
-            ],
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.emoji_events,
+                    size: 20,
+                    color: Colors.amber.shade700,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Claim Reward',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? Colors.amber.shade300 : Colors.amber.shade800,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
-      ],
+      ),
     );
   }
 
-  Widget _buildSideToMove(DailyPuzzleState dailyState, bool isDark) {
+  Widget _buildPuzzleInfoBar(DailyPuzzleState dailyState, bool isDark) {
+    final sideToMove = dailyState.puzzle!.sideToMove;
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1C1C1E) : Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.08),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
       child: Row(
         children: [
+          // Side to move indicator
           Container(
-            width: 24,
-            height: 24,
+            width: 28,
+            height: 28,
             decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: dailyState.puzzle!.sideToMove == Side.white ? Colors.white : Colors.black,
-              border: Border.all(color: Colors.grey),
+              color: sideToMove == Side.white ? Colors.white : Colors.grey.shade800,
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(
+                color: isDark ? Colors.grey.shade600 : Colors.grey.shade400,
+                width: 1.5,
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              '${sideToMove == Side.white ? "White" : "Black"} to move',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: isDark ? Colors.white : Colors.black87,
+              ),
+            ),
+          ),
+          // Theme badge
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: AppColors.primary.withValues(alpha: isDark ? 0.2 : 0.12),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              dailyState.puzzle!.theme.displayName,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: AppColors.primary,
+              ),
             ),
           ),
           const SizedBox(width: 8),
-          Text(
-            '${dailyState.puzzle!.sideToMove == Side.white ? "White" : "Black"} to move',
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+          // Rating badge
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.amber.withValues(alpha: isDark ? 0.2 : 0.12),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.star, size: 12, color: Colors.amber.shade700),
+                const SizedBox(width: 4),
+                Text(
+                  '${dailyState.puzzle!.rating}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.amber.shade700,
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),

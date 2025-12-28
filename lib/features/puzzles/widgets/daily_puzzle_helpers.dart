@@ -52,32 +52,51 @@ class PuzzleFeedbackBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     if (puzzleState.feedback == null) return const SizedBox.shrink();
 
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: getFeedbackColor(puzzleState.state),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              getFeedbackIcon(puzzleState.state),
-              color: Colors.white,
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final color = getFeedbackColor(puzzleState.state);
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1C1C1E) : Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.08),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: isDark ? 0.2 : 0.12),
+              borderRadius: BorderRadius.circular(8),
             ),
-            const SizedBox(width: 8),
-            Text(
+            child: Icon(
+              getFeedbackIcon(puzzleState.state),
+              size: 18,
+              color: color,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
               puzzleState.feedback!,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: color,
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

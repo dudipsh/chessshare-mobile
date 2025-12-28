@@ -107,35 +107,38 @@ class _QuickAccessCard extends StatelessWidget {
               ),
               // Content
               Padding(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(14),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     // Icon
                     Icon(
                       icon,
                       color: isDark ? Colors.white : gradientColors[0],
-                      size: 28,
+                      size: 26,
                     ),
-                    const Spacer(),
-                    // Title
-                    Text(
-                      title,
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: isDark ? Colors.white : Colors.black87,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    // Subtitle
-                    Text(
-                      subtitle,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: isDark ? Colors.white70 : Colors.black54,
-                      ),
+                    // Title and Subtitle
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          title,
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: isDark ? Colors.white : Colors.black87,
+                          ),
+                        ),
+                        Text(
+                          subtitle,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: isDark ? Colors.white70 : Colors.black54,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),

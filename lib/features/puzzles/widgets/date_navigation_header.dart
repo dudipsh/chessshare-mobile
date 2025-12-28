@@ -21,35 +21,49 @@ class DateNavigationHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1C1C1E) : Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.08),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           _buildNavButton(
             icon: Icons.chevron_left,
             onPressed: onPrevious,
             enabled: true,
           ),
-          const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            decoration: BoxDecoration(
-              color: isDark ? Colors.grey[850] : Colors.grey[100],
-              borderRadius: BorderRadius.circular(12),
-            ),
+          Expanded(
             child: Row(
-              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(
-                  Icons.calendar_today,
-                  size: 16,
-                  color: isDark ? Colors.grey[400] : Colors.grey[600],
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: isDark ? 0.2 : 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    Icons.calendar_today,
+                    size: 16,
+                    color: AppColors.primary,
+                  ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 10),
                 Text(
                   _formatDate(selectedDate),
                   style: TextStyle(
-                    fontSize: 16,
+                    fontSize: 15,
                     fontWeight: FontWeight.w600,
                     color: isDark ? Colors.white : Colors.black87,
                   ),
@@ -57,17 +71,17 @@ class DateNavigationHeader extends StatelessWidget {
                 if (isToday) ...[
                   const SizedBox(width: 8),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.15),
+                      color: AppColors.success.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: const Text(
+                    child: Text(
                       'Today',
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
-                        color: AppColors.primary,
+                        color: AppColors.success,
                       ),
                     ),
                   ),
@@ -75,7 +89,6 @@ class DateNavigationHeader extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(width: 8),
           _buildNavButton(
             icon: Icons.chevron_right,
             onPressed: onNext,
@@ -91,34 +104,36 @@ class DateNavigationHeader extends StatelessWidget {
     required VoidCallback? onPressed,
     required bool enabled,
   }) {
-    return Container(
-      width: 36,
-      height: 36,
-      decoration: BoxDecoration(
-        color: enabled
-            ? (isDark ? Colors.grey[850] : Colors.grey[100])
-            : (isDark ? Colors.grey[900] : Colors.grey[50]),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: enabled ? onPressed : null,
         borderRadius: BorderRadius.circular(10),
-      ),
-      child: IconButton(
-        onPressed: enabled ? onPressed : null,
-        padding: EdgeInsets.zero,
-        icon: Icon(
-          icon,
-          size: 20,
-          color: enabled
-              ? (isDark ? Colors.white : Colors.black87)
-              : (isDark ? Colors.grey[700] : Colors.grey[300]),
+        child: Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: isDark
+                ? Colors.white.withValues(alpha: enabled ? 0.1 : 0.05)
+                : Colors.grey.withValues(alpha: enabled ? 0.1 : 0.05),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(
+            icon,
+            size: 20,
+            color: enabled
+                ? (isDark ? Colors.white : Colors.black87)
+                : (isDark ? Colors.white24 : Colors.grey.shade400),
+          ),
         ),
-        tooltip: icon == Icons.chevron_left ? 'Previous day' : 'Next day',
       ),
     );
   }
 
   String _formatDate(DateTime date) {
     const months = [
-      'January', 'February', 'March', 'April', 'May', 'June',
-      'July', 'August', 'September', 'October', 'November', 'December'
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
     ];
     return '${months[date.month - 1]} ${date.day}, ${date.year}';
   }
