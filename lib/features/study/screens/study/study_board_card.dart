@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -67,8 +68,73 @@ class StudyBoardCard extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             ),
           ],
+          // Author row
+          if (board.ownerName != null) ...[
+            const SizedBox(height: 8),
+            _buildAuthorRow(context, isDark),
+          ],
         ],
       ),
+    );
+  }
+
+  Widget _buildAuthorRow(BuildContext context, bool isDark) {
+    return GestureDetector(
+      onTap: () => _navigateToAuthorProfile(context),
+      child: Row(
+        children: [
+          // Avatar
+          CircleAvatar(
+            radius: 10,
+            backgroundColor: isDark ? Colors.grey[700] : Colors.grey[300],
+            child: board.ownerAvatarUrl != null
+                ? ClipOval(
+                    child: CachedNetworkImage(
+                      imageUrl: board.ownerAvatarUrl!,
+                      width: 20,
+                      height: 20,
+                      fit: BoxFit.cover,
+                      errorWidget: (_, __, ___) => Icon(
+                        Icons.person,
+                        size: 12,
+                        color: isDark ? Colors.grey[500] : Colors.grey[600],
+                      ),
+                    ),
+                  )
+                : Icon(
+                    Icons.person,
+                    size: 12,
+                    color: isDark ? Colors.grey[500] : Colors.grey[600],
+                  ),
+          ),
+          const SizedBox(width: 6),
+          // Name
+          Expanded(
+            child: Text(
+              board.ownerName!,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: isDark ? Colors.grey[400] : Colors.grey[600],
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _navigateToAuthorProfile(BuildContext context) {
+    final queryParams = <String, String>{};
+    if (board.ownerName != null) queryParams['name'] = board.ownerName!;
+    if (board.ownerAvatarUrl != null) queryParams['avatar'] = board.ownerAvatarUrl!;
+
+    context.pushNamed(
+      'user-profile',
+      pathParameters: {'userId': board.ownerId},
+      queryParameters: queryParams,
     );
   }
 

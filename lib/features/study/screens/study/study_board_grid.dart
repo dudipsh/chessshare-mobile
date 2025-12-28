@@ -81,7 +81,7 @@ class _StudyBoardGridState extends ConsumerState<StudyBoardGrid> {
           return Padding(
             padding: const EdgeInsets.only(bottom: 20),
             child: SizedBox(
-              height: 280, // Fixed height for card with image, category, title, description
+              height: 300, // Fixed height for card with image, category, title, description, author
               child: StudyBoardCard(board: widget.boards[i]),
             ),
           );
