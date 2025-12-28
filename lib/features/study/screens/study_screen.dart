@@ -21,11 +21,16 @@ class _StudyScreenState extends ConsumerState<StudyScreen>
   late TabController _tabController;
   final _searchController = TextEditingController();
   bool _showSearch = false;
+  int _selectedTabIndex = 0;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
+    _tabController.addListener(() {
+      if (_tabController.indexIsChanging) return;
+      setState(() => _selectedTabIndex = _tabController.index);
+    });
   }
 
   @override
@@ -83,30 +88,18 @@ class _StudyScreenState extends ConsumerState<StudyScreen>
           ),
         ],
         bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(48),
+          preferredSize: const Size.fromHeight(56),
           child: Container(
-            decoration: BoxDecoration(
-              border: Border(
-                bottom: BorderSide(
-                  color: isDark ? Colors.white10 : Colors.black.withValues(alpha: 0.08),
-                ),
-              ),
-            ),
-            child: TabBar(
-              controller: _tabController,
-              isScrollable: true,
-              tabAlignment: TabAlignment.start,
-              labelColor: AppColors.primary,
-              unselectedLabelColor: isDark ? Colors.grey[400] : Colors.grey[600],
-              indicatorColor: AppColors.primary,
-              indicatorWeight: 3,
-              labelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-              unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14),
-              tabs: [
-                _buildTab('Explore', Icons.explore_outlined),
-                _buildTab('My Studies', Icons.folder_outlined),
-                _buildTab('History', Icons.history),
-                _buildTab('Liked', Icons.favorite_border),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              children: [
+                _buildPillTab(0, 'Explore', isDark),
+                const SizedBox(width: 8),
+                _buildPillTab(1, 'My Studies', isDark),
+                const SizedBox(width: 8),
+                _buildPillTab(2, 'History', isDark),
+                const SizedBox(width: 8),
+                _buildPillTab(3, 'Liked', isDark),
               ],
             ),
           ),
@@ -224,15 +217,33 @@ class _StudyScreenState extends ConsumerState<StudyScreen>
     return '$count';
   }
 
-  Widget _buildTab(String label, IconData icon) {
-    return Tab(
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 18),
-          const SizedBox(width: 6),
-          Text(label),
-        ],
+  Widget _buildPillTab(int index, String label, bool isDark) {
+    final isSelected = _selectedTabIndex == index;
+
+    return GestureDetector(
+      onTap: () {
+        _tabController.animateTo(index);
+        setState(() => _selectedTabIndex = index);
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? (isDark ? Colors.white : Colors.black87)
+              : (isDark ? const Color(0xFF2C2C2E) : const Color(0xFFF5F5F0)),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: isSelected
+                ? (isDark ? Colors.black : Colors.white)
+                : (isDark ? Colors.grey[400] : Colors.grey[700]),
+          ),
+        ),
       ),
     );
   }
