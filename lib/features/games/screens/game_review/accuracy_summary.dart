@@ -22,12 +22,18 @@ class AccuracySummary extends StatelessWidget {
     final opponentSummary = review.opponentSummary;
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: isDark ? Colors.grey[850] : Colors.grey[100],
-        border: Border(
-          bottom: BorderSide(color: isDark ? Colors.grey[700]! : Colors.grey[300]!),
-        ),
+        color: isDark ? const Color(0xFF1C1C1E) : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.08),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Row(
         children: [
@@ -36,15 +42,17 @@ class AccuracySummary extends StatelessWidget {
               username: 'You',
               accuracy: playerSummary?.accuracy ?? 0,
               isPlayer: true,
+              isDark: isDark,
             ),
           ),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Text(
               'vs',
               style: TextStyle(
-                color: isDark ? Colors.grey[500] : Colors.grey[600],
-                fontSize: 12,
+                color: Colors.grey.shade500,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
               ),
             ),
           ),
@@ -53,6 +61,7 @@ class AccuracySummary extends StatelessWidget {
               username: opponentUsername,
               accuracy: opponentSummary?.accuracy ?? 0,
               isPlayer: false,
+              isDark: isDark,
             ),
           ),
         ],
@@ -65,11 +74,13 @@ class _PlayerAccuracy extends StatelessWidget {
   final String username;
   final double accuracy;
   final bool isPlayer;
+  final bool isDark;
 
   const _PlayerAccuracy({
     required this.username,
     required this.accuracy,
     required this.isPlayer,
+    required this.isDark,
   });
 
   Color _getAccuracyColor(double accuracy) {
@@ -83,41 +94,78 @@ class _PlayerAccuracy extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final accuracyColor = _getAccuracyColor(accuracy);
+
     return Row(
       mainAxisAlignment: isPlayer ? MainAxisAlignment.start : MainAxisAlignment.end,
       children: [
         if (!isPlayer) ...[
-          Text(
-            '${accuracy.toStringAsFixed(1)}%',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: _getAccuracyColor(accuracy),
-            ),
-          ),
-          const SizedBox(width: 8),
+          _AccuracyBadge(accuracy: accuracy, color: accuracyColor, isDark: isDark),
+          const SizedBox(width: 10),
         ],
-        Text(
-          username,
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w500,
-            color: isPlayer ? AppColors.primary : null,
+        Flexible(
+          child: Column(
+            crossAxisAlignment: isPlayer ? CrossAxisAlignment.start : CrossAxisAlignment.end,
+            children: [
+              Text(
+                username,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: isPlayer ? AppColors.primary : (isDark ? Colors.white : Colors.black87),
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+              Text(
+                isPlayer ? 'Your accuracy' : 'Opponent',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: Colors.grey.shade500,
+                ),
+              ),
+            ],
           ),
-          overflow: TextOverflow.ellipsis,
         ),
         if (isPlayer) ...[
-          const SizedBox(width: 8),
-          Text(
-            '${accuracy.toStringAsFixed(1)}%',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: _getAccuracyColor(accuracy),
-            ),
-          ),
+          const SizedBox(width: 10),
+          _AccuracyBadge(accuracy: accuracy, color: accuracyColor, isDark: isDark),
         ],
       ],
+    );
+  }
+}
+
+class _AccuracyBadge extends StatelessWidget {
+  final double accuracy;
+  final Color color;
+  final bool isDark;
+
+  const _AccuracyBadge({
+    required this.accuracy,
+    required this.color,
+    required this.isDark,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: isDark ? 0.2 : 0.12),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: color.withValues(alpha: 0.4),
+          width: 1,
+        ),
+      ),
+      child: Text(
+        '${accuracy.toStringAsFixed(1)}%',
+        style: TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.bold,
+          color: color,
+        ),
+      ),
     );
   }
 }

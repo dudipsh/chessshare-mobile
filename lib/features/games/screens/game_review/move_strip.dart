@@ -25,8 +25,8 @@ class MoveStrip extends StatefulWidget {
 
 class _MoveStripState extends State<MoveStrip> {
   late ScrollController _scrollController;
-  static const double _itemWidth = 52.0;
-  static const double _itemSpacing = 4.0;
+  static const double _itemWidth = 56.0;
+  static const double _itemSpacing = 6.0;
 
   @override
   void initState() {
@@ -71,21 +71,25 @@ class _MoveStripState extends State<MoveStrip> {
     if (widget.moves.isEmpty) return const SizedBox.shrink();
 
     return Container(
-      height: 40,
-      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      height: 44,
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
       decoration: BoxDecoration(
-        color: widget.isDark ? const Color(0xFF1E1E1E) : const Color(0xFFF5F5F5),
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(
-          color: widget.isDark ? Colors.white10 : Colors.black.withValues(alpha: 0.08),
-        ),
+        color: widget.isDark ? const Color(0xFF1C1C1E) : Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: widget.isDark ? 0.3 : 0.08),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(14),
         child: ListView.builder(
           controller: _scrollController,
           scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
           itemCount: widget.moves.length,
           itemBuilder: (context, index) {
             final move = widget.moves[index];
@@ -93,20 +97,18 @@ class _MoveStripState extends State<MoveStrip> {
             final moveNumber = (index ~/ 2) + 1;
             final isWhite = index % 2 == 0;
 
-            return Center(
-              child: Padding(
-                padding: EdgeInsets.only(
-                  left: index == 0 ? 0 : _itemSpacing / 2,
-                  right: index < widget.moves.length - 1 ? _itemSpacing / 2 : 0,
-                ),
-                child: _MoveChip(
-                  move: move,
-                  moveNumber: moveNumber,
-                  isWhite: isWhite,
-                  isSelected: isSelected,
-                  isDark: widget.isDark,
-                  onTap: () => widget.onMoveSelected(index + 1),
-                ),
+            return Padding(
+              padding: EdgeInsets.only(
+                left: index == 0 ? 0 : _itemSpacing / 2,
+                right: index < widget.moves.length - 1 ? _itemSpacing / 2 : 0,
+              ),
+              child: _MoveChip(
+                move: move,
+                moveNumber: moveNumber,
+                isWhite: isWhite,
+                isSelected: isSelected,
+                isDark: widget.isDark,
+                onTap: () => widget.onMoveSelected(index + 1),
               ),
             );
           },
@@ -141,16 +143,16 @@ class _MoveChip extends ConsumerWidget {
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 120),
-        height: 28,
-        padding: const EdgeInsets.symmetric(horizontal: 6),
+        duration: const Duration(milliseconds: 150),
+        height: 36,
+        padding: const EdgeInsets.symmetric(horizontal: 8),
         decoration: BoxDecoration(
           color: isSelected
-              ? classColor.withValues(alpha: 0.2)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(16),
+              ? classColor.withValues(alpha: isDark ? 0.3 : 0.15)
+              : (isDark ? Colors.white.withValues(alpha: 0.05) : Colors.grey.shade100),
+          borderRadius: BorderRadius.circular(10),
           border: isSelected
-              ? Border.all(color: classColor.withValues(alpha: 0.6), width: 1.5)
+              ? Border.all(color: classColor.withValues(alpha: 0.7), width: 2)
               : null,
         ),
         child: Row(
@@ -161,12 +163,12 @@ class _MoveChip extends ConsumerWidget {
               Text(
                 '$moveNumber.',
                 style: TextStyle(
-                  fontSize: 10,
+                  fontSize: 11,
                   fontWeight: FontWeight.w500,
-                  color: isDark ? Colors.grey[600] : Colors.grey[500],
+                  color: isDark ? Colors.grey.shade500 : Colors.grey.shade500,
                 ),
               ),
-            if (isWhite) const SizedBox(width: 2),
+            if (isWhite) const SizedBox(width: 3),
             // Move SAN with piece icon
             MoveWithPieceIcon(
               san: move.san,
@@ -180,13 +182,19 @@ class _MoveChip extends ConsumerWidget {
             ),
             // Classification indicator
             if (hasClassification) ...[
-              const SizedBox(width: 3),
+              const SizedBox(width: 4),
               Container(
-                width: 6,
-                height: 6,
+                width: 7,
+                height: 7,
                 decoration: BoxDecoration(
                   color: classColor,
                   shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: classColor.withValues(alpha: 0.5),
+                      blurRadius: 4,
+                    ),
+                  ],
                 ),
               ),
             ],

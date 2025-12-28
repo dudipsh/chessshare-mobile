@@ -14,7 +14,6 @@ import '../widgets/import_sheet.dart';
 import 'games_list/games_loading_view.dart';
 import 'games_list/login_required_view.dart';
 import 'games_list/no_games_view.dart';
-import 'games_list/platform_switcher.dart';
 import 'games_list/quick_access_buttons.dart';
 
 class GamesListScreen extends ConsumerStatefulWidget {
@@ -229,11 +228,10 @@ class _CollapsibleHeader extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        GamesStatsBar(selectedPlatform: selectedPlatform),
-        PlatformSwitcher(
+        GamesStatsBar(
+          selectedPlatform: selectedPlatform,
           chessComUsername: gamesState.activeChessComUsername,
           lichessUsername: gamesState.activeLichessUsername,
-          selectedPlatform: selectedPlatform,
           onPlatformSelected: onPlatformSelected,
         ),
         const QuickAccessButtons(),
