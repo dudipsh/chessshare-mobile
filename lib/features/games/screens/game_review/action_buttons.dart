@@ -24,10 +24,10 @@ class ReviewActionButtons extends StatelessWidget {
         children: [
           // Practice button
           Expanded(
-            child: _ActionCard(
+            child: _ActionButton(
               icon: Icons.fitness_center,
               title: 'Practice',
-              subtitle: '$mistakesCount mistakes',
+              badge: mistakesCount > 0 ? '$mistakesCount' : null,
               gradientColors: const [
                 Color(0xFFFF6B6B),
                 Color(0xFFFF8E8E),
@@ -37,13 +37,12 @@ class ReviewActionButtons extends StatelessWidget {
               onTap: mistakesCount > 0 ? onPractice : null,
             ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 10),
           // Play vs Engine button
           Expanded(
-            child: _ActionCard(
+            child: _ActionButton(
               icon: Icons.smart_toy,
               title: 'Play Engine',
-              subtitle: 'From here',
               gradientColors: [
                 AppColors.primary,
                 AppColors.primaryLight,
@@ -59,19 +58,19 @@ class ReviewActionButtons extends StatelessWidget {
   }
 }
 
-class _ActionCard extends StatelessWidget {
+class _ActionButton extends StatelessWidget {
   final IconData icon;
   final String title;
-  final String subtitle;
+  final String? badge;
   final List<Color> gradientColors;
   final bool isDark;
   final bool isEnabled;
   final VoidCallback? onTap;
 
-  const _ActionCard({
+  const _ActionButton({
     required this.icon,
     required this.title,
-    required this.subtitle,
+    this.badge,
     required this.gradientColors,
     required this.isDark,
     required this.isEnabled,
@@ -84,16 +83,16 @@ class _ActionCard extends StatelessWidget {
 
     return Material(
       color: Colors.transparent,
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(14),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(14),
         child: Opacity(
           opacity: opacity,
           child: Container(
-            height: 64,
+            height: 48,
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(14),
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
@@ -106,64 +105,47 @@ class _ActionCard extends StatelessWidget {
               ),
               boxShadow: [
                 BoxShadow(
-                  color: gradientColors[0].withValues(alpha: isDark ? 0.2 : 0.15),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
+                  color: gradientColors[0].withValues(alpha: isDark ? 0.15 : 0.1),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
                 ),
               ],
             ),
             child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const SizedBox(width: 16),
-                // Icon
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: isDark
-                        ? Colors.white.withValues(alpha: 0.15)
-                        : Colors.white.withValues(alpha: 0.8),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(
-                    icon,
-                    color: isDark ? Colors.white : gradientColors[0],
-                    size: 22,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                // Text
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        title,
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                          color: isDark ? Colors.white : Colors.black87,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        subtitle,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: isDark ? Colors.white70 : Colors.black54,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                // Arrow
                 Icon(
-                  Icons.arrow_forward_ios,
-                  size: 16,
-                  color: isDark ? Colors.white54 : Colors.black38,
+                  icon,
+                  color: isDark ? Colors.white : gradientColors[0],
+                  size: 20,
                 ),
-                const SizedBox(width: 16),
+                const SizedBox(width: 8),
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? Colors.white : Colors.black87,
+                  ),
+                ),
+                if (badge != null) ...[
+                  const SizedBox(width: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.white24 : gradientColors[0].withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      badge!,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: isDark ? Colors.white : gradientColors[0],
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),

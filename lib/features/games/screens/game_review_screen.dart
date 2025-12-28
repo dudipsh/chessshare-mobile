@@ -1,4 +1,3 @@
-import 'package:chessground/chessground.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -22,7 +21,6 @@ import 'game_review/navigation_controls.dart';
 import 'game_review/review_chessboard.dart';
 import 'game_review/review_error_view.dart';
 import 'game_review/review_move_marker.dart';
-import 'game_review/static_evaluation_bar.dart';
 import 'play_vs_stockfish_screen.dart';
 import 'practice_mistakes_screen.dart';
 
@@ -85,8 +83,26 @@ class _GameReviewScreenState extends ConsumerState<GameReviewScreen> {
   }
 
   AppBar _buildAppBar(BuildContext context, GameReviewState state) {
+    final explorationState = ref.watch(explorationModeProvider);
+    final evalCp = explorationState.isExploring
+        ? explorationState.evalCp
+        : state.currentMove?.evalAfter;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return AppBar(
-      title: Text('vs ${widget.game.opponentUsername}', style: const TextStyle(fontSize: 17)),
+      title: Row(
+        children: [
+          _buildEvalBadge(evalCp, isDark),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'vs ${widget.game.opponentUsername}',
+              style: const TextStyle(fontSize: 16),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
       actions: [
         IconButton(
           icon: const Icon(Icons.settings),
@@ -119,6 +135,56 @@ class _GameReviewScreenState extends ConsumerState<GameReviewScreen> {
     );
   }
 
+  Widget _buildEvalBadge(int? evalCp, bool isDark) {
+    String text = '0.0';
+    Color bgColor = isDark ? Colors.grey.shade700 : Colors.grey.shade300;
+    Color textColor = isDark ? Colors.white : Colors.black87;
+
+    if (evalCp != null) {
+      if (evalCp.abs() >= 10000) {
+        // Mate score
+        final mateIn = ((10000 - evalCp.abs()) / 2).ceil();
+        text = evalCp > 0 ? 'M$mateIn' : '-M$mateIn';
+        bgColor = evalCp > 0 ? Colors.white : Colors.grey.shade800;
+        textColor = evalCp > 0 ? Colors.black87 : Colors.white;
+      } else {
+        // Centipawn score
+        final pawns = evalCp / 100;
+        if (pawns > 0) {
+          text = '+${pawns.toStringAsFixed(1)}';
+          bgColor = Colors.white;
+          textColor = Colors.black87;
+        } else if (pawns < 0) {
+          text = pawns.toStringAsFixed(1);
+          bgColor = Colors.grey.shade800;
+          textColor = Colors.white;
+        }
+      }
+    }
+
+    return Container(
+      width: 50,
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: isDark ? Colors.grey.shade600 : Colors.grey.shade400,
+          width: 1,
+        ),
+      ),
+      child: Text(
+        text,
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+          color: textColor,
+        ),
+      ),
+    );
+  }
+
   void _showSettings(BuildContext context) {
     showBoardSettingsSheet(
       context: context,
@@ -147,24 +213,12 @@ class _GameReviewScreenState extends ConsumerState<GameReviewScreen> {
 
     if (state.review == null) return const Center(child: Text('No review available'));
 
-    final evalCp = explorationState.isExploring
-        ? explorationState.evalCp
-        : state.currentMove?.evalAfter;
-
     return Column(
       children: [
         AccuracySummary(
           review: state.review!,
           opponentUsername: widget.game.opponentUsername,
           isDark: isDark,
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
-          child: StaticEvaluationBar(
-            evalCp: evalCp,
-            width: boardSize,
-            isAnalyzing: explorationState.isExploring && explorationState.isEvaluating,
-          ),
         ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8.0),
