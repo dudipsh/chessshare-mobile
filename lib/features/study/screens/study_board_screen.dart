@@ -18,7 +18,6 @@ import '../services/study_service.dart';
 import 'study_board/control_buttons.dart';
 import 'study_board/study_marker_painter.dart';
 import 'study_board/study_progress_bar.dart';
-import 'study_board/study_stats.dart';
 import 'study_board/variation_selector_sheet.dart';
 
 class StudyBoardScreen extends ConsumerStatefulWidget {
@@ -113,6 +112,7 @@ class _StudyBoardScreenState extends ConsumerState<StudyBoardScreen> {
                 totalMoves: state.totalMoves,
                 progress: state.progress,
                 isCompleted: state.state == StudyState.completed,
+                isDark: isDark,
               ),
               Padding(
                 padding: const EdgeInsets.all(8.0),
@@ -154,12 +154,6 @@ class _StudyBoardScreenState extends ConsumerState<StudyBoardScreen> {
                 ),
               ),
               if (state.state == StudyState.completed) _buildCompletedActions(state),
-              StudyStats(
-                completedMoves: state.completedMoves,
-                hintsUsed: state.hintsUsed,
-                mistakesMade: state.mistakesMade,
-                isDark: isDark,
-              ),
               const SizedBox(height: 8),
             ],
           ),

@@ -18,49 +18,113 @@ class StudyStats extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1C1C1E) : Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.08),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
-          _StatChip(icon: Icons.check_circle_outline, value: '$completedMoves', color: AppColors.success),
-          const SizedBox(width: 16),
-          _StatChip(icon: Icons.lightbulb_outline, value: '$hintsUsed', color: Colors.amber),
-          const SizedBox(width: 16),
-          _StatChip(icon: Icons.close, value: '$mistakesMade', color: AppColors.error),
+          _StatItem(
+            icon: Icons.check_circle,
+            value: completedMoves,
+            label: 'Correct',
+            color: AppColors.success,
+            isDark: isDark,
+          ),
+          _Divider(isDark: isDark),
+          _StatItem(
+            icon: Icons.lightbulb,
+            value: hintsUsed,
+            label: 'Hints',
+            color: Colors.amber,
+            isDark: isDark,
+          ),
+          _Divider(isDark: isDark),
+          _StatItem(
+            icon: Icons.close,
+            value: mistakesMade,
+            label: 'Mistakes',
+            color: AppColors.error,
+            isDark: isDark,
+          ),
         ],
       ),
     );
   }
 }
 
-class _StatChip extends StatelessWidget {
+class _StatItem extends StatelessWidget {
   final IconData icon;
-  final String value;
+  final int value;
+  final String label;
   final Color color;
+  final bool isDark;
 
-  const _StatChip({
+  const _StatItem({
     required this.icon,
     required this.value,
+    required this.label,
     required this.color,
+    required this.isDark,
   });
 
   @override
   Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: isDark ? 0.2 : 0.12),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(icon, size: 18, color: color),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          '$value',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: color,
+          ),
+        ),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 10,
+            color: isDark ? Colors.white54 : Colors.black45,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _Divider extends StatelessWidget {
+  final bool isDark;
+
+  const _Divider({required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 16, color: color),
-          const SizedBox(width: 4),
-          Text(value, style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: color)),
-        ],
-      ),
+      width: 1,
+      height: 40,
+      color: isDark ? Colors.white12 : Colors.grey.shade200,
     );
   }
 }

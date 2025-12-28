@@ -47,7 +47,9 @@ class _PlayVsStockfishScreenState extends ConsumerState<PlayVsStockfishScreen> {
   List<String> _moveHistory = [];
   NormalMove? _lastMove;
   int _engineLevel = 10;
+  int? _evalCp;
   StreamSubscription<String>? _stockfishSubscription;
+  StreamSubscription<String>? _evalSubscription;
 
   @override
   void initState() {
@@ -65,17 +67,15 @@ class _PlayVsStockfishScreenState extends ConsumerState<PlayVsStockfishScreen> {
     try {
       _stockfish = await GlobalStockfishManager.instance.acquire(
         _ownerId,
-        config: StockfishConfig(
-          multiPv: 1,
-          hashSizeMb: 32,
-          threads: 2,
-          maxDepth: _engineLevel.clamp(1, 20),
-        ),
+        config: StockfishConfig.forPlaying(level: _engineLevel),
       );
 
       if (!mounted) return;
 
       setState(() => _isInitializing = false);
+
+      // Start listening for evaluations
+      _evaluatePosition();
 
       if (_shouldEngineMoveFirst()) {
         _makeEngineMove();
@@ -314,32 +314,66 @@ class _PlayVsStockfishScreenState extends ConsumerState<PlayVsStockfishScreen> {
       setState(() => _engineLevel = newLevel);
       if (_stockfish != null) {
         await _stockfish!.updateConfig(
-          StockfishConfig(
-            multiPv: 1,
-            hashSizeMb: 32,
-            threads: 2,
-            maxDepth: newLevel.clamp(1, 20),
-          ),
+          StockfishConfig.forPlaying(level: newLevel),
         );
       }
     }
   }
 
+  void _evaluatePosition() async {
+    if (_stockfish == null || _gameResult != null) return;
+
+    _evalSubscription?.cancel();
+    int? lastScore;
+
+    _evalSubscription = _stockfish!.outputStream.listen((line) {
+      if (line.startsWith('info ') && line.contains('score')) {
+        final scoreMatch = RegExp(r'score cp (-?\d+)').firstMatch(line);
+        final mateMatch = RegExp(r'score mate (-?\d+)').firstMatch(line);
+
+        if (scoreMatch != null) {
+          lastScore = int.parse(scoreMatch.group(1)!);
+        } else if (mateMatch != null) {
+          final mateIn = int.parse(mateMatch.group(1)!);
+          lastScore = mateIn > 0 ? 10000 - mateIn * 100 : -10000 - mateIn * 100;
+        }
+
+        if (lastScore != null && mounted) {
+          setState(() => _evalCp = lastScore);
+        }
+      }
+    });
+  }
+
   @override
   void dispose() {
     _stockfishSubscription?.cancel();
+    _evalSubscription?.cancel();
     GlobalStockfishManager.instance.release(_ownerId);
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final screenWidth = MediaQuery.of(context).size.width;
     final boardSize = screenWidth - 16;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Play vs Engine'),
+        title: Row(
+          children: [
+            _buildEvalBadge(_evalCp, isDark),
+            const SizedBox(width: 10),
+            const Expanded(
+              child: Text(
+                'Play vs Engine',
+                style: TextStyle(fontSize: 16),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.settings),
@@ -349,6 +383,56 @@ class _PlayVsStockfishScreenState extends ConsumerState<PlayVsStockfishScreen> {
         ],
       ),
       body: _buildBody(boardSize),
+    );
+  }
+
+  Widget _buildEvalBadge(int? evalCp, bool isDark) {
+    String text = '0.0';
+    Color bgColor = isDark ? Colors.grey.shade700 : Colors.grey.shade300;
+    Color textColor = isDark ? Colors.white : Colors.black87;
+
+    if (evalCp != null) {
+      if (evalCp.abs() >= 10000) {
+        // Mate score
+        final mateIn = ((10000 - evalCp.abs()) / 100).ceil();
+        text = evalCp > 0 ? 'M$mateIn' : '-M$mateIn';
+        bgColor = evalCp > 0 ? Colors.white : Colors.grey.shade800;
+        textColor = evalCp > 0 ? Colors.black87 : Colors.white;
+      } else {
+        // Centipawn score
+        final pawns = evalCp / 100;
+        if (pawns > 0) {
+          text = '+${pawns.toStringAsFixed(1)}';
+          bgColor = Colors.white;
+          textColor = Colors.black87;
+        } else if (pawns < 0) {
+          text = pawns.toStringAsFixed(1);
+          bgColor = Colors.grey.shade800;
+          textColor = Colors.white;
+        }
+      }
+    }
+
+    return Container(
+      width: 50,
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: isDark ? Colors.grey.shade600 : Colors.grey.shade400,
+          width: 1,
+        ),
+      ),
+      child: Text(
+        text,
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+          color: textColor,
+        ),
+      ),
     );
   }
 

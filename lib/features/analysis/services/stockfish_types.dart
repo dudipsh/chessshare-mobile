@@ -16,11 +16,16 @@ class StockfishConfig {
   /// Maximum search depth (0 = unlimited)
   final int maxDepth;
 
+  /// Skill level (0-20, where 0 is weakest and 20 is strongest)
+  /// This makes Stockfish intentionally play weaker moves at lower levels
+  final int? skillLevel;
+
   const StockfishConfig({
     this.multiPv = 3,
     this.hashSizeMb = 64,
     this.threads = 4,  // Use 4 threads by default (most phones have 4+ cores)
     this.maxDepth = 20,
+    this.skillLevel,
   });
 
   /// Get optimal config for mobile devices
@@ -55,12 +60,29 @@ class StockfishConfig {
     int? hashSizeMb,
     int? threads,
     int? maxDepth,
+    int? skillLevel,
   }) {
     return StockfishConfig(
       multiPv: multiPv ?? this.multiPv,
       hashSizeMb: hashSizeMb ?? this.hashSizeMb,
       threads: threads ?? this.threads,
       maxDepth: maxDepth ?? this.maxDepth,
+      skillLevel: skillLevel ?? this.skillLevel,
+    );
+  }
+
+  /// Get config for playing against engine at a specific level
+  /// Level 1 = very weak beginner, Level 20 = full strength
+  static StockfishConfig forPlaying({required int level}) {
+    final cores = Platform.numberOfProcessors;
+    final threads = (cores ~/ 2).clamp(2, 4);
+
+    return StockfishConfig(
+      multiPv: 1,
+      hashSizeMb: 32,
+      threads: threads,
+      maxDepth: 20,  // Keep depth high, skill level controls strength
+      skillLevel: level.clamp(0, 20),
     );
   }
 }

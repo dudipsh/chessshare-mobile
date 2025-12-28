@@ -7,6 +7,7 @@ class StudyProgressBar extends StatelessWidget {
   final int totalMoves;
   final double progress;
   final bool isCompleted;
+  final bool isDark;
 
   const StudyProgressBar({
     super.key,
@@ -14,27 +15,81 @@ class StudyProgressBar extends StatelessWidget {
     required this.totalMoves,
     required this.progress,
     this.isCompleted = false,
+    this.isDark = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+    final progressColor = isCompleted ? AppColors.success : AppColors.primary;
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1C1C1E) : Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.08),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
       child: Row(
         children: [
-          Text('$moveIndex/$totalMoves', style: const TextStyle(fontSize: 12)),
-          const SizedBox(width: 8),
+          // Progress icon
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: progressColor.withValues(alpha: isDark ? 0.2 : 0.12),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(
+              isCompleted ? Icons.check_circle : Icons.play_circle_outline,
+              size: 18,
+              color: progressColor,
+            ),
+          ),
+          const SizedBox(width: 12),
+          // Progress bar
           Expanded(
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: LinearProgressIndicator(
-                value: progress,
-                backgroundColor: Colors.grey.shade300,
-                valueColor: AlwaysStoppedAnimation<Color>(
-                  isCompleted ? AppColors.success : AppColors.primary,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      isCompleted ? 'Completed!' : 'Progress',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: isDark ? Colors.white70 : Colors.black54,
+                      ),
+                    ),
+                    Text(
+                      '$moveIndex / $totalMoves',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: progressColor,
+                      ),
+                    ),
+                  ],
                 ),
-                minHeight: 6,
-              ),
+                const SizedBox(height: 6),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: progress,
+                    backgroundColor: isDark ? Colors.white12 : Colors.grey.shade200,
+                    valueColor: AlwaysStoppedAnimation<Color>(progressColor),
+                    minHeight: 6,
+                  ),
+                ),
+              ],
             ),
           ),
         ],

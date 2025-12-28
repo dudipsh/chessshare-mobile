@@ -15,20 +15,27 @@ class MistakeInfoHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: mistake.classification.color.withValues(alpha: 0.1),
-        border: Border(
-          bottom: BorderSide(color: mistake.classification.color.withValues(alpha: 0.3)),
-        ),
+        color: isDark ? const Color(0xFF1C1C1E) : Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.08),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Row(
         children: [
+          // Classification badge
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             decoration: BoxDecoration(
               color: mistake.classification.color,
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(10),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -43,18 +50,30 @@ class MistakeInfoHeader extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 12),
-          Text(
-            'You played: ${mistake.san}',
-            style: TextStyle(color: isDark ? Colors.white70 : Colors.grey[700], fontSize: 14),
+          // Move info
+          Expanded(
+            child: Text(
+              'You played: ${mistake.san}',
+              style: TextStyle(
+                color: isDark ? Colors.white70 : Colors.grey[700],
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
-          const Spacer(),
+          const SizedBox(width: 8),
+          // Color indicator
           Container(
-            width: 20,
-            height: 20,
+            width: 22,
+            height: 22,
             decoration: BoxDecoration(
               color: mistake.color == 'white' ? Colors.white : Colors.grey.shade800,
-              borderRadius: BorderRadius.circular(4),
-              border: Border.all(color: Colors.grey.shade400),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(
+                color: isDark ? Colors.grey.shade600 : Colors.grey.shade400,
+                width: 1.5,
+              ),
             ),
           ),
         ],

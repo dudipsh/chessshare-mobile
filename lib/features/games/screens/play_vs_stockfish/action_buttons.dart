@@ -16,38 +16,118 @@ class GameActionButtons extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       child: Row(
         children: [
           Expanded(
-            child: OutlinedButton.icon(
+            child: _ActionButton(
+              icon: Icons.undo,
+              label: 'Undo',
               onPressed: canUndo ? onUndo : null,
-              icon: const Icon(Icons.undo),
-              label: const Text('Undo'),
+              gradientColors: [Colors.grey.shade400, Colors.grey.shade600],
+              isDark: isDark,
             ),
           ),
           const SizedBox(width: 8),
           Expanded(
-            child: OutlinedButton.icon(
+            child: _ActionButton(
+              icon: Icons.refresh,
+              label: 'Reset',
               onPressed: onReset,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Reset'),
+              gradientColors: [Colors.blue.shade400, Colors.blue.shade600],
+              isDark: isDark,
             ),
           ),
           const SizedBox(width: 8),
           Expanded(
-            child: ElevatedButton.icon(
+            child: _ActionButton(
+              icon: Icons.flag,
+              label: 'Resign',
               onPressed: onResign,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red,
-                foregroundColor: Colors.white,
-              ),
-              icon: const Icon(Icons.flag),
-              label: const Text('Resign'),
+              gradientColors: [Colors.red.shade400, Colors.red.shade600],
+              isDark: isDark,
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ActionButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback? onPressed;
+  final List<Color> gradientColors;
+  final bool isDark;
+
+  const _ActionButton({
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+    required this.gradientColors,
+    required this.isDark,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isEnabled = onPressed != null;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          height: 48,
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF1C1C1E) : Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.08),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: gradientColors
+                    .map((c) => c.withValues(alpha: isEnabled ? 0.15 : 0.05))
+                    .toList(),
+              ),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  icon,
+                  size: 18,
+                  color: isEnabled
+                      ? gradientColors[1]
+                      : (isDark ? Colors.white24 : Colors.grey.shade400),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: isEnabled
+                        ? (isDark ? gradientColors[0] : gradientColors[1])
+                        : (isDark ? Colors.white24 : Colors.grey.shade400),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

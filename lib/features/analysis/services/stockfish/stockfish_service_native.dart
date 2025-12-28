@@ -342,6 +342,11 @@ class StockfishService {
     _send('setoption name Hash value ${_config.hashSizeMb}');
     _send('setoption name Threads value ${_config.threads}');
 
+    // Apply skill level if specified (0-20, lower = weaker)
+    if (_config.skillLevel != null) {
+      _send('setoption name Skill Level value ${_config.skillLevel}');
+    }
+
     // Wait for ready confirmation using the unified completer
     _readyCompleter = Completer<void>();
     _send('isready');

@@ -207,23 +207,12 @@ class _PracticeMistakesScreenState extends ConsumerState<PracticeMistakesScreen>
                 ],
               ),
             ),
-            // Attempt indicators removed - unlimited attempts now allowed
+            // Hint button with card style
             if (_state == PracticeState.ready)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: OutlinedButton.icon(
-                  onPressed: () => setState(() => _showHint = !_showHint),
-                  icon: Icon(
-                    _showHint ? Icons.lightbulb : Icons.lightbulb_outline,
-                    color: _showHint ? Colors.amber : null,
-                  ),
-                  label: Text(_showHint ? 'Hide Hint' : 'Show Hint'),
-                  style: OutlinedButton.styleFrom(minimumSize: const Size(double.infinity, 44)),
-                ),
-              ),
-            if (_feedback != null) FeedbackMessage(message: _feedback!, state: _state),
+              _buildHintButton(isDark),
+            if (_feedback != null) FeedbackMessage(message: _feedback!, state: _state, isDark: isDark),
             Padding(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               child: Text(
                 _getInstructions(),
                 style: TextStyle(fontSize: 15, color: isDark ? Colors.white70 : Colors.grey.shade700),
@@ -234,23 +223,10 @@ class _PracticeMistakesScreenState extends ConsumerState<PracticeMistakesScreen>
               currentIndex: _currentIndex,
               total: widget.mistakes.length,
               correctCount: _correctCount,
+              isDark: isDark,
             ),
             if (_state == PracticeState.correct || _state == PracticeState.showingSolution)
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  children: [
-                    Expanded(child: OutlinedButton(onPressed: _loadPosition, child: const Text('Retry'))),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: _nextPuzzle,
-                        child: Text(_currentIndex < widget.mistakes.length - 1 ? 'Next' : 'Finish'),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              _buildActionButtons(isDark),
             SizedBox(height: MediaQuery.of(context).padding.bottom + 16),
           ],
         ),
@@ -354,5 +330,183 @@ class _PracticeMistakesScreenState extends ConsumerState<PracticeMistakesScreen>
       case PracticeState.wrong: return 'Not quite right...';
       case PracticeState.showingSolution: return 'This was the best move';
     }
+  }
+
+  Widget _buildHintButton(bool isDark) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => setState(() => _showHint = !_showHint),
+          borderRadius: BorderRadius.circular(14),
+          child: Container(
+            height: 48,
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF1C1C1E) : Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.08),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    Colors.amber.withValues(alpha: _showHint ? 0.25 : 0.12),
+                    Colors.orange.withValues(alpha: _showHint ? 0.15 : 0.06),
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    _showHint ? Icons.lightbulb : Icons.lightbulb_outline,
+                    size: 20,
+                    color: Colors.amber.shade700,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    _showHint ? 'Hide Hint' : 'Show Hint',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? Colors.amber.shade300 : Colors.amber.shade800,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActionButtons(bool isDark) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      child: Row(
+        children: [
+          // Retry button
+          Expanded(
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: _loadPosition,
+                borderRadius: BorderRadius.circular(14),
+                child: Container(
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF1C1C1E) : Colors.white,
+                    borderRadius: BorderRadius.circular(14),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.08),
+                        blurRadius: 12,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          Colors.grey.withValues(alpha: 0.12),
+                          Colors.grey.withValues(alpha: 0.06),
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.refresh,
+                          size: 20,
+                          color: isDark ? Colors.white70 : Colors.grey.shade700,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Retry',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: isDark ? Colors.white70 : Colors.grey.shade700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          // Next/Finish button
+          Expanded(
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: _nextPuzzle,
+                borderRadius: BorderRadius.circular(14),
+                child: Container(
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF1C1C1E) : Colors.white,
+                    borderRadius: BorderRadius.circular(14),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.08),
+                        blurRadius: 12,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          Colors.green.withValues(alpha: 0.15),
+                          Colors.teal.withValues(alpha: 0.08),
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          _currentIndex < widget.mistakes.length - 1
+                              ? Icons.arrow_forward
+                              : Icons.check_circle_outline,
+                          size: 20,
+                          color: Colors.green.shade600,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          _currentIndex < widget.mistakes.length - 1 ? 'Next' : 'Finish',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: isDark ? Colors.green.shade300 : Colors.green.shade700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
