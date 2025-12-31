@@ -215,42 +215,87 @@ class MainShell extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Watch daily puzzle state for badge indicator
     final dailyPuzzleAvailable = ref.watch(isDailyPuzzleAvailableProvider);
+    final selectedIndex = _calculateSelectedIndex(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
       body: child,
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _calculateSelectedIndex(context),
-        onDestinationSelected: (index) => _onItemTapped(index, context),
-        destinations: [
-          const NavigationDestination(
-            icon: Icon(Icons.sports_esports_outlined),
-            selectedIcon: Icon(Icons.sports_esports),
-            label: 'My Games',
+      extendBody: true,
+      bottomNavigationBar: Container(
+        padding: EdgeInsets.only(
+          left: 16,
+          right: 16,
+          bottom: MediaQuery.of(context).padding.bottom + 12,
+          top: 12,
+        ),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              (isDark ? Colors.black : Colors.white).withValues(alpha: 0),
+              (isDark ? Colors.black : Colors.white).withValues(alpha: 0.9),
+              isDark ? Colors.black : Colors.white,
+            ],
+            stops: const [0.0, 0.3, 1.0],
           ),
-          NavigationDestination(
-            icon: Badge(
-              isLabelVisible: dailyPuzzleAvailable,
-              child: const Icon(Icons.extension_outlined),
+        ),
+        child: Container(
+          height: 64,
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF1C1C1E) : Colors.white,
+            borderRadius: BorderRadius.circular(32),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.12),
+                blurRadius: 20,
+                offset: const Offset(0, 4),
+              ),
+            ],
+            border: Border.all(
+              color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.04),
             ),
-            selectedIcon: Badge(
-              isLabelVisible: dailyPuzzleAvailable,
-              child: const Icon(Icons.extension),
-            ),
-            label: 'Daily',
           ),
-          const NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home),
-            label: 'Home',
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              _NavItem(
+                icon: Icons.sports_esports_outlined,
+                selectedIcon: Icons.sports_esports,
+                label: 'Games',
+                isSelected: selectedIndex == 0,
+                onTap: () => _onItemTapped(0, context),
+                isDark: isDark,
+              ),
+              _NavItem(
+                icon: Icons.extension_outlined,
+                selectedIcon: Icons.extension,
+                label: 'Daily',
+                isSelected: selectedIndex == 1,
+                onTap: () => _onItemTapped(1, context),
+                isDark: isDark,
+                showBadge: dailyPuzzleAvailable,
+              ),
+              _NavItem(
+                icon: Icons.menu_book_outlined,
+                selectedIcon: Icons.menu_book,
+                label: 'Study',
+                isSelected: selectedIndex == 2,
+                onTap: () => _onItemTapped(2, context),
+                isDark: isDark,
+              ),
+              _NavItem(
+                icon: Icons.person_outline,
+                selectedIcon: Icons.person,
+                label: 'Profile',
+                isSelected: selectedIndex == 3,
+                onTap: () => _onItemTapped(3, context),
+                isDark: isDark,
+              ),
+            ],
           ),
-          const NavigationDestination(
-            icon: Icon(Icons.person_outline),
-            selectedIcon: Icon(Icons.person),
-            label: 'Profile',
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -279,6 +324,106 @@ class MainShell extends ConsumerWidget {
         context.goNamed('profile');
         break;
     }
+  }
+}
+
+class _NavItem extends StatelessWidget {
+  final IconData icon;
+  final IconData selectedIcon;
+  final String label;
+  final bool isSelected;
+  final VoidCallback onTap;
+  final bool isDark;
+  final bool showBadge;
+
+  const _NavItem({
+    required this.icon,
+    required this.selectedIcon,
+    required this.label,
+    required this.isSelected,
+    required this.onTap,
+    required this.isDark,
+    this.showBadge = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final primaryColor = Theme.of(context).primaryColor;
+
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOutCubic,
+        padding: EdgeInsets.symmetric(
+          horizontal: isSelected ? 16 : 12,
+          vertical: 8,
+        ),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? primaryColor.withValues(alpha: isDark ? 0.2 : 0.12)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 200),
+                  child: Icon(
+                    isSelected ? selectedIcon : icon,
+                    key: ValueKey(isSelected),
+                    size: 24,
+                    color: isSelected
+                        ? primaryColor
+                        : (isDark ? Colors.grey[400] : Colors.grey[600]),
+                  ),
+                ),
+                if (showBadge)
+                  Positioned(
+                    right: -4,
+                    top: -4,
+                    child: Container(
+                      width: 10,
+                      height: 10,
+                      decoration: BoxDecoration(
+                        color: Colors.red,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: isDark ? const Color(0xFF1C1C1E) : Colors.white,
+                          width: 2,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            // Animated label that appears when selected
+            AnimatedSize(
+              duration: const Duration(milliseconds: 250),
+              curve: Curves.easeOutCubic,
+              child: isSelected
+                  ? Padding(
+                      padding: const EdgeInsets.only(left: 8),
+                      child: Text(
+                        label,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: primaryColor,
+                        ),
+                      ),
+                    )
+                  : const SizedBox.shrink(),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

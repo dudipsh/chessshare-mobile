@@ -79,9 +79,9 @@ class _StudyBoardGridState extends ConsumerState<StudyBoardGrid> {
             );
           }
           return Padding(
-            padding: const EdgeInsets.only(bottom: 20),
+            padding: const EdgeInsets.only(bottom: 16),
             child: SizedBox(
-              height: 300, // Fixed height for card with image, category, title, description, author
+              height: 320, // Fixed height for card with border, image, category, title, description, author
               child: StudyBoardCard(board: widget.boards[i]),
             ),
           );

@@ -19,61 +19,86 @@ class StudyBoardCard extends StatelessWidget {
 
     return GestureDetector(
       onTap: () => context.pushNamed('study-board', extra: board),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Image section with badges and stats
-          Expanded(
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(16),
-              child: Stack(
-                fit: StackFit.expand,
+      child: Container(
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF1C1C1E) : Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.06),
+            width: 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.06),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Image section with badges and stats
+            Expanded(
+              child: ClipRRect(
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(15)),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    StudyBoardCover(imageUrl: board.coverImageUrl ?? _defaultCover, isDark: isDark),
+                    _buildGradientOverlay(),
+                    // Featured/Lines badge at top right
+                    _buildTopBadge(),
+                    // Stats at bottom left
+                    _buildStatsOverlay(),
+                  ],
+                ),
+              ),
+            ),
+            // Content section with padding
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  StudyBoardCover(imageUrl: board.coverImageUrl ?? _defaultCover, isDark: isDark),
-                  _buildGradientOverlay(),
-                  // Featured/Lines badge at top right
-                  _buildTopBadge(),
-                  // Stats at bottom left
-                  _buildStatsOverlay(),
+                  // Category tag
+                  _buildCategoryTag(isDark),
+                  const SizedBox(height: 6),
+                  // Title
+                  Text(
+                    board.title,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? Colors.white : Colors.black87,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  // Description
+                  if (board.description != null && board.description!.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      board.description!,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: isDark ? Colors.grey[400] : Colors.grey[600],
+                        height: 1.3,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                  // Author row
+                  if (board.ownerName != null) ...[
+                    const SizedBox(height: 8),
+                    _buildAuthorRow(context, isDark),
+                  ],
                 ],
               ),
             ),
-          ),
-          const SizedBox(height: 12),
-          // Category tag
-          _buildCategoryTag(isDark),
-          const SizedBox(height: 6),
-          // Title
-          Text(
-            board.title,
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: isDark ? Colors.white : Colors.black87,
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-          // Description
-          if (board.description != null && board.description!.isNotEmpty) ...[
-            const SizedBox(height: 4),
-            Text(
-              board.description!,
-              style: TextStyle(
-                fontSize: 13,
-                color: isDark ? Colors.grey[400] : Colors.grey[600],
-                height: 1.3,
-              ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
           ],
-          // Author row
-          if (board.ownerName != null) ...[
-            const SizedBox(height: 8),
-            _buildAuthorRow(context, isDark),
-          ],
-        ],
+        ),
       ),
     );
   }
