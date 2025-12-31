@@ -9,6 +9,8 @@ class NavigationControls extends StatelessWidget {
   final VoidCallback onPrevious;
   final VoidCallback onNext;
   final VoidCallback onLast;
+  final VoidCallback? onPlay;
+  final bool isPlaying;
 
   const NavigationControls({
     super.key,
@@ -18,6 +20,8 @@ class NavigationControls extends StatelessWidget {
     required this.onPrevious,
     required this.onNext,
     required this.onLast,
+    this.onPlay,
+    this.isPlaying = false,
   });
 
   @override
@@ -54,26 +58,11 @@ class NavigationControls extends StatelessWidget {
             isEnabled: currentMoveIndex > 0,
             isLarge: true,
           ),
-          // Move counter
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  AppColors.primary.withValues(alpha: isDark ? 0.3 : 0.15),
-                  AppColors.primaryLight.withValues(alpha: isDark ? 0.2 : 0.08),
-                ],
-              ),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(
-              '$currentMoveIndex / $totalMoves',
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                color: isDark ? Colors.white : AppColors.primary,
-              ),
-            ),
+          // Play/Pause button
+          _PlayButton(
+            isPlaying: isPlaying,
+            onTap: onPlay,
+            isDark: isDark,
           ),
           _NavButton(
             icon: Icons.chevron_right,
@@ -89,6 +78,55 @@ class NavigationControls extends StatelessWidget {
             isEnabled: currentMoveIndex < totalMoves,
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _PlayButton extends StatelessWidget {
+  final bool isPlaying;
+  final VoidCallback? onTap;
+  final bool isDark;
+
+  const _PlayButton({
+    required this.isPlaying,
+    required this.onTap,
+    required this.isDark,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          width: 56,
+          height: 40,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: isPlaying
+                  ? [
+                      Colors.orange.withValues(alpha: isDark ? 0.3 : 0.2),
+                      Colors.deepOrange.withValues(alpha: isDark ? 0.2 : 0.12),
+                    ]
+                  : [
+                      AppColors.primary.withValues(alpha: isDark ? 0.3 : 0.15),
+                      AppColors.primaryLight.withValues(alpha: isDark ? 0.2 : 0.08),
+                    ],
+            ),
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Icon(
+            isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+            size: 28,
+            color: isPlaying
+                ? (isDark ? Colors.orange.shade300 : Colors.deepOrange)
+                : (isDark ? Colors.white : AppColors.primary),
+          ),
+        ),
       ),
     );
   }

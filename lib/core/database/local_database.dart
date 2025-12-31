@@ -11,7 +11,7 @@ import '../../features/study/models/study_board.dart';
 class LocalDatabase {
   static Database? _database;
   static const String _databaseName = 'chessshare.db';
-  static const int _databaseVersion = 6;
+  static const int _databaseVersion = 7;
 
   // Table names
   static const String userProfileTable = 'user_profile';
@@ -25,6 +25,7 @@ class LocalDatabase {
   static const String studyVariationsTable = 'study_variations';
   static const String boardViewsTable = 'board_views';
   static const String boardLikesCacheTable = 'board_likes_cache';
+  static const String gamePuzzlesTable = 'game_puzzles';
 
   static Future<Database> get database async {
     _database ??= await _initDatabase();
@@ -100,6 +101,9 @@ class LocalDatabase {
 
     // Version 6 tables (board views, likes cache)
     await _createV6Tables(db);
+
+    // Version 7 tables (game puzzles with multi-move solutions)
+    await _createV7Tables(db);
   }
 
   static Future<void> _createV2Tables(Database db) async {
@@ -240,6 +244,10 @@ class LocalDatabase {
     if (oldVersion < 6) {
       await _createV6Tables(db);
     }
+
+    if (oldVersion < 7) {
+      await _createV7Tables(db);
+    }
   }
 
   /// Create V4 tables (study boards)
@@ -314,6 +322,33 @@ class LocalDatabase {
     await db.execute('CREATE INDEX IF NOT EXISTS idx_board_likes_liked_at ON $boardLikesCacheTable(liked_at DESC)');
 
     debugPrint('Created V6 tables: board_views, board_likes_cache');
+  }
+
+  /// Create V7 tables (game puzzles with multi-move solutions)
+  static Future<void> _createV7Tables(Database db) async {
+    // Game puzzles table for multi-move puzzle sequences
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $gamePuzzlesTable (
+        id TEXT PRIMARY KEY,
+        game_review_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        fen TEXT NOT NULL,
+        player_color TEXT NOT NULL,
+        solution_uci TEXT NOT NULL,
+        solution_san TEXT NOT NULL,
+        classification TEXT NOT NULL,
+        theme TEXT,
+        move_number INTEGER NOT NULL,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (game_review_id) REFERENCES $gameReviewsTable(id) ON DELETE CASCADE
+      )
+    ''');
+
+    // Create indexes
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_game_puzzles_review ON $gamePuzzlesTable(game_review_id)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_game_puzzles_user ON $gamePuzzlesTable(user_id)');
+
+    debugPrint('Created V7 tables: game_puzzles');
   }
 
   // User Profile operations
@@ -1074,5 +1109,82 @@ class LocalDatabase {
   static Future<void> clearLikedBoardsCache() async {
     final db = await database;
     await db.delete(boardLikesCacheTable);
+  }
+
+  // ========== Game Puzzles (Multi-Move) ==========
+
+  /// Save game puzzles for a game review
+  static Future<void> saveGamePuzzles(String userId, List<Map<String, dynamic>> puzzles) async {
+    final db = await database;
+    final batch = db.batch();
+
+    for (final puzzle in puzzles) {
+      batch.insert(
+        gamePuzzlesTable,
+        {
+          'id': puzzle['id'],
+          'game_review_id': puzzle['game_review_id'],
+          'user_id': userId,
+          'fen': puzzle['fen'],
+          'player_color': puzzle['player_color'],
+          'solution_uci': puzzle['solution_uci'], // JSON array as string
+          'solution_san': puzzle['solution_san'], // JSON array as string
+          'classification': puzzle['classification'],
+          'theme': puzzle['theme'],
+          'move_number': puzzle['move_number'],
+          'created_at': puzzle['created_at'] ?? DateTime.now().toIso8601String(),
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    }
+
+    await batch.commit(noResult: true);
+    debugPrint('Saved ${puzzles.length} game puzzles locally');
+  }
+
+  /// Get game puzzles for a specific game review
+  static Future<List<Map<String, dynamic>>> getGamePuzzles(String gameReviewId) async {
+    final db = await database;
+    return await db.query(
+      gamePuzzlesTable,
+      where: 'game_review_id = ?',
+      whereArgs: [gameReviewId],
+      orderBy: 'move_number ASC',
+    );
+  }
+
+  /// Get all game puzzles for a user
+  static Future<List<Map<String, dynamic>>> getUserGamePuzzles(String userId, {int limit = 50}) async {
+    final db = await database;
+    return await db.query(
+      gamePuzzlesTable,
+      where: 'user_id = ?',
+      whereArgs: [userId],
+      orderBy: 'created_at DESC',
+      limit: limit,
+    );
+  }
+
+  /// Check if puzzles exist for a game review
+  static Future<bool> hasGamePuzzles(String gameReviewId) async {
+    final db = await database;
+    final results = await db.query(
+      gamePuzzlesTable,
+      columns: ['id'],
+      where: 'game_review_id = ?',
+      whereArgs: [gameReviewId],
+      limit: 1,
+    );
+    return results.isNotEmpty;
+  }
+
+  /// Delete game puzzles for a specific game review
+  static Future<void> deleteGamePuzzles(String gameReviewId) async {
+    final db = await database;
+    await db.delete(
+      gamePuzzlesTable,
+      where: 'game_review_id = ?',
+      whereArgs: [gameReviewId],
+    );
   }
 }

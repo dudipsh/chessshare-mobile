@@ -135,11 +135,12 @@ class _StudyBoardScreenState extends ConsumerState<StudyBoardScreen> {
                 onReset: () => ref.read(studyBoardProvider.notifier).resetVariation(),
                 isDark: isDark,
               ),
-              // Fixed height container for feedback + instructions to prevent layout shifts
-              SizedBox(
-                height: 80,
+              // Container for feedback + instructions with minimum height
+              ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 80),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     if (state.feedback != null) _buildFeedback(state, isDark),
                     Padding(

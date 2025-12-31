@@ -8,6 +8,8 @@ import '../services/study_service.dart';
 class StudyListState {
   final List<StudyBoard> publicBoards;
   final List<StudyBoard> myBoards;
+  final List<StudyBoard> myPublicBoards;
+  final List<StudyBoard> myPrivateBoards;
   final bool isLoading;
   final bool isLoadingMore;
   final bool hasMorePublic;
@@ -18,6 +20,8 @@ class StudyListState {
   const StudyListState({
     this.publicBoards = const [],
     this.myBoards = const [],
+    this.myPublicBoards = const [],
+    this.myPrivateBoards = const [],
     this.isLoading = false,
     this.isLoadingMore = false,
     this.hasMorePublic = true,
@@ -29,6 +33,8 @@ class StudyListState {
   StudyListState copyWith({
     List<StudyBoard>? publicBoards,
     List<StudyBoard>? myBoards,
+    List<StudyBoard>? myPublicBoards,
+    List<StudyBoard>? myPrivateBoards,
     bool? isLoading,
     bool? isLoadingMore,
     bool? hasMorePublic,
@@ -39,6 +45,8 @@ class StudyListState {
     return StudyListState(
       publicBoards: publicBoards ?? this.publicBoards,
       myBoards: myBoards ?? this.myBoards,
+      myPublicBoards: myPublicBoards ?? this.myPublicBoards,
+      myPrivateBoards: myPrivateBoards ?? this.myPrivateBoards,
       isLoading: isLoading ?? this.isLoading,
       isLoadingMore: isLoadingMore ?? this.isLoadingMore,
       hasMorePublic: hasMorePublic ?? this.hasMorePublic,
@@ -49,6 +57,9 @@ class StudyListState {
   }
 
   bool get hasBoards => publicBoards.isNotEmpty || myBoards.isNotEmpty;
+  bool get hasOnlyPublic => myPublicBoards.isNotEmpty && myPrivateBoards.isEmpty;
+  bool get hasOnlyPrivate => myPrivateBoards.isNotEmpty && myPublicBoards.isEmpty;
+  bool get hasBothTypes => myPublicBoards.isNotEmpty && myPrivateBoards.isNotEmpty;
 }
 
 /// Provider for study list
@@ -81,18 +92,36 @@ class StudyListNotifier extends StateNotifier<StudyListState> {
       if (!mounted) return;
 
       List<StudyBoard> myBoards = [];
+      List<StudyBoard> myPublicBoards = [];
+      List<StudyBoard> myPrivateBoards = [];
 
       if (_userId != null && !_userId.startsWith('guest_')) {
-        myBoards = await StudyService.getMyBoards(_userId).timeout(
-          const Duration(seconds: 15),
-          onTimeout: () => <StudyBoard>[],
-        );
+        // Fetch public and private boards in parallel
+        final results = await Future.wait([
+          StudyService.getMyBoards(_userId, isPublic: true).timeout(
+            const Duration(seconds: 15),
+            onTimeout: () => <StudyBoard>[],
+          ),
+          StudyService.getMyBoards(_userId, isPublic: false).timeout(
+            const Duration(seconds: 15),
+            onTimeout: () => <StudyBoard>[],
+          ),
+        ]);
         if (!mounted) return;
+
+        myPublicBoards = results[0];
+        myPrivateBoards = results[1];
+
+        // Combine and sort by updated_at
+        myBoards = [...myPublicBoards, ...myPrivateBoards];
+        myBoards.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
       }
 
       state = state.copyWith(
         publicBoards: publicBoards,
         myBoards: myBoards,
+        myPublicBoards: myPublicBoards,
+        myPrivateBoards: myPrivateBoards,
         isLoading: false,
         hasMorePublic: publicBoards.length >= _pageSize,
         hasMoreMy: false, // My boards typically don't need pagination

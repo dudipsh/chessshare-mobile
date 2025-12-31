@@ -6,12 +6,14 @@ class ReviewActionButtons extends StatelessWidget {
   final int mistakesCount;
   final VoidCallback? onPractice;
   final VoidCallback onPlayEngine;
+  final bool isPracticeLoading;
 
   const ReviewActionButtons({
     super.key,
     required this.mistakesCount,
     this.onPractice,
     required this.onPlayEngine,
+    this.isPracticeLoading = false,
   });
 
   @override
@@ -33,8 +35,9 @@ class ReviewActionButtons extends StatelessWidget {
                 Color(0xFFFF8E8E),
               ],
               isDark: isDark,
-              isEnabled: mistakesCount > 0,
-              onTap: mistakesCount > 0 ? onPractice : null,
+              isEnabled: mistakesCount > 0 && !isPracticeLoading,
+              isLoading: isPracticeLoading,
+              onTap: mistakesCount > 0 && !isPracticeLoading ? onPractice : null,
             ),
           ),
           const SizedBox(width: 10),
@@ -65,6 +68,7 @@ class _ActionButton extends StatelessWidget {
   final List<Color> gradientColors;
   final bool isDark;
   final bool isEnabled;
+  final bool isLoading;
   final VoidCallback? onTap;
 
   const _ActionButton({
@@ -74,6 +78,7 @@ class _ActionButton extends StatelessWidget {
     required this.gradientColors,
     required this.isDark,
     required this.isEnabled,
+    this.isLoading = false,
     this.onTap,
   });
 
@@ -114,21 +119,33 @@ class _ActionButton extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(
-                  icon,
-                  color: isDark ? Colors.white : gradientColors[0],
-                  size: 20,
-                ),
+                if (isLoading)
+                  SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        isDark ? Colors.white : gradientColors[0],
+                      ),
+                    ),
+                  )
+                else
+                  Icon(
+                    icon,
+                    color: isDark ? Colors.white : gradientColors[0],
+                    size: 20,
+                  ),
                 const SizedBox(width: 8),
                 Text(
-                  title,
+                  isLoading ? 'Loading...' : title,
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
                     color: isDark ? Colors.white : Colors.black87,
                   ),
                 ),
-                if (badge != null) ...[
+                if (badge != null && !isLoading) ...[
                   const SizedBox(width: 6),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),

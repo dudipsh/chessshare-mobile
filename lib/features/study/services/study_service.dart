@@ -133,10 +133,34 @@ class StudyService {
     }
   }
 
-  /// Get user's boards
-  static Future<List<StudyBoard>> getMyBoards(String userId) async {
+  /// Get user's boards with optional is_public filter
+  static Future<List<StudyBoard>> getMyBoards(String userId, {bool? isPublic}) async {
     try {
-      final response = await SupabaseService.client
+      // Try RPC first for better performance
+      final response = await SupabaseService.client.rpc(
+        'get_my_boards_paginated',
+        params: {
+          'p_is_public': isPublic,
+          'p_limit': 100,
+          'p_cursor_created_at': null,
+        },
+      );
+
+      if (response != null) {
+        return (response as List).map((j) => StudyBoard.fromRpcJson(j as Map<String, dynamic>)).toList();
+      }
+      return [];
+    } catch (e) {
+      debugPrint('Error fetching my boards via RPC: $e, trying fallback');
+      // Fallback to direct query
+      return _getMyBoardsFallback(userId, isPublic: isPublic);
+    }
+  }
+
+  /// Fallback for getting user's boards
+  static Future<List<StudyBoard>> _getMyBoardsFallback(String userId, {bool? isPublic}) async {
+    try {
+      var query = SupabaseService.client
           .from('boards')
           .select('''
             id, title, description, owner_id, cover_image_url,
@@ -144,12 +168,17 @@ class StudyService {
             created_at, updated_at,
             variations:board_variations(id, board_id, name, pgn, starting_fen, player_color, position)
           ''')
-          .eq('owner_id', userId)
-          .order('updated_at', ascending: false);
+          .eq('owner_id', userId);
+
+      if (isPublic != null) {
+        query = query.eq('is_public', isPublic);
+      }
+
+      final response = await query.order('updated_at', ascending: false);
 
       return (response as List).map((j) => StudyBoard.fromJson(j)).toList();
     } catch (e) {
-      debugPrint('Error fetching my boards: $e');
+      debugPrint('Error fetching my boards fallback: $e');
       return [];
     }
   }

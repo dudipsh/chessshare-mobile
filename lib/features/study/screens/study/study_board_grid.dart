@@ -63,11 +63,14 @@ class _StudyBoardGridState extends ConsumerState<StudyBoardGrid> {
 
     final itemCount = widget.boards.length + (state.hasMorePublic && !widget.isMine ? 1 : 0);
 
+    // Add extra bottom padding for floating navigation bar
+    final bottomPadding = 100.0 + MediaQuery.of(context).padding.bottom;
+
     return RefreshIndicator(
       onRefresh: () => ref.read(studyListProvider.notifier).refresh(),
       child: ListView.builder(
         controller: _scrollController,
-        padding: const EdgeInsets.all(12),
+        padding: EdgeInsets.fromLTRB(12, 12, 12, bottomPadding),
         itemCount: itemCount,
         itemBuilder: (ctx, i) {
           if (i >= widget.boards.length) {

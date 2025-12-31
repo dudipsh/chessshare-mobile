@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/theme/colors.dart';
 import '../../../core/widgets/design_components.dart';
 import '../../gamification/widgets/level_badge.dart';
+import '../models/study_board.dart';
 import '../providers/study_history_provider.dart';
 import '../providers/study_likes_provider.dart';
 import '../providers/study_provider.dart';
@@ -22,19 +23,28 @@ class _StudyScreenState extends ConsumerState<StudyScreen>
   final _searchController = TextEditingController();
   bool _showSearch = false;
   int _selectedTabIndex = 0;
+  int _myStudiesFilter = 0; // 0 = public, 1 = private
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
-    _tabController.addListener(() {
-      if (_tabController.indexIsChanging) return;
-      setState(() => _selectedTabIndex = _tabController.index);
-    });
+    // Listen to animation for real-time tab updates during swipe
+    _tabController.animation?.addListener(_onTabAnimation);
+  }
+
+  void _onTabAnimation() {
+    // Update selected tab during swipe animation
+    final animationValue = _tabController.animation?.value ?? 0;
+    final newIndex = animationValue.round();
+    if (newIndex != _selectedTabIndex) {
+      setState(() => _selectedTabIndex = newIndex);
+    }
   }
 
   @override
   void dispose() {
+    _tabController.animation?.removeListener(_onTabAnimation);
     _tabController.dispose();
     _searchController.dispose();
     super.dispose();
@@ -149,6 +159,16 @@ class _StudyScreenState extends ConsumerState<StudyScreen>
       );
     }
 
+    // Determine which boards to show based on filter
+    final List<StudyBoard> boardsToShow;
+    if (state.hasBothTypes) {
+      boardsToShow = _myStudiesFilter == 0 ? state.myPublicBoards : state.myPrivateBoards;
+    } else if (state.hasOnlyPublic) {
+      boardsToShow = state.myPublicBoards;
+    } else {
+      boardsToShow = state.myPrivateBoards;
+    }
+
     return Column(
       children: [
         // Compact stats header
@@ -164,14 +184,102 @@ class _StudyScreenState extends ConsumerState<StudyScreen>
             ],
           ),
         ),
+        // Public/Private filter tabs (only show if both types exist)
+        if (state.hasBothTypes)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            child: Row(
+              children: [
+                _buildFilterChip(
+                  0,
+                  'Public',
+                  Icons.public,
+                  state.myPublicBoards.length,
+                  isDark,
+                ),
+                const SizedBox(width: 8),
+                _buildFilterChip(
+                  1,
+                  'Private',
+                  Icons.lock,
+                  state.myPrivateBoards.length,
+                  isDark,
+                ),
+              ],
+            ),
+          ),
         Expanded(
           child: StudyBoardGrid(
-            boards: state.myBoards,
+            boards: boardsToShow,
             isLoading: false,
             isMine: true,
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildFilterChip(int index, String label, IconData icon, int count, bool isDark) {
+    final isSelected = _myStudiesFilter == index;
+
+    return GestureDetector(
+      onTap: () => setState(() => _myStudiesFilter = index),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? (isDark ? AppColors.primary.withValues(alpha: 0.3) : AppColors.primary.withValues(alpha: 0.15))
+              : (isDark ? const Color(0xFF2C2C2E) : const Color(0xFFF5F5F0)),
+          borderRadius: BorderRadius.circular(16),
+          border: isSelected
+              ? Border.all(color: AppColors.primary, width: 1.5)
+              : null,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 14,
+              color: isSelected
+                  ? AppColors.primary
+                  : (isDark ? Colors.grey[400] : Colors.grey[600]),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                color: isSelected
+                    ? AppColors.primary
+                    : (isDark ? Colors.grey[400] : Colors.grey[600]),
+              ),
+            ),
+            const SizedBox(width: 4),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? AppColors.primary.withValues(alpha: 0.2)
+                    : (isDark ? Colors.grey[700] : Colors.grey[300]),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                '$count',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  color: isSelected
+                      ? AppColors.primary
+                      : (isDark ? Colors.grey[400] : Colors.grey[600]),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

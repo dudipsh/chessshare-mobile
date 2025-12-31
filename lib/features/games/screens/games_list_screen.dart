@@ -201,9 +201,9 @@ class _GamesListScreenState extends ConsumerState<GamesListScreen> {
             ),
           ),
 
-          // Bottom padding
-          const SliverToBoxAdapter(
-            child: SizedBox(height: 16),
+          // Bottom padding for floating navigation bar
+          SliverToBoxAdapter(
+            child: SizedBox(height: 100 + MediaQuery.of(context).padding.bottom),
           ),
         ],
       ),
@@ -234,6 +234,7 @@ class _CollapsibleHeader extends StatelessWidget {
           lichessUsername: gamesState.activeLichessUsername,
           onPlatformSelected: onPlatformSelected,
         ),
+        const SizedBox(height: 4), // Add spacing between stats and quick access
         const QuickAccessButtons(),
       ],
     );
