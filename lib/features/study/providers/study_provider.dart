@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../auth/providers/auth_provider.dart';
@@ -68,10 +69,12 @@ class StudyListNotifier extends StateNotifier<StudyListState> {
   static const int _pageSize = 20;
 
   StudyListNotifier(this._userId) : super(const StudyListState()) {
+    debugPrint('[StudyProvider] Initialized with userId: $_userId');
     loadBoards();
   }
 
   Future<void> loadBoards() async {
+    debugPrint('[StudyProvider] loadBoards called - userId: $_userId');
     if (!mounted) return;
     state = state.copyWith(
       isLoading: true,
@@ -82,6 +85,7 @@ class StudyListNotifier extends StateNotifier<StudyListState> {
 
     try {
       // Pass userId for progress tracking with timeout
+      debugPrint('[StudyProvider] Fetching public boards...');
       final publicBoards = await StudyService.getPublicBoards(
         userId: _userId,
         limit: _pageSize,
@@ -89,6 +93,7 @@ class StudyListNotifier extends StateNotifier<StudyListState> {
         const Duration(seconds: 15),
         onTimeout: () => <StudyBoard>[],
       );
+      debugPrint('[StudyProvider] Got ${publicBoards.length} public boards');
       if (!mounted) return;
 
       List<StudyBoard> myBoards = [];
@@ -96,6 +101,7 @@ class StudyListNotifier extends StateNotifier<StudyListState> {
       List<StudyBoard> myPrivateBoards = [];
 
       if (_userId != null && !_userId.startsWith('guest_')) {
+        debugPrint('[StudyProvider] Fetching my boards for userId: $_userId');
         // Fetch public and private boards in parallel
         final results = await Future.wait([
           StudyService.getMyBoards(_userId, isPublic: true).timeout(
@@ -112,9 +118,14 @@ class StudyListNotifier extends StateNotifier<StudyListState> {
         myPublicBoards = results[0];
         myPrivateBoards = results[1];
 
+        debugPrint('[StudyProvider] My public boards: ${myPublicBoards.length}, private: ${myPrivateBoards.length}');
+
         // Combine and sort by updated_at
         myBoards = [...myPublicBoards, ...myPrivateBoards];
         myBoards.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+        debugPrint('[StudyProvider] Total my boards: ${myBoards.length}');
+      } else {
+        debugPrint('[StudyProvider] Skipping my boards - userId is null or guest');
       }
 
       state = state.copyWith(
@@ -126,7 +137,9 @@ class StudyListNotifier extends StateNotifier<StudyListState> {
         hasMorePublic: publicBoards.length >= _pageSize,
         hasMoreMy: false, // My boards typically don't need pagination
       );
+      debugPrint('[StudyProvider] ✅ State updated - publicBoards: ${publicBoards.length}, myBoards: ${myBoards.length}');
     } catch (e) {
+      debugPrint('[StudyProvider] ❌ Error loading boards: $e');
       if (!mounted) return;
       state = state.copyWith(
         isLoading: false,

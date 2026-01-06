@@ -353,7 +353,10 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
 
   /// Load user boards (lazy loaded when tab is selected)
   Future<void> loadBoards({bool forceRefresh = false}) async {
+    debugPrint('[Profile Boards] loadBoards called - forceRefresh: $forceRefresh, existing: ${state.boards.length}, isOwnProfile: $isOwnProfile');
+
     if (state.boards.isNotEmpty && !forceRefresh) {
+      debugPrint('[Profile Boards] Already have ${state.boards.length} boards, skipping load');
       return; // Already loaded
     }
 
@@ -367,14 +370,18 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
       List<UserBoard> boards;
 
       if (isOwnProfile) {
+        debugPrint('[Profile Boards] Loading own boards via getMyBoards()');
         // Use get_my_boards_paginated for own profile
         boards = await ProfileService.getMyBoards();
+        debugPrint('[Profile Boards] getMyBoards() returned ${boards.length} boards');
 
         // Update cursors based on returned boards
         _updateCursors(boards);
       } else {
+        debugPrint('[Profile Boards] Loading other user boards for userId: $userId');
         // Use direct query for other users (public boards only)
         boards = await ProfileService.getUserBoards(userId);
+        debugPrint('[Profile Boards] getUserBoards() returned ${boards.length} boards');
       }
 
       state = state.copyWith(
@@ -382,13 +389,15 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
         isLoadingBoards: false,
         hasMoreBoards: boards.length >= 20, // Assume more if we got a full page
       );
+      debugPrint('[Profile Boards] ✅ State updated with ${boards.length} boards');
 
       // Cache boards only for own profile
       if (isOwnProfile) {
         await ProfileCacheService.cacheUserBoards(boards);
+        debugPrint('[Profile Boards] Cached boards to local storage');
       }
     } catch (e) {
-      debugPrint('Error loading boards: $e');
+      debugPrint('[Profile Boards] ❌ Error loading boards: $e');
       state = state.copyWith(isLoadingBoards: false);
     }
   }

@@ -13,10 +13,18 @@ class FilterSheet extends ConsumerStatefulWidget {
     showModalBottomSheet(
       context: context,
       backgroundColor: Theme.of(context).colorScheme.surface,
+      isScrollControlled: true,
+      useSafeArea: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (context) => const FilterSheet(),
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.7,
+        minChildSize: 0.5,
+        maxChildSize: 0.95,
+        expand: false,
+        builder: (context, scrollController) => const FilterSheet(),
+      ),
     );
   }
 
@@ -128,6 +136,9 @@ class _FilterSheetState extends ConsumerState<FilterSheet> {
           ),
 
           const SizedBox(height: 24),
+
+          // Extra padding at bottom to account for tab bar
+          SizedBox(height: MediaQuery.of(context).padding.bottom + 80),
         ],
       ),
     );

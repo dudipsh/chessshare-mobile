@@ -135,8 +135,10 @@ class StudyService {
 
   /// Get user's boards with optional is_public filter
   static Future<List<StudyBoard>> getMyBoards(String userId, {bool? isPublic}) async {
+    debugPrint('[StudyService] getMyBoards called - userId: $userId, isPublic: $isPublic');
     try {
       // Try RPC first for better performance
+      debugPrint('[StudyService] Calling get_my_boards_paginated RPC with p_is_public: $isPublic');
       final response = await SupabaseService.client.rpc(
         'get_my_boards_paginated',
         params: {
@@ -146,12 +148,18 @@ class StudyService {
         },
       );
 
-      if (response != null) {
-        return (response as List).map((j) => StudyBoard.fromRpcJson(j as Map<String, dynamic>)).toList();
+      debugPrint('[StudyService] RPC response: $response');
+      if (response != null && (response as List).isNotEmpty) {
+        final boards = response.map((j) => StudyBoard.fromRpcJson(j as Map<String, dynamic>)).toList();
+        debugPrint('[StudyService] ✅ Parsed ${boards.length} boards from RPC');
+        return boards;
       }
-      return [];
+
+      // RPC returned empty - try fallback (RPC might have auth issues)
+      debugPrint('[StudyService] RPC returned empty, trying direct query fallback');
+      return _getMyBoardsFallback(userId, isPublic: isPublic);
     } catch (e) {
-      debugPrint('Error fetching my boards via RPC: $e, trying fallback');
+      debugPrint('[StudyService] ❌ Error fetching my boards via RPC: $e, trying fallback');
       // Fallback to direct query
       return _getMyBoardsFallback(userId, isPublic: isPublic);
     }
@@ -159,6 +167,7 @@ class StudyService {
 
   /// Fallback for getting user's boards
   static Future<List<StudyBoard>> _getMyBoardsFallback(String userId, {bool? isPublic}) async {
+    debugPrint('[StudyService] _getMyBoardsFallback - userId: $userId, isPublic: $isPublic');
     try {
       var query = SupabaseService.client
           .from('boards')
@@ -175,10 +184,13 @@ class StudyService {
       }
 
       final response = await query.order('updated_at', ascending: false);
+      debugPrint('[StudyService] Fallback response: ${(response as List).length} boards');
 
-      return (response as List).map((j) => StudyBoard.fromJson(j)).toList();
+      final boards = response.map((j) => StudyBoard.fromJson(j)).toList();
+      debugPrint('[StudyService] ✅ Fallback parsed ${boards.length} boards');
+      return boards;
     } catch (e) {
-      debugPrint('Error fetching my boards fallback: $e');
+      debugPrint('[StudyService] ❌ Error fetching my boards fallback: $e');
       return [];
     }
   }

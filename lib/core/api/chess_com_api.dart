@@ -47,7 +47,10 @@ class ChessComApi {
     try {
       final response = await http.get(
         Uri.parse('$_baseUrl/player/$username/games/archives'),
-        headers: {'Accept': 'application/json'},
+        headers: {
+          'Accept': 'application/json',
+          'Cache-Control': 'no-cache',
+        },
       );
 
       if (response.statusCode == 200) {
@@ -70,7 +73,10 @@ class ChessComApi {
     try {
       final response = await http.get(
         Uri.parse(archiveUrl),
-        headers: {'Accept': 'application/json'},
+        headers: {
+          'Accept': 'application/json',
+          'Cache-Control': 'no-cache',
+        },
       );
 
       if (response.statusCode == 200) {

@@ -221,7 +221,6 @@ class MainShell extends ConsumerWidget {
 
     return Scaffold(
       body: child,
-      extendBody: true,
       bottomNavigationBar: Container(
         padding: EdgeInsets.only(
           left: 16,

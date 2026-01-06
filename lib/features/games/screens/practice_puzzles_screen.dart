@@ -1,4 +1,5 @@
 import 'package:chessground/chessground.dart';
+import 'package:confetti/confetti.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:fast_immutable_collections/fast_immutable_collections.dart';
 import 'package:flutter/material.dart';
@@ -10,6 +11,8 @@ import '../../../core/services/audio_service.dart';
 import '../../../core/widgets/board_settings_factory.dart';
 import '../../../core/widgets/board_settings_sheet.dart';
 import '../../../core/widgets/chess_board_shell.dart';
+import '../../gamification/models/xp_models.dart';
+import '../../gamification/providers/gamification_provider.dart';
 import '../models/analyzed_move.dart';
 import '../models/game_puzzle.dart';
 import '../widgets/move_markers.dart';
@@ -52,13 +55,29 @@ class _PracticePuzzlesScreenState extends ConsumerState<PracticePuzzlesScreen> {
   bool _showHint = false;
   MoveClassification? _feedbackMarker;
   bool _puzzleFailed = false; // Track if current puzzle had any wrong moves
+  late ConfettiController _confettiController;
+  int _totalXpEarned = 0;
+  int? _initialTotalXp;
 
   GamePuzzle get currentPuzzle => widget.puzzles[_currentPuzzleIndex];
 
   @override
   void initState() {
     super.initState();
+    _confettiController = ConfettiController(duration: const Duration(seconds: 2));
     _loadPuzzle();
+
+    // Get initial XP for tracking level ups
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final gamificationState = ref.read(gamificationProvider);
+      _initialTotalXp = gamificationState.totalXp;
+    });
+  }
+
+  @override
+  void dispose() {
+    _confettiController.dispose();
+    super.dispose();
   }
 
   void _loadPuzzle() {
@@ -115,8 +134,12 @@ class _PracticePuzzlesScreenState extends ConsumerState<PracticePuzzlesScreen> {
       _state = PuzzlePracticeState.completed;
       if (!_puzzleFailed) {
         _correctPuzzles++;
+        // Award XP for solving puzzle correctly
+        _awardPuzzleXp();
       }
       _feedback = 'Excellent! Puzzle complete!';
+      // Play confetti for completed puzzle
+      _confettiController.play();
       setState(() {});
     } else if (_currentMoveIndex % 2 == 1) {
       // Opponent's turn - play their move automatically
@@ -201,6 +224,18 @@ class _PracticePuzzlesScreenState extends ConsumerState<PracticePuzzlesScreen> {
     }
   }
 
+  void _awardPuzzleXp() {
+    // Award XP for solving puzzle correctly
+    const xpPerPuzzle = XpEventType.puzzleSolve;
+    _totalXpEarned += xpPerPuzzle.defaultXp;
+
+    // Actually award XP through the provider
+    ref.read(gamificationProvider.notifier).awardXp(
+      XpEventType.puzzleSolve,
+      relatedId: widget.gameId,
+    );
+  }
+
   void _nextPuzzle() {
     if (_currentPuzzleIndex < widget.puzzles.length - 1) {
       _currentPuzzleIndex++;
@@ -210,11 +245,14 @@ class _PracticePuzzlesScreenState extends ConsumerState<PracticePuzzlesScreen> {
         context: context,
         correctCount: _correctPuzzles,
         total: widget.puzzles.length,
+        totalXpEarned: _totalXpEarned,
+        previousTotalXp: _initialTotalXp,
         onTryAgain: () {
           Navigator.pop(context);
           setState(() {
             _currentPuzzleIndex = 0;
             _correctPuzzles = 0;
+            _totalXpEarned = 0;
             _loadPuzzle();
           });
         },
@@ -308,42 +346,68 @@ class _PracticePuzzlesScreenState extends ConsumerState<PracticePuzzlesScreen> {
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
-            _buildPuzzleHeader(isDark),
-            Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Stack(
-                children: [
-                  _buildChessboard(boardSize),
-                  if (_feedbackMarker != null && _lastMove != null)
-                    _buildFeedbackMarker(boardSize),
-                  if (_showHint && _expectedMoveUci != null)
-                    _buildHintMarker(boardSize),
-                ],
-              ),
+      body: Stack(
+        children: [
+          SingleChildScrollView(
+            child: Column(
+              children: [
+                _buildPuzzleHeader(isDark),
+                Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Stack(
+                    children: [
+                      _buildChessboard(boardSize),
+                      if (_feedbackMarker != null && _lastMove != null)
+                        _buildFeedbackMarker(boardSize),
+                      if (_showHint && _expectedMoveUci != null)
+                        _buildHintMarker(boardSize),
+                    ],
+                  ),
+                ),
+                if (_state == PuzzlePracticeState.ready)
+                  _buildHintButton(isDark),
+                if (_feedback != null)
+                  FeedbackMessage(
+                    message: _feedback!,
+                    state: _mapToPracticeState(),
+                    isDark: isDark,
+                  ),
+                _buildInstructions(isDark),
+                PracticeProgressBar(
+                  currentIndex: _currentPuzzleIndex,
+                  total: widget.puzzles.length,
+                  correctCount: _correctPuzzles,
+                  isDark: isDark,
+                ),
+                if (_state == PuzzlePracticeState.completed)
+                  _buildActionButtons(isDark),
+                SizedBox(height: MediaQuery.of(context).padding.bottom + 16),
+              ],
             ),
-            if (_state == PuzzlePracticeState.ready)
-              _buildHintButton(isDark),
-            if (_feedback != null)
-              FeedbackMessage(
-                message: _feedback!,
-                state: _mapToPracticeState(),
-                isDark: isDark,
-              ),
-            _buildInstructions(isDark),
-            PracticeProgressBar(
-              currentIndex: _currentPuzzleIndex,
-              total: widget.puzzles.length,
-              correctCount: _correctPuzzles,
-              isDark: isDark,
+          ),
+          // Confetti overlay for puzzle completion
+          Align(
+            alignment: Alignment.topCenter,
+            child: ConfettiWidget(
+              confettiController: _confettiController,
+              blastDirectionality: BlastDirectionality.explosive,
+              shouldLoop: false,
+              colors: const [
+                Colors.green,
+                Colors.blue,
+                Colors.pink,
+                Colors.orange,
+                Colors.purple,
+                Colors.yellow,
+              ],
+              numberOfParticles: 20,
+              maxBlastForce: 15,
+              minBlastForce: 5,
+              emissionFrequency: 0.05,
+              gravity: 0.3,
             ),
-            if (_state == PuzzlePracticeState.completed)
-              _buildActionButtons(isDark),
-            SizedBox(height: MediaQuery.of(context).padding.bottom + 16),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

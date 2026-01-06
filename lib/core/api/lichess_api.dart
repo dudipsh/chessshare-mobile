@@ -35,7 +35,10 @@ class LichessApi {
         Uri.parse(
           '$_baseUrl/games/user/$username?max=$max&rated=$rated&opening=true&pgnInJson=true',
         ),
-        headers: {'Accept': 'application/x-ndjson'},
+        headers: {
+          'Accept': 'application/x-ndjson',
+          'Cache-Control': 'no-cache',
+        },
       );
 
       if (response.statusCode == 200) {

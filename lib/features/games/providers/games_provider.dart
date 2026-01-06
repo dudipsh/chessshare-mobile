@@ -165,15 +165,25 @@ class GamesNotifier extends StateNotifier<GamesState> {
   /// Auto-import games from saved profiles in background
   /// This runs silently without blocking the UI
   Future<void> _autoImportInBackground() async {
-    if (!mounted) return;
+    debugPrint('[Games] _autoImportInBackground called');
+    if (!mounted) {
+      debugPrint('[Games] Not mounted, skipping auto import');
+      return;
+    }
 
-    if (state.hasAutoImported) return;
+    if (state.hasAutoImported) {
+      debugPrint('[Games] Already auto imported, skipping');
+      return;
+    }
 
     final hasChessCom = _chessComUsername?.isNotEmpty ?? false;
     final hasLichess = _lichessUsername?.isNotEmpty ?? false;
 
+    debugPrint('[Games] hasChessCom: $hasChessCom ($_chessComUsername), hasLichess: $hasLichess ($_lichessUsername)');
+
     // If no profiles to import from, mark as done
     if (!hasChessCom && !hasLichess) {
+      debugPrint('[Games] No profiles to import from');
       if (mounted) {
         state = state.copyWith(hasAutoImported: true);
       }
@@ -188,15 +198,18 @@ class GamesNotifier extends StateNotifier<GamesState> {
     try {
       // Import from Chess.com first if available
       if (hasChessCom && mounted) {
+        debugPrint('[Games] Starting Chess.com sync...');
         await _importFromChessComSilent(_chessComUsername!);
       }
 
       // Then import from Lichess if available
       if (hasLichess && mounted) {
+        debugPrint('[Games] Starting Lichess sync...');
         await _importFromLichessSilent(_lichessUsername!);
       }
     } finally {
       if (mounted) {
+        debugPrint('[Games] Auto import complete');
         state = state.copyWith(
           isSyncingInBackground: false,
           hasAutoImported: true,
@@ -209,27 +222,40 @@ class GamesNotifier extends StateNotifier<GamesState> {
   Future<void> _importFromChessComSilent(String username) async {
     if (!mounted) return;
 
+    debugPrint('[ChessCom Sync] Starting sync for user: $username');
+
     try {
       final isValid = await ChessComApi.validateUsername(username);
+      debugPrint('[ChessCom Sync] Username valid: $isValid');
       if (!mounted || !isValid) return;
 
       final archives = await ChessComApi.getArchives(username);
+      debugPrint('[ChessCom Sync] Found ${archives.length} archives');
       if (!mounted || archives.isEmpty) return;
 
       final maxArchives = archives.take(3).toList();
+      debugPrint('[ChessCom Sync] Processing ${maxArchives.length} recent archives: $maxArchives');
       final allGames = <ChessGame>[];
 
       for (final archive in maxArchives) {
         if (!mounted) return;
         final archiveGames = await ChessComApi.getGamesFromArchive(archive, username);
+        debugPrint('[ChessCom Sync] Archive $archive: ${archiveGames.length} games');
+        if (archiveGames.isNotEmpty) {
+          debugPrint('[ChessCom Sync] First game date: ${archiveGames.first.playedAt}');
+          debugPrint('[ChessCom Sync] Last game date: ${archiveGames.last.playedAt}');
+        }
         allGames.addAll(archiveGames);
       }
 
+      debugPrint('[ChessCom Sync] Total games fetched: ${allGames.length}');
       if (!mounted) return;
 
       // Merge with existing games
       final existingIds = state.games.map((g) => g.externalId).toSet();
       final newGames = allGames.where((g) => !existingIds.contains(g.externalId)).toList();
+
+      debugPrint('[ChessCom Sync] Existing games: ${state.games.length}, New games: ${newGames.length}');
 
       if (newGames.isNotEmpty) {
         final mergedGames = [...state.games, ...newGames]
@@ -238,10 +264,12 @@ class GamesNotifier extends StateNotifier<GamesState> {
         state = state.copyWith(games: mergedGames);
         _updateGamesWithAnalysisStatus();
         await GamesCacheService.cacheGames(state.games);
-        debugPrint('Background sync: Added ${newGames.length} new Chess.com games');
+        debugPrint('[ChessCom Sync] ✅ Added ${newGames.length} new Chess.com games');
+      } else {
+        debugPrint('[ChessCom Sync] No new games to add');
       }
     } catch (e) {
-      debugPrint('Background Chess.com sync error: $e');
+      debugPrint('[ChessCom Sync] ❌ Error: $e');
     }
   }
 
@@ -249,16 +277,26 @@ class GamesNotifier extends StateNotifier<GamesState> {
   Future<void> _importFromLichessSilent(String username) async {
     if (!mounted) return;
 
+    debugPrint('[Lichess Sync] Starting sync for user: $username');
+
     try {
       final isValid = await LichessApi.validateUsername(username);
+      debugPrint('[Lichess Sync] Username valid: $isValid');
       if (!mounted || !isValid) return;
 
       final games = await LichessApi.getGames(username, max: 100);
+      debugPrint('[Lichess Sync] Fetched ${games.length} games');
+      if (games.isNotEmpty) {
+        debugPrint('[Lichess Sync] First game date: ${games.first.playedAt}');
+        debugPrint('[Lichess Sync] Last game date: ${games.last.playedAt}');
+      }
       if (!mounted) return;
 
       // Merge with existing games
       final existingIds = state.games.map((g) => g.externalId).toSet();
       final newGames = games.where((g) => !existingIds.contains(g.externalId)).toList();
+
+      debugPrint('[Lichess Sync] Existing games: ${state.games.length}, New games: ${newGames.length}');
 
       if (newGames.isNotEmpty) {
         final mergedGames = [...state.games, ...newGames]
@@ -267,10 +305,12 @@ class GamesNotifier extends StateNotifier<GamesState> {
         state = state.copyWith(games: mergedGames);
         _updateGamesWithAnalysisStatus();
         await GamesCacheService.cacheGames(state.games);
-        debugPrint('Background sync: Added ${newGames.length} new Lichess games');
+        debugPrint('[Lichess Sync] ✅ Added ${newGames.length} new Lichess games');
+      } else {
+        debugPrint('[Lichess Sync] No new games to add');
       }
     } catch (e) {
-      debugPrint('Background Lichess sync error: $e');
+      debugPrint('[Lichess Sync] ❌ Error: $e');
     }
   }
 

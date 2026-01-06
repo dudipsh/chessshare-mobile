@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../features/profile/models/profile_data.dart';
 import 'base_repository.dart';
@@ -128,6 +129,8 @@ class ProfileRepository {
     required int limit,
     DateTime? cursor,
   }) async {
+    debugPrint('[ProfileRepository] _fetchMyBoardsByVisibility - isPublic: $isPublic, limit: $limit, cursor: $cursor');
+
     final rpcResult = await BaseRepository.executeRpc<List<UserBoard>>(
       functionName: 'get_my_boards_paginated',
       params: {
@@ -136,8 +139,10 @@ class ProfileRepository {
         'p_cursor_created_at': cursor?.toUtc().toIso8601String(),
       },
       parser: (response) {
+        debugPrint('[ProfileRepository] get_my_boards_paginated response (isPublic=$isPublic): $response');
         if (response == null) return <UserBoard>[];
         final list = response as List;
+        debugPrint('[ProfileRepository] Parsing ${list.length} boards (isPublic=$isPublic)');
         return list.map((e) {
           final map = e as Map<String, dynamic>;
           return UserBoard(
@@ -156,7 +161,57 @@ class ProfileRepository {
       defaultValue: <UserBoard>[],
     );
 
+    debugPrint('[ProfileRepository] _fetchMyBoardsByVisibility result (isPublic=$isPublic): ${rpcResult.data?.length ?? 0} boards, success: ${rpcResult.success}, error: ${rpcResult.error}');
+
+    // If RPC returned empty, try direct query fallback
+    if (rpcResult.data?.isEmpty ?? true) {
+      debugPrint('[ProfileRepository] RPC returned empty, trying direct query fallback');
+      return _fetchMyBoardsByVisibilityFallback(isPublic: isPublic, limit: limit);
+    }
+
     return rpcResult.data ?? [];
+  }
+
+  /// Fallback method using direct query instead of RPC
+  static Future<List<UserBoard>> _fetchMyBoardsByVisibilityFallback({
+    required bool isPublic,
+    required int limit,
+  }) async {
+    try {
+      final client = Supabase.instance.client;
+      final userId = client.auth.currentUser?.id;
+      if (userId == null) {
+        debugPrint('[ProfileRepository] No user ID for fallback query');
+        return [];
+      }
+
+      final response = await client
+          .from('boards')
+          .select('id, title, cover_image_url, is_public, views_count, likes_count, created_at')
+          .eq('owner_id', userId)
+          .eq('is_public', isPublic)
+          .order('created_at', ascending: false)
+          .limit(limit);
+
+      final boards = (response as List).map((e) {
+        final map = e as Map<String, dynamic>;
+        return UserBoard(
+          id: map['id'] as String,
+          title: map['title'] as String? ?? 'Untitled Board',
+          coverImageUrl: map['cover_image_url'] as String?,
+          isPublic: map['is_public'] as bool? ?? true,
+          viewsCount: (map['views_count'] as num?)?.toInt() ?? 0,
+          likesCount: (map['likes_count'] as num?)?.toInt() ?? 0,
+          createdAt: DateTime.parse(map['created_at'] as String),
+        );
+      }).toList();
+
+      debugPrint('[ProfileRepository] ✅ Fallback returned ${boards.length} boards (isPublic=$isPublic)');
+      return boards;
+    } catch (e) {
+      debugPrint('[ProfileRepository] ❌ Fallback error: $e');
+      return [];
+    }
   }
 
   /// Get another user's public boards - uses get_user_boards_with_author RPC
