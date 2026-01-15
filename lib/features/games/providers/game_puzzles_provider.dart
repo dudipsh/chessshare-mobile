@@ -109,6 +109,11 @@ class GamePuzzlesNotifier extends StateNotifier<GamePuzzlesState> {
       );
 
       final puzzles = result.puzzles.map((extracted) {
+        // Determine player color from FEN - the side to move in the puzzle position
+        // In a puzzle, the player plays as whoever needs to make the next move
+        final setup = Setup.parseFen(extracted.fen);
+        final puzzlePlayerColor = setup.turn == Side.white ? 'white' : 'black';
+
         // Convert ExtractedPuzzle to GamePuzzle
         // Create a synthetic AnalyzedMove for the originalMistake reference
         final syntheticMistake = AnalyzedMove(
@@ -129,7 +134,7 @@ class GamePuzzlesNotifier extends StateNotifier<GamePuzzlesState> {
           id: const Uuid().v4(),
           gameReviewId: _gameReviewId,
           fen: extracted.fen,
-          playerColor: _playerColor,
+          playerColor: puzzlePlayerColor,
           solutionUci: extracted.solution,
           solutionSan: [], // SAN not provided by server
           classification: syntheticMistake.classification,

@@ -379,6 +379,8 @@ class _PracticePuzzlesScreenState extends ConsumerState<PracticePuzzlesScreen> {
                   correctCount: _correctPuzzles,
                   isDark: isDark,
                 ),
+                // Navigation buttons - always visible
+                _buildNavigationButtons(isDark),
                 if (_state == PuzzlePracticeState.completed)
                   _buildActionButtons(isDark),
                 SizedBox(height: MediaQuery.of(context).padding.bottom + 16),
@@ -603,6 +605,20 @@ class _PracticePuzzlesScreenState extends ConsumerState<PracticePuzzlesScreen> {
     }
   }
 
+  void _previousPuzzle() {
+    if (_currentPuzzleIndex > 0) {
+      _currentPuzzleIndex--;
+      _loadPuzzle();
+    }
+  }
+
+  void _skipPuzzle() {
+    if (_currentPuzzleIndex < widget.puzzles.length - 1) {
+      _currentPuzzleIndex++;
+      _loadPuzzle();
+    }
+  }
+
   Widget _buildInstructions(bool isDark) {
     String text;
     switch (_state) {
@@ -626,6 +642,118 @@ class _PracticePuzzlesScreenState extends ConsumerState<PracticePuzzlesScreen> {
         text,
         style: TextStyle(fontSize: 15, color: isDark ? Colors.white70 : Colors.grey.shade700),
         textAlign: TextAlign.center,
+      ),
+    );
+  }
+
+  Widget _buildNavigationButtons(bool isDark) {
+    final hasPrevious = _currentPuzzleIndex > 0;
+    final hasNext = _currentPuzzleIndex < widget.puzzles.length - 1;
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      child: Row(
+        children: [
+          // Previous button
+          Expanded(
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: hasPrevious ? _previousPuzzle : null,
+                borderRadius: BorderRadius.circular(14),
+                child: Container(
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF1C1C1E) : Colors.white,
+                    borderRadius: BorderRadius.circular(14),
+                    boxShadow: hasPrevious
+                        ? [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.08),
+                              blurRadius: 12,
+                              offset: const Offset(0, 4),
+                            ),
+                          ]
+                        : null,
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.arrow_back,
+                        size: 18,
+                        color: hasPrevious
+                            ? (isDark ? Colors.white70 : Colors.grey.shade700)
+                            : (isDark ? Colors.grey.shade700 : Colors.grey.shade400),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Previous',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: hasPrevious
+                              ? (isDark ? Colors.white70 : Colors.grey.shade700)
+                              : (isDark ? Colors.grey.shade700 : Colors.grey.shade400),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          // Skip/Next button
+          Expanded(
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: hasNext ? _skipPuzzle : null,
+                borderRadius: BorderRadius.circular(14),
+                child: Container(
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF1C1C1E) : Colors.white,
+                    borderRadius: BorderRadius.circular(14),
+                    boxShadow: hasNext
+                        ? [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.08),
+                              blurRadius: 12,
+                              offset: const Offset(0, 4),
+                            ),
+                          ]
+                        : null,
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        'Skip',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: hasNext
+                              ? (isDark ? Colors.white70 : Colors.grey.shade700)
+                              : (isDark ? Colors.grey.shade700 : Colors.grey.shade400),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Icon(
+                        Icons.arrow_forward,
+                        size: 18,
+                        color: hasNext
+                            ? (isDark ? Colors.white70 : Colors.grey.shade700)
+                            : (isDark ? Colors.grey.shade700 : Colors.grey.shade400),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
