@@ -3,13 +3,14 @@ import 'dart:convert';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:uuid/uuid.dart';
 
+import '../../../core/api/review_api_service.dart';
 import '../../../core/api/supabase_service.dart';
 import '../../../core/database/local_database.dart';
 import '../models/analyzed_move.dart';
 import '../models/chess_game.dart';
 import '../models/game_review.dart';
-import '../models/move_classification.dart';
 import '../services/game_analysis_service.dart';
 import '../utils/chess_position_utils.dart';
 
@@ -326,19 +327,38 @@ class GameReviewNotifier extends StateNotifier<GameReviewState> {
     }
   }
 
-  /// Analyze a game
+  /// Analyze a game using the Review API server
   Future<void> analyzeGame(ChessGame game) async {
     if (_analysisService.isAnalyzing) return;
 
     state = state.copyWith(
       isAnalyzing: true,
       analysisProgress: 0,
-      analysisMessage: 'Starting analysis...',
+      analysisMessage: 'Connecting to server...',
       error: null,
     );
 
     try {
-      final review = await _analysisService.analyzeGame(
+      // Try server-side analysis first
+      final review = await _analyzeWithServer(game);
+      if (review != null) {
+        state = state.copyWith(
+          review: review,
+          isAnalyzing: false,
+          analysisProgress: 1.0,
+          analysisMessage: null,
+          currentMoveIndex: 0,
+        );
+        return;
+      }
+
+      // Fallback to local analysis if server fails
+      debugPrint('GameReviewProvider: Server unavailable, falling back to local analysis');
+      state = state.copyWith(
+        analysisMessage: 'Server unavailable, analyzing locally...',
+      );
+
+      final localReview = await _analysisService.analyzeGame(
         game: game,
         userId: _userId,
         onProgress: (progress) {
@@ -350,7 +370,7 @@ class GameReviewNotifier extends StateNotifier<GameReviewState> {
       );
 
       state = state.copyWith(
-        review: review,
+        review: localReview,
         isAnalyzing: false,
         analysisProgress: 1.0,
         analysisMessage: null,
@@ -365,6 +385,165 @@ class GameReviewNotifier extends StateNotifier<GameReviewState> {
         error: wasCancelled ? null : e.toString(),
       );
     }
+  }
+
+  /// Analyze game using the Review API server
+  Future<GameReview?> _analyzeWithServer(ChessGame game) async {
+    try {
+      // Check if server is healthy
+      final health = await ReviewApiService.checkHealth();
+      if (!health.isHealthy) {
+        debugPrint('GameReviewProvider: Server not healthy: ${health.error}');
+        return null;
+      }
+
+      final reviewId = const Uuid().v4();
+      final moves = <AnalyzedMove>[];
+      String? serverReviewId;
+      Map<String, double>? accuracy;
+
+      // Convert platform to string
+      final platform = game.platform == GamePlatform.chesscom ? 'chesscom' : 'lichess';
+
+      // Stream analysis events
+      final stream = ReviewApiService.reviewGame(
+        pgn: game.pgn,
+        playerColor: game.playerColor,
+        platform: platform,
+        gameId: game.externalId,
+      );
+
+      await for (final event in stream) {
+        switch (event) {
+          case ReviewProgressEvent():
+            state = state.copyWith(
+              analysisProgress: event.percentage / 100,
+              analysisMessage: 'Analyzing move ${event.currentMove} of ${event.totalMoves}...',
+            );
+
+          case ReviewMoveEvent():
+            final move = _convertServerMoveToAnalyzedMove(
+              event,
+              reviewId,
+            );
+            moves.add(move);
+
+          case ReviewCompleteEvent():
+            serverReviewId = event.reviewId;
+            accuracy = event.accuracy;
+
+          case ReviewErrorEvent():
+            throw ReviewApiException(event.message, code: event.code);
+        }
+      }
+
+      if (moves.isEmpty) {
+        debugPrint('GameReviewProvider: No moves received from server');
+        return null;
+      }
+
+      // Build accuracy summaries
+      final whiteMoves = moves.where((m) => m.color == 'white').toList();
+      final blackMoves = moves.where((m) => m.color == 'black').toList();
+
+      final whiteSummary = accuracy != null && accuracy['white'] != null
+          ? AccuracySummary.fromMoves(whiteMoves)
+          : AccuracySummary.fromMoves(whiteMoves);
+
+      final blackSummary = accuracy != null && accuracy['black'] != null
+          ? AccuracySummary.fromMoves(blackMoves)
+          : AccuracySummary.fromMoves(blackMoves);
+
+      final review = GameReview(
+        id: serverReviewId ?? reviewId,
+        userId: _userId,
+        gameId: game.id,
+        game: game,
+        status: ReviewStatus.completed,
+        progress: 1.0,
+        whiteSummary: whiteSummary,
+        blackSummary: blackSummary,
+        moves: moves,
+        depth: 18,
+        analyzedAt: DateTime.now(),
+        createdAt: DateTime.now(),
+      );
+
+      // Cache locally
+      await _cacheReviewLocally(review);
+
+      return review;
+    } on RateLimitException catch (e) {
+      debugPrint('GameReviewProvider: Rate limit exceeded: ${e.message}');
+      state = state.copyWith(
+        error: 'Daily analysis limit reached. Resets ${_formatResetTime(e.resetAt)}',
+      );
+      rethrow;
+    } on ReviewApiException catch (e) {
+      debugPrint('GameReviewProvider: API error: ${e.message}');
+      if (e.code == 'AUTH_REQUIRED') {
+        state = state.copyWith(
+          error: 'Please sign in to analyze games',
+        );
+        rethrow;
+      }
+      // For other API errors, return null to trigger fallback
+      return null;
+    } catch (e) {
+      debugPrint('GameReviewProvider: Server analysis failed: $e');
+      return null;
+    }
+  }
+
+  /// Convert server move event to AnalyzedMove
+  AnalyzedMove _convertServerMoveToAnalyzedMove(
+    ReviewMoveEvent event,
+    String reviewId,
+  ) {
+    return AnalyzedMove(
+      id: '${reviewId}_${event.moveNumber}',
+      gameReviewId: reviewId,
+      moveNumber: event.moveNumber + 1, // Convert from 0-indexed
+      color: event.color,
+      fen: event.fen,
+      san: event.san,
+      uci: event.move,
+      classification: _convertMarkerType(event.markerType),
+      evalBefore: (event.evaluationBefore * 100).round(), // Convert to centipawns
+      evalAfter: (event.evaluationAfter * 100).round(),
+      bestMove: event.bestMove,
+      bestMoveUci: event.bestMoveUci ?? event.bestMove,
+      centipawnLoss: event.centipawnLoss.round().abs(),
+    );
+  }
+
+  /// Convert server marker type to MoveClassification
+  MoveClassification _convertMarkerType(String serverMarkerType) {
+    return switch (serverMarkerType.toUpperCase()) {
+      'BOOK' => MoveClassification.book,
+      'BRILLIANT' => MoveClassification.brilliant,
+      'GREAT' => MoveClassification.great,
+      'BEST' => MoveClassification.best,
+      'GOOD' => MoveClassification.good,
+      'INACCURACY' => MoveClassification.inaccuracy,
+      'MISTAKE' => MoveClassification.mistake,
+      'MISS' => MoveClassification.miss,
+      'BLUNDER' => MoveClassification.blunder,
+      'FORCED' => MoveClassification.forced,
+      _ => MoveClassification.good,
+    };
+  }
+
+  /// Format reset time for user display
+  String _formatResetTime(DateTime? resetAt) {
+    if (resetAt == null) return 'later';
+    final diff = resetAt.difference(DateTime.now());
+    if (diff.inHours > 0) {
+      return 'in ${diff.inHours} hours';
+    } else if (diff.inMinutes > 0) {
+      return 'in ${diff.inMinutes} minutes';
+    }
+    return 'soon';
   }
 
   /// Navigate to a specific move
