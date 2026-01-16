@@ -108,8 +108,8 @@ class _StudyBoardScreenState extends ConsumerState<StudyBoardScreen> {
               if ((state.board?.variations.length ?? 0) > 1)
                 _buildCurrentVariationIndicator(state, isDark),
               StudyProgressBar(
-                moveIndex: state.moveIndex,
-                totalMoves: state.totalMoves,
+                moveIndex: state.currentFullMoves,
+                totalMoves: state.totalFullMoves,
                 progress: state.progress,
                 isCompleted: state.state == StudyState.completed,
                 isDark: isDark,

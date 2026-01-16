@@ -106,6 +106,10 @@ class StudyBoardState {
 
   double get progress => totalMoves > 0 ? moveIndex / totalMoves : 0;
 
+  /// Full moves (not plies) - each full move consists of white + black move
+  int get currentFullMoves => moveIndex ~/ 2;
+  int get totalFullMoves => totalMoves ~/ 2;
+
   bool get isUserTurn {
     // User plays from the orientation side
     // If playerColor is white, user plays on even indices (0, 2, 4...)
