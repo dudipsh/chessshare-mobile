@@ -4,10 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../../core/api/review_api_service.dart';
 import '../../../core/database/local_database.dart';
 import '../../../core/services/audio_service.dart';
 import '../../../core/widgets/board_settings_sheet.dart';
-import '../../analysis/services/stockfish_service.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../models/analyzed_move.dart';
 import '../models/chess_game.dart';
@@ -498,46 +498,18 @@ class _GameReviewScreenState extends ConsumerState<GameReviewScreen> {
         return;
       }
 
-      // No existing puzzles - generate new ones
-      final mistakes = _getTopMistakes(state);
-
-      if (mistakes.isEmpty) {
-        if (mounted) {
-          setState(() => _isGeneratingPuzzles = false);
-        }
-        return;
-      }
-
-      // Generate puzzle sequences using Stockfish
-      final stockfish = StockfishService(config: const StockfishConfig(
-        multiPv: 1,
-        hashSizeMb: 64,
-        threads: 2,
-        maxDepth: 18,
-      ));
-      await stockfish.initialize();
-
-      final puzzles = <GamePuzzle>[];
-
-      for (final mistake in mistakes) {
-        final puzzle = await _generatePuzzleSequence(stockfish, mistake, state.review!.id);
-        if (puzzle != null) {
-          puzzles.add(puzzle);
-        }
-      }
-
-      // Dispose stockfish after puzzle generation
-      stockfish.dispose();
+      // Extract puzzles using the Review API
+      final puzzles = await _extractPuzzlesFromApi(state.review!.id);
 
       if (!mounted) return;
 
       if (puzzles.isNotEmpty) {
-        // Save puzzles to database
         await _savePuzzlesToDb(puzzles);
       }
 
       setState(() => _isGeneratingPuzzles = false);
     } catch (e) {
+      debugPrint('Error auto-generating puzzles: $e');
       if (mounted) {
         setState(() => _isGeneratingPuzzles = false);
       }
@@ -562,45 +534,15 @@ class _GameReviewScreenState extends ConsumerState<GameReviewScreen> {
         return;
       }
 
-      // No existing puzzles - generate new ones
-      final mistakes = _getTopMistakes(state);
-
-      if (mistakes.isEmpty) {
-        if (!mounted) return;
-        setState(() => _isGeneratingPuzzles = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No mistakes to practice!')),
-        );
-        return;
-      }
-
-      // Generate puzzle sequences using Stockfish
-      final stockfish = StockfishService(config: const StockfishConfig(
-        multiPv: 1,
-        hashSizeMb: 64,
-        threads: 2,
-        maxDepth: 18,
-      ));
-      await stockfish.initialize();
-
-      final puzzles = <GamePuzzle>[];
-
-      for (final mistake in mistakes) {
-        final puzzle = await _generatePuzzleSequence(stockfish, mistake, state.review!.id);
-        if (puzzle != null) {
-          puzzles.add(puzzle);
-        }
-      }
-
-      // Dispose stockfish after puzzle generation
-      stockfish.dispose();
+      // Extract puzzles using the Review API
+      final puzzles = await _extractPuzzlesFromApi(state.review!.id);
 
       if (!mounted) return;
 
       if (puzzles.isEmpty) {
         setState(() => _isGeneratingPuzzles = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not generate puzzles')),
+          const SnackBar(content: Text('No puzzles found in this game')),
         );
         return;
       }
@@ -610,14 +552,74 @@ class _GameReviewScreenState extends ConsumerState<GameReviewScreen> {
 
       setState(() => _isGeneratingPuzzles = false);
       _navigateToPractice(puzzles);
+    } on RateLimitException catch (e) {
+      if (mounted) {
+        setState(() => _isGeneratingPuzzles = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.message)),
+        );
+      }
     } catch (e) {
       if (mounted) {
         setState(() => _isGeneratingPuzzles = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error generating puzzles: $e')),
+          SnackBar(content: Text('Error extracting puzzles: $e')),
         );
       }
     }
+  }
+
+  /// Extract puzzles from the Review API
+  Future<List<GamePuzzle>> _extractPuzzlesFromApi(String reviewId) async {
+    final result = await ReviewApiService.extractPuzzles(
+      pgn: widget.game.pgn,
+      playerColor: widget.game.playerColor,
+      reviewId: reviewId,
+    );
+
+    return result.puzzles.map((extracted) {
+      // Determine player color from FEN - the side to move in the puzzle position
+      final setup = Setup.parseFen(extracted.fen);
+      final puzzlePlayerColor = setup.turn == Side.white ? 'white' : 'black';
+
+      // Create a synthetic AnalyzedMove for the originalMistake reference
+      final syntheticMistake = AnalyzedMove(
+        id: '${reviewId}_puzzle_${extracted.moveNumber}',
+        gameReviewId: reviewId,
+        moveNumber: extracted.moveNumber,
+        color: extracted.moveNumber % 2 == 0 ? 'white' : 'black',
+        fen: extracted.fen,
+        san: '',
+        uci: extracted.playedMove,
+        classification: _typeToClassification(extracted.type),
+        bestMove: extracted.bestMove,
+        bestMoveUci: extracted.bestMove,
+        centipawnLoss: extracted.evaluationSwing.abs().round(),
+      );
+
+      return GamePuzzle(
+        id: const Uuid().v4(),
+        gameReviewId: reviewId,
+        fen: extracted.fen,
+        playerColor: puzzlePlayerColor,
+        solutionUci: extracted.solution,
+        solutionSan: [],
+        classification: syntheticMistake.classification,
+        theme: extracted.themes.isNotEmpty ? extracted.themes.first : 'tactics',
+        moveNumber: extracted.moveNumber,
+        originalMistake: syntheticMistake,
+      );
+    }).toList();
+  }
+
+  MoveClassification _typeToClassification(String type) {
+    return switch (type.toLowerCase()) {
+      'mistake' => MoveClassification.mistake,
+      'missed_tactic' => MoveClassification.miss,
+      'brilliant' => MoveClassification.brilliant,
+      'blunder' => MoveClassification.blunder,
+      _ => MoveClassification.mistake,
+    };
   }
 
   List<GamePuzzle> _parsePuzzlesFromDb(List<Map<String, dynamic>> dbPuzzles, GameReviewState state) {
@@ -679,113 +681,6 @@ class _GameReviewScreenState extends ConsumerState<GameReviewScreen> {
         ),
       ),
     );
-  }
-
-  Future<GamePuzzle?> _generatePuzzleSequence(
-    StockfishService stockfish,
-    AnalyzedMove mistake,
-    String reviewId,
-  ) async {
-    try {
-      final solutionUci = <String>[];
-      final solutionSan = <String>[];
-
-      var position = Chess.fromSetup(Setup.parseFen(mistake.fen));
-
-      // Generate 3-4 moves
-      for (int moveNum = 0; moveNum < 4; moveNum++) {
-        final analysis = await stockfish.evaluatePosition(position.fen, depth: 16);
-        if (analysis == null || analysis['bestMove'] == null) break;
-
-        final bestMoveUci = analysis['bestMove'] as String;
-        final move = _parseUciMoveForPuzzle(bestMoveUci);
-        if (move == null) break;
-
-        if (!position.legalMoves.containsKey(move.from)) break;
-
-        final san = position.makeSan(move).$2;
-        solutionUci.add(bestMoveUci);
-        solutionSan.add(san);
-
-        position = position.play(move) as Chess;
-
-        // After 3 moves, only continue if move 4 leads to material gain
-        if (moveNum == 2) {
-          final nextAnalysis = await stockfish.evaluatePosition(position.fen, depth: 12);
-          if (nextAnalysis != null && nextAnalysis['bestMove'] != null) {
-            final nextMoveUci = nextAnalysis['bestMove'] as String;
-            final nextMove = _parseUciMoveForPuzzle(nextMoveUci);
-            if (nextMove != null && position.legalMoves.containsKey(nextMove.from)) {
-              final nextSan = position.makeSan(nextMove).$2;
-              // Add if capture, check, or checkmate
-              if (nextSan.contains('x') || nextSan.contains('+') || nextSan.contains('#')) {
-                solutionUci.add(nextMoveUci);
-                solutionSan.add(nextSan);
-              }
-            }
-          }
-          break;
-        }
-      }
-
-      // Need at least 1 move
-      if (solutionUci.isEmpty) {
-        if (mistake.bestMoveUci != null) {
-          solutionUci.add(mistake.bestMoveUci!);
-          if (mistake.bestMove != null) solutionSan.add(mistake.bestMove!);
-        } else {
-          return null;
-        }
-      }
-
-      return GamePuzzle(
-        id: const Uuid().v4(),
-        gameReviewId: reviewId,
-        fen: mistake.fen,
-        playerColor: widget.game.playerColor,
-        solutionUci: solutionUci,
-        solutionSan: solutionSan,
-        classification: mistake.classification,
-        theme: _inferPuzzleTheme(mistake),
-        moveNumber: mistake.moveNumber,
-        originalMistake: mistake,
-      );
-    } catch (e) {
-      return null;
-    }
-  }
-
-  NormalMove? _parseUciMoveForPuzzle(String uci) {
-    if (uci.length < 4) return null;
-    try {
-      final from = Square.fromName(uci.substring(0, 2));
-      final to = Square.fromName(uci.substring(2, 4));
-      Role? promotion;
-      if (uci.length > 4) {
-        switch (uci[4].toLowerCase()) {
-          case 'q':
-            promotion = Role.queen;
-          case 'r':
-            promotion = Role.rook;
-          case 'b':
-            promotion = Role.bishop;
-          case 'n':
-            promotion = Role.knight;
-        }
-      }
-      return NormalMove(from: from, to: to, promotion: promotion);
-    } catch (e) {
-      return null;
-    }
-  }
-
-  String? _inferPuzzleTheme(AnalyzedMove move) {
-    final san = move.bestMove ?? '';
-    if (san.contains('#')) return 'checkmate';
-    if (san.contains('+')) return 'check';
-    if (san.contains('x')) return 'capture';
-    if (san.startsWith('O-O')) return 'castling';
-    return 'tactics';
   }
 
   void _navigateToPlayVsStockfish(GameReviewState state, ExplorationState explorationState) {

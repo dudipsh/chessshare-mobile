@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:chessground/chessground.dart';
 import 'package:confetti/confetti.dart';
 import 'package:dartchess/dartchess.dart';
@@ -17,7 +19,6 @@ import '../models/analyzed_move.dart';
 import '../models/game_puzzle.dart';
 import '../widgets/move_markers.dart';
 import 'practice_mistakes/completion_dialog.dart';
-import 'practice_mistakes/feedback_message.dart';
 import 'practice_mistakes/hint_marker.dart';
 import 'practice_mistakes/practice_progress_bar.dart';
 
@@ -49,12 +50,13 @@ class _PracticePuzzlesScreenState extends ConsumerState<PracticePuzzlesScreen> {
   Chess? _position;
   Side _orientation = Side.white;
   PuzzlePracticeState _state = PuzzlePracticeState.ready;
-  String? _feedback;
   int _correctPuzzles = 0;
   NormalMove? _lastMove;
   bool _showHint = false;
+  bool _showMoveArrow = false; // Show full move (from -> to)
   MoveClassification? _feedbackMarker;
   bool _puzzleFailed = false; // Track if current puzzle had any wrong moves
+  bool _opponentStartsFirst = false; // Track if opponent plays first move
   late ConfettiController _confettiController;
   int _totalXpEarned = 0;
   int? _initialTotalXp;
@@ -86,12 +88,52 @@ class _PracticePuzzlesScreenState extends ConsumerState<PracticePuzzlesScreen> {
     _orientation = puzzle.playerColor == 'white' ? Side.white : Side.black;
     _currentMoveIndex = 0;
     _state = PuzzlePracticeState.ready;
-    _feedback = null;
     _feedbackMarker = null;
     _lastMove = null;
     _showHint = false;
+    _showMoveArrow = false;
     _puzzleFailed = false;
+
+    // Check if it's the opponent's turn first (FEN turn != player color)
+    final fenTurn = _position!.turn;
+    final playerSide = puzzle.playerColor == 'white' ? Side.white : Side.black;
+    _opponentStartsFirst = fenTurn != playerSide;
+
     setState(() {});
+
+    // If opponent starts first, play their move automatically
+    if (_opponentStartsFirst && puzzle.solutionUci.isNotEmpty) {
+      _state = PuzzlePracticeState.opponentPlaying;
+      setState(() {});
+
+      Future.delayed(const Duration(milliseconds: 800), () {
+        if (mounted) {
+          _playOpponentMoveFirst();
+        }
+      });
+    }
+  }
+
+  /// Play opponent's move when puzzle starts with opponent's turn
+  void _playOpponentMoveFirst() {
+    if (_position == null || currentPuzzle.solutionUci.isEmpty) return;
+
+    final opponentMoveUci = currentPuzzle.solutionUci[0];
+    final opponentMove = _parseUciMove(opponentMoveUci);
+
+    if (opponentMove != null && _position!.legalMoves.containsKey(opponentMove.from)) {
+      _playMoveSound(opponentMove, _position!);
+      _lastMove = opponentMove;
+      _position = _position!.play(opponentMove) as Chess;
+      _currentMoveIndex = 1; // Move to index 1 (player's turn)
+
+      _state = PuzzlePracticeState.ready;
+      setState(() {});
+    } else {
+      // If move is invalid, just let player play
+      _state = PuzzlePracticeState.ready;
+      setState(() {});
+    }
   }
 
   /// Get the expected move at current index
@@ -101,10 +143,27 @@ class _PracticePuzzlesScreenState extends ConsumerState<PracticePuzzlesScreen> {
   }
 
   /// Number of player moves required
-  int get _playerMovesRequired => (currentPuzzle.solutionUci.length + 1) ~/ 2;
+  int get _playerMovesRequired {
+    final total = currentPuzzle.solutionUci.length;
+    if (_opponentStartsFirst) {
+      // Player plays at odd indices (1, 3, 5...)
+      return total ~/ 2;
+    } else {
+      // Player plays at even indices (0, 2, 4...)
+      return (total + 1) ~/ 2;
+    }
+  }
 
   /// Current player move number (1-based)
-  int get _currentPlayerMoveNumber => (_currentMoveIndex ~/ 2) + 1;
+  int get _currentPlayerMoveNumber {
+    if (_opponentStartsFirst) {
+      // Player plays at indices 1, 3, 5... so player move count = (index + 1) ~/ 2
+      return (_currentMoveIndex + 1) ~/ 2;
+    } else {
+      // Player plays at indices 0, 2, 4... so player move count = (index ~/ 2) + 1
+      return (_currentMoveIndex ~/ 2) + 1;
+    }
+  }
 
   void _makeMove(NormalMove move) {
     if (_position == null || _state != PuzzlePracticeState.ready) return;
@@ -122,12 +181,24 @@ class _PracticePuzzlesScreenState extends ConsumerState<PracticePuzzlesScreen> {
     }
   }
 
+  /// Check if a given move index is the opponent's turn
+  bool _isOpponentTurnAt(int index) {
+    // If opponent starts first: opponent plays at even indices (0, 2, 4...)
+    // If player starts first: opponent plays at odd indices (1, 3, 5...)
+    if (_opponentStartsFirst) {
+      return index % 2 == 0;
+    } else {
+      return index % 2 == 1;
+    }
+  }
+
   void _handleCorrectMove(NormalMove move) {
     _lastMove = move;
     _feedbackMarker = MoveClassification.best;
     _position = _position!.play(move) as Chess;
     _currentMoveIndex++;
     _showHint = false;
+    _showMoveArrow = false;
 
     // Check if puzzle is complete
     if (_currentMoveIndex >= currentPuzzle.solutionUci.length) {
@@ -137,14 +208,14 @@ class _PracticePuzzlesScreenState extends ConsumerState<PracticePuzzlesScreen> {
         // Award XP for solving puzzle correctly
         _awardPuzzleXp();
       }
-      _feedback = 'Excellent! Puzzle complete!';
       // Play confetti for completed puzzle
       _confettiController.play();
       setState(() {});
-    } else if (_currentMoveIndex % 2 == 1) {
+      // Show completion modal
+      _showPuzzleCompletionModal();
+    } else if (_isOpponentTurnAt(_currentMoveIndex)) {
       // Opponent's turn - play their move automatically
       _state = PuzzlePracticeState.opponentPlaying;
-      _feedback = 'Good move!';
       setState(() {});
 
       Future.delayed(const Duration(milliseconds: 600), () {
@@ -155,7 +226,6 @@ class _PracticePuzzlesScreenState extends ConsumerState<PracticePuzzlesScreen> {
     } else {
       // Player's turn again
       _state = PuzzlePracticeState.ready;
-      _feedback = 'Good! Keep going...';
       setState(() {});
     }
   }
@@ -178,10 +248,8 @@ class _PracticePuzzlesScreenState extends ConsumerState<PracticePuzzlesScreen> {
         if (!_puzzleFailed) {
           _correctPuzzles++;
         }
-        _feedback = 'Excellent! Puzzle complete!';
       } else {
         _state = PuzzlePracticeState.ready;
-        _feedback = 'Your turn - find the next move!';
       }
       setState(() {});
     }
@@ -194,7 +262,6 @@ class _PracticePuzzlesScreenState extends ConsumerState<PracticePuzzlesScreen> {
     _lastMove = move;
     _showHint = false;
     _position = _position!.play(move) as Chess;
-    _feedback = 'Not quite right. Try again!';
     setState(() {});
 
     // Reset to current position after delay
@@ -205,8 +272,7 @@ class _PracticePuzzlesScreenState extends ConsumerState<PracticePuzzlesScreen> {
         setState(() {
           _lastMove = null;
           _state = PuzzlePracticeState.ready;
-          _feedback = null;
-          _feedbackMarker = null;
+                _feedbackMarker = null;
         });
       }
     });
@@ -233,6 +299,134 @@ class _PracticePuzzlesScreenState extends ConsumerState<PracticePuzzlesScreen> {
     ref.read(gamificationProvider.notifier).awardXp(
       XpEventType.puzzleSolve,
       relatedId: widget.gameId,
+    );
+  }
+
+  void _showPuzzleCompletionModal() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final xpEarned = _puzzleFailed ? 0 : XpEventType.puzzleSolve.defaultXp;
+    final isLastPuzzle = _currentPuzzleIndex >= widget.puzzles.length - 1;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isDismissible: true,
+      builder: (context) => Container(
+        margin: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF1C1C1E) : Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.2),
+              blurRadius: 20,
+              offset: const Offset(0, -4),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Success icon
+            Container(
+              width: 60,
+              height: 60,
+              decoration: BoxDecoration(
+                color: Colors.green.withValues(alpha: 0.15),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.check_circle,
+                color: Colors.green,
+                size: 36,
+              ),
+            ),
+            const SizedBox(height: 12),
+            // Title
+            Text(
+              _puzzleFailed ? 'Puzzle Complete' : 'Well Done!',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: isDark ? Colors.white : Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 8),
+            // XP earned
+            if (!_puzzleFailed)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.amber.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.star, color: Colors.amber, size: 20),
+                    const SizedBox(width: 6),
+                    Text(
+                      '+$xpEarned XP',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.amber.shade700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            const SizedBox(height: 20),
+            // Navigation buttons
+            Row(
+              children: [
+                // Back button
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      if (_currentPuzzleIndex > 0) {
+                        _previousPuzzle();
+                      }
+                    },
+                    icon: const Icon(Icons.arrow_back, size: 18),
+                    label: const Text('Back'),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                // Next button
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _nextPuzzle();
+                    },
+                    icon: Icon(
+                      isLastPuzzle ? Icons.check : Icons.arrow_forward,
+                      size: 18,
+                    ),
+                    label: Text(isLastPuzzle ? 'Finish' : 'Next'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -361,18 +555,13 @@ class _PracticePuzzlesScreenState extends ConsumerState<PracticePuzzlesScreen> {
                         _buildFeedbackMarker(boardSize),
                       if (_showHint && _expectedMoveUci != null)
                         _buildHintMarker(boardSize),
+                      if (_showMoveArrow && _expectedMoveUci != null)
+                        _buildMoveArrowMarker(boardSize),
                     ],
                   ),
                 ),
                 if (_state == PuzzlePracticeState.ready)
-                  _buildHintButton(isDark),
-                if (_feedback != null)
-                  FeedbackMessage(
-                    message: _feedback!,
-                    state: _mapToPracticeState(),
-                    isDark: isDark,
-                  ),
-                _buildInstructions(isDark),
+                  _buildHintButtons(isDark),
                 PracticeProgressBar(
                   currentIndex: _currentPuzzleIndex,
                   total: widget.puzzles.length,
@@ -381,8 +570,6 @@ class _PracticePuzzlesScreenState extends ConsumerState<PracticePuzzlesScreen> {
                 ),
                 // Navigation buttons - always visible
                 _buildNavigationButtons(isDark),
-                if (_state == PuzzlePracticeState.completed)
-                  _buildActionButtons(isDark),
                 SizedBox(height: MediaQuery.of(context).padding.bottom + 16),
               ],
             ),
@@ -412,19 +599,6 @@ class _PracticePuzzlesScreenState extends ConsumerState<PracticePuzzlesScreen> {
         ],
       ),
     );
-  }
-
-  PracticeState _mapToPracticeState() {
-    switch (_state) {
-      case PuzzlePracticeState.ready:
-        return PracticeState.ready;
-      case PuzzlePracticeState.correct:
-      case PuzzlePracticeState.opponentPlaying:
-      case PuzzlePracticeState.completed:
-        return PracticeState.correct;
-      case PuzzlePracticeState.wrong:
-        return PracticeState.wrong;
-    }
   }
 
   Widget _buildPuzzleHeader(bool isDark) {
@@ -605,6 +779,44 @@ class _PracticePuzzlesScreenState extends ConsumerState<PracticePuzzlesScreen> {
     }
   }
 
+  Widget _buildMoveArrowMarker(double boardSize) {
+    final expectedMove = _expectedMoveUci;
+    if (expectedMove == null || expectedMove.length < 4) return const SizedBox.shrink();
+
+    try {
+      final from = Square.fromName(expectedMove.substring(0, 2));
+      final to = Square.fromName(expectedMove.substring(2, 4));
+      final squareSize = boardSize / 8;
+      const capturedPiecesSlotHeight = 24.0;
+
+      // Calculate positions based on orientation
+      double fromX = _orientation == Side.black ? (7 - from.file).toDouble() : from.file.toDouble();
+      double fromY = _orientation == Side.black ? from.rank.toDouble() : (7 - from.rank).toDouble();
+      double toX = _orientation == Side.black ? (7 - to.file).toDouble() : to.file.toDouble();
+      double toY = _orientation == Side.black ? to.rank.toDouble() : (7 - to.rank).toDouble();
+
+      // Center of squares
+      final startX = fromX * squareSize + squareSize / 2;
+      final startY = capturedPiecesSlotHeight + fromY * squareSize + squareSize / 2;
+      final endX = toX * squareSize + squareSize / 2;
+      final endY = capturedPiecesSlotHeight + toY * squareSize + squareSize / 2;
+
+      return CustomPaint(
+        size: Size(boardSize, boardSize + capturedPiecesSlotHeight * 2),
+        painter: _ArrowPainter(
+          startX: startX,
+          startY: startY,
+          endX: endX,
+          endY: endY,
+          color: Colors.blue.withValues(alpha: 0.7),
+          strokeWidth: squareSize * 0.15,
+        ),
+      );
+    } catch (e) {
+      return const SizedBox.shrink();
+    }
+  }
+
   void _previousPuzzle() {
     if (_currentPuzzleIndex > 0) {
       _currentPuzzleIndex--;
@@ -617,33 +829,6 @@ class _PracticePuzzlesScreenState extends ConsumerState<PracticePuzzlesScreen> {
       _currentPuzzleIndex++;
       _loadPuzzle();
     }
-  }
-
-  Widget _buildInstructions(bool isDark) {
-    String text;
-    switch (_state) {
-      case PuzzlePracticeState.ready:
-        text = _currentMoveIndex == 0
-            ? 'Find the best move'
-            : 'Find the next best move';
-      case PuzzlePracticeState.opponentPlaying:
-        text = 'Opponent is responding...';
-      case PuzzlePracticeState.correct:
-        text = 'Good move!';
-      case PuzzlePracticeState.wrong:
-        text = 'Not quite right...';
-      case PuzzlePracticeState.completed:
-        text = 'Puzzle complete!';
-    }
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      child: Text(
-        text,
-        style: TextStyle(fontSize: 15, color: isDark ? Colors.white70 : Colors.grey.shade700),
-        textAlign: TextAlign.center,
-      ),
-    );
   }
 
   Widget _buildNavigationButtons(bool isDark) {
@@ -758,76 +943,23 @@ class _PracticePuzzlesScreenState extends ConsumerState<PracticePuzzlesScreen> {
     );
   }
 
-  Widget _buildHintButton(bool isDark) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () => setState(() => _showHint = !_showHint),
-          borderRadius: BorderRadius.circular(14),
-          child: Container(
-            height: 48,
-            decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF1C1C1E) : Colors.white,
-              borderRadius: BorderRadius.circular(14),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.08),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    Colors.amber.withValues(alpha: _showHint ? 0.25 : 0.12),
-                    Colors.orange.withValues(alpha: _showHint ? 0.15 : 0.06),
-                  ],
-                ),
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    _showHint ? Icons.lightbulb : Icons.lightbulb_outline,
-                    size: 20,
-                    color: Colors.amber.shade700,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    _showHint ? 'Hide Hint' : 'Show Hint',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: isDark ? Colors.amber.shade300 : Colors.amber.shade800,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildActionButtons(bool isDark) {
+  Widget _buildHintButtons(bool isDark) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       child: Row(
         children: [
+          // Show Hint button (highlights the piece to move)
           Expanded(
             child: Material(
               color: Colors.transparent,
               child: InkWell(
-                onTap: _loadPuzzle,
+                onTap: () => setState(() {
+                  _showHint = !_showHint;
+                  if (_showHint) _showMoveArrow = false;
+                }),
                 borderRadius: BorderRadius.circular(14),
                 child: Container(
-                  height: 48,
+                  height: 44,
                   decoration: BoxDecoration(
                     color: isDark ? const Color(0xFF1C1C1E) : Colors.white,
                     borderRadius: BorderRadius.circular(14),
@@ -843,8 +975,8 @@ class _PracticePuzzlesScreenState extends ConsumerState<PracticePuzzlesScreen> {
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         colors: [
-                          Colors.grey.withValues(alpha: 0.12),
-                          Colors.grey.withValues(alpha: 0.06),
+                          Colors.amber.withValues(alpha: _showHint ? 0.25 : 0.12),
+                          Colors.orange.withValues(alpha: _showHint ? 0.15 : 0.06),
                         ],
                       ),
                       borderRadius: BorderRadius.circular(14),
@@ -852,14 +984,18 @@ class _PracticePuzzlesScreenState extends ConsumerState<PracticePuzzlesScreen> {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.refresh, size: 20, color: isDark ? Colors.white70 : Colors.grey.shade700),
-                        const SizedBox(width: 8),
+                        Icon(
+                          _showHint ? Icons.lightbulb : Icons.lightbulb_outline,
+                          size: 18,
+                          color: Colors.amber.shade700,
+                        ),
+                        const SizedBox(width: 6),
                         Text(
-                          'Retry',
+                          'Hint',
                           style: TextStyle(
-                            fontSize: 14,
+                            fontSize: 13,
                             fontWeight: FontWeight.w600,
-                            color: isDark ? Colors.white70 : Colors.grey.shade700,
+                            color: isDark ? Colors.amber.shade300 : Colors.amber.shade800,
                           ),
                         ),
                       ],
@@ -870,14 +1006,18 @@ class _PracticePuzzlesScreenState extends ConsumerState<PracticePuzzlesScreen> {
             ),
           ),
           const SizedBox(width: 8),
+          // Show Move button (shows the full move with arrow)
           Expanded(
             child: Material(
               color: Colors.transparent,
               child: InkWell(
-                onTap: _nextPuzzle,
+                onTap: () => setState(() {
+                  _showMoveArrow = !_showMoveArrow;
+                  if (_showMoveArrow) _showHint = false;
+                }),
                 borderRadius: BorderRadius.circular(14),
                 child: Container(
-                  height: 48,
+                  height: 44,
                   decoration: BoxDecoration(
                     color: isDark ? const Color(0xFF1C1C1E) : Colors.white,
                     borderRadius: BorderRadius.circular(14),
@@ -893,8 +1033,8 @@ class _PracticePuzzlesScreenState extends ConsumerState<PracticePuzzlesScreen> {
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         colors: [
-                          Colors.green.withValues(alpha: 0.15),
-                          Colors.teal.withValues(alpha: 0.08),
+                          Colors.blue.withValues(alpha: _showMoveArrow ? 0.25 : 0.12),
+                          Colors.indigo.withValues(alpha: _showMoveArrow ? 0.15 : 0.06),
                         ],
                       ),
                       borderRadius: BorderRadius.circular(14),
@@ -903,19 +1043,17 @@ class _PracticePuzzlesScreenState extends ConsumerState<PracticePuzzlesScreen> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Icon(
-                          _currentPuzzleIndex < widget.puzzles.length - 1
-                              ? Icons.arrow_forward
-                              : Icons.check_circle_outline,
-                          size: 20,
-                          color: Colors.green.shade600,
+                          _showMoveArrow ? Icons.visibility : Icons.visibility_outlined,
+                          size: 18,
+                          color: Colors.blue.shade700,
                         ),
-                        const SizedBox(width: 8),
+                        const SizedBox(width: 6),
                         Text(
-                          _currentPuzzleIndex < widget.puzzles.length - 1 ? 'Next' : 'Finish',
+                          'Show Move',
                           style: TextStyle(
-                            fontSize: 14,
+                            fontSize: 13,
                             fontWeight: FontWeight.w600,
-                            color: isDark ? Colors.green.shade300 : Colors.green.shade700,
+                            color: isDark ? Colors.blue.shade300 : Colors.blue.shade800,
                           ),
                         ),
                       ],
@@ -928,5 +1066,73 @@ class _PracticePuzzlesScreenState extends ConsumerState<PracticePuzzlesScreen> {
         ],
       ),
     );
+  }
+
+}
+
+/// Custom painter to draw an arrow from one point to another
+class _ArrowPainter extends CustomPainter {
+  final double startX;
+  final double startY;
+  final double endX;
+  final double endY;
+  final Color color;
+  final double strokeWidth;
+
+  _ArrowPainter({
+    required this.startX,
+    required this.startY,
+    required this.endX,
+    required this.endY,
+    required this.color,
+    required this.strokeWidth,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = strokeWidth
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+
+    // Draw the line
+    canvas.drawLine(
+      Offset(startX, startY),
+      Offset(endX, endY),
+      paint,
+    );
+
+    // Draw the arrowhead
+    final arrowSize = strokeWidth * 2.5;
+    final angle = atan2(endY - startY, endX - startX);
+
+    final arrowPaint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
+
+    final path = Path();
+    path.moveTo(endX, endY);
+    path.lineTo(
+      endX - arrowSize * cos(angle - 0.5),
+      endY - arrowSize * sin(angle - 0.5),
+    );
+    path.lineTo(
+      endX - arrowSize * cos(angle + 0.5),
+      endY - arrowSize * sin(angle + 0.5),
+    );
+    path.close();
+
+    canvas.drawPath(path, arrowPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _ArrowPainter oldDelegate) {
+    return startX != oldDelegate.startX ||
+        startY != oldDelegate.startY ||
+        endX != oldDelegate.endX ||
+        endY != oldDelegate.endY ||
+        color != oldDelegate.color ||
+        strokeWidth != oldDelegate.strokeWidth;
   }
 }

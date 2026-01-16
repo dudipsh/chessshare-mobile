@@ -5,7 +5,6 @@ import '../../../core/api/supabase_service.dart';
 import '../../../core/database/local_database.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../models/puzzle.dart';
-import '../services/puzzle_generator.dart';
 
 /// Cache duration for puzzles (30 minutes)
 const _puzzleCacheDuration = Duration(minutes: 30);
@@ -52,9 +51,8 @@ class PuzzleGeneratorState {
   }
 }
 
-/// Notifier for puzzle generation
+/// Notifier for puzzle management (loading from server)
 class PuzzleGeneratorNotifier extends StateNotifier<PuzzleGeneratorState> {
-  PuzzleGenerator? _generator;
   final String? _userId;
 
   PuzzleGeneratorNotifier(this._userId) : super(const PuzzleGeneratorState()) {
@@ -79,11 +77,8 @@ class PuzzleGeneratorNotifier extends StateNotifier<PuzzleGeneratorState> {
         debugPrint('Loaded ${cachedPuzzles.length} puzzles from cache');
       }
 
-      // Check if cache is still valid
-      final userId = _userId;
-      final cacheTime = userId != null
-          ? await LocalDatabase.getPuzzlesCacheTime(userId)
-          : null;
+      // Check if cache is still valid (we know _userId is not null after the early return)
+      final cacheTime = await LocalDatabase.getPuzzlesCacheTime(_userId);
       final isCacheValid = cacheTime != null &&
           DateTime.now().difference(cacheTime) < _puzzleCacheDuration;
 
@@ -310,75 +305,9 @@ class PuzzleGeneratorNotifier extends StateNotifier<PuzzleGeneratorState> {
     state = state.copyWith(isLoading: false);
   }
 
-  /// Generate puzzles from a PGN game
-  Future<void> generateFromPgn(String pgn) async {
-    if (state.isGenerating) return;
-
-    state = state.copyWith(
-      isGenerating: true,
-      progress: 0,
-      clearError: true,
-    );
-
-    try {
-      _generator ??= PuzzleGenerator();
-      await _generator!.initialize();
-
-      state = state.copyWith(progress: 0.1);
-
-      final puzzles = await _generator!.generateFromPgn(pgn);
-
-      state = state.copyWith(
-        isGenerating: false,
-        puzzles: puzzles,
-        progress: 1.0,
-      );
-    } catch (e) {
-      state = state.copyWith(
-        isGenerating: false,
-        error: 'Failed to generate puzzles: $e',
-      );
-    }
-  }
-
-  /// Generate puzzles from a list of FEN positions
-  Future<void> generateFromPositions(List<String> fens) async {
-    if (state.isGenerating) return;
-
-    state = state.copyWith(
-      isGenerating: true,
-      progress: 0,
-      clearError: true,
-    );
-
-    try {
-      _generator ??= PuzzleGenerator();
-      await _generator!.initialize();
-
-      final puzzles = await _generator!.generateFromPositions(fens);
-
-      state = state.copyWith(
-        isGenerating: false,
-        puzzles: puzzles,
-        progress: 1.0,
-      );
-    } catch (e) {
-      state = state.copyWith(
-        isGenerating: false,
-        error: 'Failed to generate puzzles: $e',
-      );
-    }
-  }
-
-  /// Clear generated puzzles
+  /// Clear puzzles
   void clear() {
     state = const PuzzleGeneratorState();
-  }
-
-  @override
-  void dispose() {
-    _generator?.dispose();
-    super.dispose();
   }
 }
 

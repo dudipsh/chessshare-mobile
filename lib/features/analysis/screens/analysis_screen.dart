@@ -6,6 +6,7 @@ import 'package:dartchess/dartchess.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../app/theme/colors.dart';
+import '../../../core/api/review_api_service.dart';
 import '../../../core/providers/board_settings_provider.dart';
 import '../../../core/providers/captured_pieces_provider.dart';
 import '../../../core/services/audio_service.dart';
@@ -13,7 +14,6 @@ import '../../../core/widgets/board_settings_factory.dart';
 import '../../../core/widgets/board_settings_sheet.dart';
 import '../../../core/widgets/chess_board_shell.dart';
 import '../../games/models/chess_game.dart';
-import '../../puzzles/providers/puzzle_generator_provider.dart';
 import '../providers/analysis_provider.dart';
 import '../providers/engine_provider.dart';
 import '../widgets/analysis_panel.dart';
@@ -299,35 +299,32 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> {
 
   Future<void> _generatePuzzles() async {
     final pgn = widget.game.pgn;
+    final playerColor = widget.game.playerColor;
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('Generating puzzles from your game...'),
+        content: Text('Extracting puzzles from your game...'),
         duration: Duration(seconds: 2),
       ),
     );
 
-    // Generate puzzles
-    await ref.read(puzzleGeneratorProvider.notifier).generateFromPgn(pgn);
+    try {
+      // Use Review API to extract puzzles
+      final result = await ReviewApiService.extractPuzzles(
+        pgn: pgn,
+        playerColor: playerColor,
+      );
 
-    // Check result
-    final state = ref.read(puzzleGeneratorProvider);
-    if (mounted) {
-      if (state.puzzles.isNotEmpty) {
+      if (!mounted) return;
+
+      if (result.puzzles.isNotEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Found ${state.puzzles.length} puzzles!'),
+            content: Text('Found ${result.puzzles.length} puzzles!'),
             action: SnackBarAction(
               label: 'View',
               onPressed: () => context.goNamed('puzzles'),
             ),
-          ),
-        );
-      } else if (state.error != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(state.error!),
-            backgroundColor: AppColors.error,
           ),
         );
       } else {
@@ -337,6 +334,22 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> {
           ),
         );
       }
+    } on RateLimitException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.message),
+          backgroundColor: AppColors.error,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to extract puzzles: $e'),
+          backgroundColor: AppColors.error,
+        ),
+      );
     }
   }
 }
