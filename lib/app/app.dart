@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/notifications/local_notification_service.dart';
 import '../core/notifications/notification_navigation.dart';
+import '../core/services/force_update_service.dart';
+import '../core/widgets/force_update_dialog.dart';
 import '../features/auth/providers/auth_provider.dart';
 import '../features/gamification/providers/gamification_provider.dart';
 import '../features/gamification/widgets/gamification_listener.dart';
@@ -27,6 +29,35 @@ class _ChessShareAppState extends ConsumerState<ChessShareApp> {
   void initState() {
     super.initState();
     _setupNotificationNavigation();
+    _checkForUpdates();
+  }
+
+  /// Check for app updates and show dialog if needed
+  Future<void> _checkForUpdates() async {
+    // Wait for app to fully initialize
+    await Future.delayed(const Duration(seconds: 1));
+
+    final result = await ForceUpdateService.checkForUpdate();
+
+    if (!mounted) return;
+
+    final context = rootNavigatorKey.currentContext;
+    if (context == null) return;
+
+    switch (result.status) {
+      case UpdateStatus.forceUpdateRequired:
+        // Force update - user cannot dismiss
+        ForceUpdateDialog.showForceUpdate(context, result);
+        break;
+      case UpdateStatus.updateAvailable:
+        // Optional update - user can dismiss
+        ForceUpdateDialog.showOptionalUpdate(context, result);
+        break;
+      case UpdateStatus.upToDate:
+      case UpdateStatus.error:
+        // No action needed
+        break;
+    }
   }
 
   @override
