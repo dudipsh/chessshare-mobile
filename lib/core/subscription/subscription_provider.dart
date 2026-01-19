@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -9,7 +12,16 @@ import 'limits_tracker.dart';
 /// Provider for the SubscriptionService
 final subscriptionServiceProvider = Provider<SubscriptionService>((ref) {
   final featureFlagService = ref.watch(featureFlagServiceProvider);
-  return SubscriptionService(Supabase.instance.client, featureFlagService);
+  final service = SubscriptionService(Supabase.instance.client, featureFlagService);
+
+  // Start listening for realtime updates
+  service.startListeningForUpdates();
+
+  ref.onDispose(() {
+    service.dispose();
+  });
+
+  return service;
 });
 
 /// State for subscription and limits
@@ -20,7 +32,7 @@ class SubscriptionState {
   final String? error;
 
   // Remaining quotas
-  final int remainingAnalyses;
+  final int remainingGameReviews;
   final int remainingBoardViews;
 
   const SubscriptionState({
@@ -28,7 +40,7 @@ class SubscriptionState {
     this.limits,
     this.isLoading = false,
     this.error,
-    this.remainingAnalyses = 0,
+    this.remainingGameReviews = 0,
     this.remainingBoardViews = 0,
   });
 
@@ -37,7 +49,7 @@ class SubscriptionState {
     TierLimits? limits,
     bool? isLoading,
     String? error,
-    int? remainingAnalyses,
+    int? remainingGameReviews,
     int? remainingBoardViews,
   }) {
     return SubscriptionState(
@@ -45,7 +57,7 @@ class SubscriptionState {
       limits: limits ?? this.limits,
       isLoading: isLoading ?? this.isLoading,
       error: error,
-      remainingAnalyses: remainingAnalyses ?? this.remainingAnalyses,
+      remainingGameReviews: remainingGameReviews ?? this.remainingGameReviews,
       remainingBoardViews: remainingBoardViews ?? this.remainingBoardViews,
     );
   }
@@ -61,14 +73,26 @@ class SubscriptionState {
 
   /// Check if user is pro
   bool get isPro => tier == SubscriptionTier.pro || isAdmin;
+
+  /// Check if user is basic or higher
+  bool get isBasicOrHigher => tier == SubscriptionTier.basic || isPro;
 }
 
 /// Notifier for managing subscription state
 class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
   final SubscriptionService _service;
+  StreamSubscription? _updateSubscription;
 
   SubscriptionNotifier(this._service) : super(const SubscriptionState(isLoading: true)) {
     _load();
+    _listenForUpdates();
+  }
+
+  void _listenForUpdates() {
+    _updateSubscription = _service.onSubscriptionUpdated.listen((subscription) {
+      debugPrint('SubscriptionNotifier: Received subscription update');
+      _load(); // Refresh all state
+    });
   }
 
   Future<void> _load() async {
@@ -77,14 +101,14 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
 
       final subscription = await _service.getSubscription();
       final limits = subscription.limits;
-      final remainingAnalyses = await _service.getRemainingAnalyses();
+      final remainingGameReviews = await _service.getRemainingGameReviews();
       final remainingBoardViews = await _service.getRemainingBoardViews();
 
       state = SubscriptionState(
         subscription: subscription,
         limits: limits,
         isLoading: false,
-        remainingAnalyses: remainingAnalyses,
+        remainingGameReviews: remainingGameReviews,
         remainingBoardViews: remainingBoardViews,
       );
     } catch (e) {
@@ -107,23 +131,29 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
     state = const SubscriptionState();
   }
 
+  @override
+  void dispose() {
+    _updateSubscription?.cancel();
+    super.dispose();
+  }
+
   // ============ Limit Checks with Recording ============
 
-  /// Check and record game analysis
-  Future<LimitCheckResult> checkAndRecordAnalysis() async {
-    final result = await _service.canAnalyzeGame();
+  /// Check and record game review
+  Future<LimitCheckResult> checkAndRecordGameReview() async {
+    final result = await _service.canReviewGame();
     if (result.allowed) {
-      await _service.recordAnalysis();
+      await _service.recordGameReview();
       // Update remaining count
-      final remaining = await _service.getRemainingAnalyses();
-      state = state.copyWith(remainingAnalyses: remaining);
+      final remaining = await _service.getRemainingGameReviews();
+      state = state.copyWith(remainingGameReviews: remaining);
     }
     return result;
   }
 
   /// Check and record board view
   Future<LimitCheckResult> checkAndRecordBoardView(String boardId) async {
-    final result = await _service.canViewBoard();
+    final result = await _service.canViewBoard(boardId);
     if (result.allowed) {
       await _service.recordBoardView(boardId);
       // Update remaining count
@@ -141,6 +171,16 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
   /// Check board creation
   Future<LimitCheckResult> canCreateBoard(int currentCount) async {
     return await _service.canCreateBoard(currentCount);
+  }
+
+  /// Check if can create club
+  Future<bool> canCreateClub() async {
+    return await _service.canCreateClub();
+  }
+
+  /// Check if can change cover
+  Future<bool> canChangeCover() async {
+    return await _service.canChangeCover();
   }
 }
 
@@ -163,10 +203,16 @@ final isPaidUserProvider = Provider<bool>((ref) {
   return state.isPaid;
 });
 
-/// Provider for remaining analyses
-final remainingAnalysesProvider = Provider<int>((ref) {
+/// Provider for checking if user is basic or higher
+final isBasicOrHigherProvider = Provider<bool>((ref) {
   final state = ref.watch(subscriptionProvider);
-  return state.remainingAnalyses;
+  return state.isBasicOrHigher;
+});
+
+/// Provider for remaining game reviews
+final remainingGameReviewsProvider = Provider<int>((ref) {
+  final state = ref.watch(subscriptionProvider);
+  return state.remainingGameReviews;
 });
 
 /// Provider for remaining board views

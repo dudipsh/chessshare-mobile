@@ -1,128 +1,166 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../../app/theme/colors.dart';
+import '../../../../core/subscription/lemonsqueezy_service.dart';
+import '../../../../core/subscription/subscription_tier.dart';
 import '../../../auth/providers/auth_provider.dart';
 
-class PlanTab extends ConsumerWidget {
+class PlanTab extends ConsumerStatefulWidget {
   final bool isDark;
 
   const PlanTab({super.key, required this.isDark});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final profile = ref.watch(authProvider).profile;
-    final currentPlan = (profile?.subscriptionType ?? 'FREE').toLowerCase();
+  ConsumerState<PlanTab> createState() => _PlanTabState();
+}
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Current Plan Card
-          _CurrentPlanCard(
-            currentPlan: currentPlan,
-            isDark: isDark,
-          ),
-          const SizedBox(height: 24),
+class _PlanTabState extends ConsumerState<PlanTab> {
+  bool _isLoading = false;
 
-          // Available Plans
-          Text(
-            'Available Plans',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: isDark ? Colors.white : Colors.black87,
-            ),
-          ),
-          const SizedBox(height: 16),
+  Future<void> _openCheckout(SubscriptionTier tier) async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please sign in to upgrade')),
+      );
+      return;
+    }
 
-          _PlanCard(
-            name: 'Free',
-            price: 'Free',
-            period: '',
-            features: const [
-              '3 boards per day',
-              '5 boards total',
-              'Basic analysis',
-              'Community support',
-            ],
-            isCurrentPlan: currentPlan == 'free',
-            isDark: isDark,
-            onSelect: () {},
-          ),
-          const SizedBox(height: 12),
+    setState(() => _isLoading = true);
 
-          _PlanCard(
-            name: 'Basic',
-            price: '\$4.99',
-            period: '/month',
-            features: const [
-              '10 boards per day',
-              '20 boards total',
-              'Change cover image',
-              'Basic analysis',
-            ],
-            isCurrentPlan: currentPlan == 'basic',
-            isDark: isDark,
-            onSelect: () => _showUpgradeDialog(context, 'basic'),
-          ),
-          const SizedBox(height: 12),
-
-          _PlanCard(
-            name: 'Pro',
-            price: '\$9.99',
-            period: '/month',
-            features: const [
-              'Unlimited viewing',
-              'Unlimited creation',
-              'Create clubs',
-              'Advanced analysis',
-              'Priority support',
-            ],
-            isCurrentPlan: currentPlan == 'pro',
-            isRecommended: true,
-            isDark: isDark,
-            onSelect: () => _showUpgradeDialog(context, 'pro'),
-          ),
-
-          const SizedBox(height: 32),
-        ],
-      ),
+    final success = await LemonSqueezyService.openCheckout(
+      tier: tier,
+      userId: user.id,
+      email: user.email ?? '',
     );
+
+    if (mounted) {
+      setState(() => _isLoading = false);
+
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Complete your purchase in the browser'),
+            duration: Duration(seconds: 3),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not open checkout')),
+        );
+      }
+    }
   }
 
-  void _showUpgradeDialog(BuildContext context, String plan) {
-    final planName = plan[0].toUpperCase() + plan.substring(1);
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Upgrade to $planName'),
-        content: const Text('Subscription management will be available soon. Stay tuned!'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('OK'),
+  @override
+  Widget build(BuildContext context) {
+    final profile = ref.watch(authProvider).profile;
+    final currentTier = SubscriptionTier.fromString(profile?.subscriptionType);
+
+    return Stack(
+      children: [
+        SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Current Plan Card
+              _CurrentPlanCard(
+                currentTier: currentTier,
+                isDark: widget.isDark,
+              ),
+              const SizedBox(height: 24),
+
+              // Available Plans
+              Text(
+                'Available Plans',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: widget.isDark ? Colors.white : Colors.black87,
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              _PlanCard(
+                tier: SubscriptionTier.free,
+                features: const [
+                  '1 game review per day',
+                  '3 board views per day',
+                  '5 boards max',
+                  '1 daily puzzle',
+                ],
+                isCurrentPlan: currentTier == SubscriptionTier.free,
+                isDark: widget.isDark,
+                onSelect: () {},
+              ),
+              const SizedBox(height: 12),
+
+              _PlanCard(
+                tier: SubscriptionTier.basic,
+                features: const [
+                  '3 game reviews per day',
+                  '50 board views per day',
+                  '20 boards max',
+                  '3 daily puzzles',
+                  'All variations access',
+                  'Create clubs',
+                  'Change cover images',
+                ],
+                isCurrentPlan: currentTier == SubscriptionTier.basic,
+                isDark: widget.isDark,
+                onSelect: () => _openCheckout(SubscriptionTier.basic),
+              ),
+              const SizedBox(height: 12),
+
+              _PlanCard(
+                tier: SubscriptionTier.pro,
+                features: const [
+                  'Unlimited game reviews',
+                  'Unlimited board views',
+                  'Unlimited boards',
+                  'Unlimited daily puzzles',
+                  'All variations access',
+                  'Create clubs',
+                  'Change cover images',
+                  'Priority support',
+                ],
+                isCurrentPlan: currentTier == SubscriptionTier.pro,
+                isRecommended: true,
+                isDark: widget.isDark,
+                onSelect: () => _openCheckout(SubscriptionTier.pro),
+              ),
+
+              const SizedBox(height: 32),
+            ],
           ),
-        ],
-      ),
+        ),
+        if (_isLoading)
+          Container(
+            color: Colors.black45,
+            child: const Center(
+              child: CircularProgressIndicator(),
+            ),
+          ),
+      ],
     );
   }
 }
 
 class _CurrentPlanCard extends StatelessWidget {
-  final String currentPlan;
+  final SubscriptionTier currentTier;
   final bool isDark;
 
   const _CurrentPlanCard({
-    required this.currentPlan,
+    required this.currentTier,
     required this.isDark,
   });
 
   @override
   Widget build(BuildContext context) {
-    final planName = currentPlan[0].toUpperCase() + currentPlan.substring(1);
-    final isPremium = currentPlan != 'free';
+    final isPremium = currentTier != SubscriptionTier.free;
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -159,7 +197,7 @@ class _CurrentPlanCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(
-              isPremium ? Icons.workspace_premium : Icons.person,
+              _getTierIcon(currentTier),
               size: 32,
               color: isPremium ? Colors.white : AppColors.primary,
             ),
@@ -180,7 +218,7 @@ class _CurrentPlanCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  planName,
+                  currentTier.displayName,
                   style: TextStyle(
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
@@ -210,12 +248,23 @@ class _CurrentPlanCard extends StatelessWidget {
       ),
     );
   }
+
+  IconData _getTierIcon(SubscriptionTier tier) {
+    switch (tier) {
+      case SubscriptionTier.free:
+        return Icons.person;
+      case SubscriptionTier.basic:
+        return Icons.star;
+      case SubscriptionTier.pro:
+        return Icons.workspace_premium;
+      case SubscriptionTier.admin:
+        return Icons.admin_panel_settings;
+    }
+  }
 }
 
 class _PlanCard extends StatelessWidget {
-  final String name;
-  final String price;
-  final String period;
+  final SubscriptionTier tier;
   final List<String> features;
   final bool isCurrentPlan;
   final bool isRecommended;
@@ -223,9 +272,7 @@ class _PlanCard extends StatelessWidget {
   final VoidCallback onSelect;
 
   const _PlanCard({
-    required this.name,
-    required this.price,
-    required this.period,
+    required this.tier,
     required this.features,
     required this.isCurrentPlan,
     this.isRecommended = false,
@@ -235,6 +282,11 @@ class _PlanCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final price = tier == SubscriptionTier.free
+        ? 'Free'
+        : '\$${tier.monthlyPrice.toStringAsFixed(2)}';
+    final period = tier == SubscriptionTier.free ? '' : '/month';
+
     return Container(
       decoration: BoxDecoration(
         color: isDark ? Colors.grey[850] : Colors.white,
@@ -259,9 +311,9 @@ class _PlanCard extends StatelessWidget {
             Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(vertical: 8),
-              decoration: BoxDecoration(
+              decoration: const BoxDecoration(
                 color: AppColors.primary,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(14)),
               ),
               child: const Text(
                 'RECOMMENDED',
@@ -283,7 +335,7 @@ class _PlanCard extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      name,
+                      tier.displayName,
                       style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
@@ -295,7 +347,7 @@ class _PlanCard extends StatelessWidget {
                       children: [
                         Text(
                           price,
-                          style: TextStyle(
+                          style: const TextStyle(
                             fontSize: 28,
                             fontWeight: FontWeight.bold,
                             color: AppColors.primary,
@@ -320,7 +372,7 @@ class _PlanCard extends StatelessWidget {
                       padding: const EdgeInsets.only(bottom: 8),
                       child: Row(
                         children: [
-                          Icon(
+                          const Icon(
                             Icons.check_circle,
                             size: 18,
                             color: AppColors.success,
@@ -342,7 +394,9 @@ class _PlanCard extends StatelessWidget {
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: isCurrentPlan ? null : onSelect,
+                    onPressed: isCurrentPlan || tier == SubscriptionTier.free
+                        ? null
+                        : onSelect,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: isCurrentPlan
                           ? (isDark ? Colors.grey[700] : Colors.grey[300])
@@ -356,7 +410,11 @@ class _PlanCard extends StatelessWidget {
                       ),
                     ),
                     child: Text(
-                      isCurrentPlan ? 'Current Plan' : 'Select Plan',
+                      isCurrentPlan
+                          ? 'Current Plan'
+                          : tier == SubscriptionTier.free
+                              ? 'Free'
+                              : 'Upgrade to ${tier.displayName}',
                       style: const TextStyle(
                         fontWeight: FontWeight.w600,
                         fontSize: 16,

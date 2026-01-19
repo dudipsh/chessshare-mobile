@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../app/theme/colors.dart';
+import 'lemonsqueezy_service.dart';
 import 'limits_tracker.dart';
 import 'subscription_tier.dart';
 
-/// Shows a modal when user hits their limit
-class UpgradeModal extends StatelessWidget {
+/// Shows a modal when user hits their limit with upgrade options
+class UpgradeModal extends StatefulWidget {
   final LimitCheckResult result;
   final String feature;
   final SubscriptionTier currentTier;
@@ -36,11 +37,47 @@ class UpgradeModal extends StatelessWidget {
     );
   }
 
-  void _openUpgradeUrl() async {
-    // TODO: Replace with actual upgrade URL
-    const url = 'https://chessy.app/pricing';
-    if (await canLaunchUrl(Uri.parse(url))) {
-      await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+  @override
+  State<UpgradeModal> createState() => _UpgradeModalState();
+}
+
+class _UpgradeModalState extends State<UpgradeModal> {
+  bool _isLoading = false;
+  SubscriptionTier _selectedTier = SubscriptionTier.pro;
+
+  Future<void> _openCheckout() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please sign in to upgrade')),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    final success = await LemonSqueezyService.openCheckout(
+      tier: _selectedTier,
+      userId: user.id,
+      email: user.email ?? '',
+    );
+
+    if (mounted) {
+      setState(() => _isLoading = false);
+
+      if (success) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Complete your purchase in the browser'),
+            duration: Duration(seconds: 3),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not open checkout')),
+        );
+      }
     }
   }
 
@@ -101,7 +138,8 @@ class UpgradeModal extends StatelessWidget {
 
               // Message
               Text(
-                result.message ?? 'You\'ve reached your daily limit for $feature.',
+                widget.result.message ??
+                    'You\'ve reached your daily limit for ${widget.feature}.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: isDark ? Colors.grey[400] : Colors.grey[600],
@@ -109,10 +147,11 @@ class UpgradeModal extends StatelessWidget {
               ),
               const SizedBox(height: 24),
 
-              // Current vs upgraded comparison
-              _ComparisonCard(
-                feature: feature,
-                currentTier: currentTier,
+              // Plan selection
+              _PlanSelector(
+                currentTier: widget.currentTier,
+                selectedTier: _selectedTier,
+                onTierSelected: (tier) => setState(() => _selectedTier = tier),
                 isDark: isDark,
               ),
               const SizedBox(height: 24),
@@ -121,7 +160,7 @@ class UpgradeModal extends StatelessWidget {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: _openUpgradeUrl,
+                  onPressed: _isLoading ? null : _openCheckout,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
                     foregroundColor: Colors.white,
@@ -130,13 +169,22 @@ class UpgradeModal extends StatelessWidget {
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                  child: const Text(
-                    'Upgrade Now',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                    ),
-                  ),
+                  child: _isLoading
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : Text(
+                          'Upgrade to ${_selectedTier.displayName}',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
                 ),
               ),
               const SizedBox(height: 12),
@@ -159,133 +207,180 @@ class UpgradeModal extends StatelessWidget {
   }
 }
 
-class _ComparisonCard extends StatelessWidget {
-  final String feature;
+class _PlanSelector extends StatelessWidget {
   final SubscriptionTier currentTier;
+  final SubscriptionTier selectedTier;
+  final ValueChanged<SubscriptionTier> onTierSelected;
   final bool isDark;
 
-  const _ComparisonCard({
-    required this.feature,
+  const _PlanSelector({
     required this.currentTier,
+    required this.selectedTier,
+    required this.onTierSelected,
     required this.isDark,
   });
 
   @override
   Widget build(BuildContext context) {
-    final currentLimits = TierLimits.forTier(currentTier);
-    final proLimits = TierLimits.forTier(SubscriptionTier.pro);
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isDark ? Colors.grey[850] : Colors.grey[100],
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: _TierColumn(
-                  tierName: currentTier.displayName,
-                  limits: currentLimits,
-                  isCurrent: true,
-                  isDark: isDark,
-                ),
-              ),
-              Container(
-                width: 1,
-                height: 80,
-                color: isDark ? Colors.grey[700] : Colors.grey[300],
-              ),
-              Expanded(
-                child: _TierColumn(
-                  tierName: 'Pro',
-                  limits: proLimits,
-                  isCurrent: false,
-                  isDark: isDark,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _TierColumn extends StatelessWidget {
-  final String tierName;
-  final TierLimits limits;
-  final bool isCurrent;
-  final bool isDark;
-
-  const _TierColumn({
-    required this.tierName,
-    required this.limits,
-    required this.isCurrent,
-    required this.isDark,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
+    return Row(
       children: [
-        Text(
-          tierName,
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            color: isCurrent
-                ? (isDark ? Colors.grey[400] : Colors.grey[600])
-                : AppColors.primary,
+        if (currentTier == SubscriptionTier.free) ...[
+          Expanded(
+            child: _PlanCard(
+              tier: SubscriptionTier.basic,
+              isSelected: selectedTier == SubscriptionTier.basic,
+              onTap: () => onTierSelected(SubscriptionTier.basic),
+              isDark: isDark,
+            ),
           ),
-        ),
-        const SizedBox(height: 8),
-        _LimitRow(
-          label: 'Analyses',
-          value: limits.isUnlimited(limits.dailyAnalyses)
-              ? '∞'
-              : '${limits.dailyAnalyses}/day',
-          isDark: isDark,
-        ),
-        _LimitRow(
-          label: 'Boards',
-          value: limits.isUnlimited(limits.dailyBoardViews)
-              ? '∞'
-              : '${limits.dailyBoardViews}/day',
-          isDark: isDark,
-        ),
-        _LimitRow(
-          label: 'Variations',
-          value: limits.allVariations ? 'All' : 'First only',
-          isDark: isDark,
+          const SizedBox(width: 12),
+        ],
+        Expanded(
+          child: _PlanCard(
+            tier: SubscriptionTier.pro,
+            isSelected: selectedTier == SubscriptionTier.pro,
+            onTap: () => onTierSelected(SubscriptionTier.pro),
+            isDark: isDark,
+            isRecommended: true,
+          ),
         ),
       ],
     );
   }
 }
 
-class _LimitRow extends StatelessWidget {
-  final String label;
-  final String value;
+class _PlanCard extends StatelessWidget {
+  final SubscriptionTier tier;
+  final bool isSelected;
+  final VoidCallback onTap;
+  final bool isDark;
+  final bool isRecommended;
+
+  const _PlanCard({
+    required this.tier,
+    required this.isSelected,
+    required this.onTap,
+    required this.isDark,
+    this.isRecommended = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final limits = TierLimits.forTier(tier);
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? AppColors.primary.withValues(alpha: 0.1)
+              : (isDark ? Colors.grey[850] : Colors.grey[100]),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected ? AppColors.primary : Colors.transparent,
+            width: 2,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text(
+                  tier.displayName,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: isSelected ? AppColors.primary : null,
+                  ),
+                ),
+                if (isRecommended) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.orange,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: const Text(
+                      'Best',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '\$${tier.monthlyPrice.toStringAsFixed(2)}/mo',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: isSelected ? AppColors.primary : null,
+              ),
+            ),
+            const SizedBox(height: 12),
+            _FeatureRow(
+              text:
+                  '${limits.isUnlimited(limits.dailyGameReviews) ? "Unlimited" : limits.dailyGameReviews} reviews/day',
+              isDark: isDark,
+            ),
+            _FeatureRow(
+              text:
+                  '${limits.isUnlimited(limits.dailyBoardViews) ? "Unlimited" : limits.dailyBoardViews} board views/day',
+              isDark: isDark,
+            ),
+            _FeatureRow(
+              text:
+                  '${limits.isUnlimited(limits.maxBoards) ? "Unlimited" : limits.maxBoards} boards',
+              isDark: isDark,
+            ),
+            if (limits.canCreateClub)
+              _FeatureRow(text: 'Create clubs', isDark: isDark),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _FeatureRow extends StatelessWidget {
+  final String text;
   final bool isDark;
 
-  const _LimitRow({
-    required this.label,
-    required this.value,
+  const _FeatureRow({
+    required this.text,
     required this.isDark,
   });
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Text(
-        '$label: $value',
-        style: TextStyle(
-          fontSize: 12,
-          color: isDark ? Colors.grey[400] : Colors.grey[600],
-        ),
+      padding: const EdgeInsets.only(top: 4),
+      child: Row(
+        children: [
+          Icon(
+            Icons.check,
+            size: 14,
+            color: Colors.green[600],
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(
+                fontSize: 12,
+                color: isDark ? Colors.grey[400] : Colors.grey[600],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -301,7 +396,12 @@ void showLimitWarning(BuildContext context, LimitCheckResult result) {
         label: 'Upgrade',
         textColor: Colors.white,
         onPressed: () {
-          // TODO: Navigate to upgrade
+          UpgradeModal.show(
+            context,
+            result: result,
+            feature: 'this feature',
+            currentTier: SubscriptionTier.free,
+          );
         },
       ),
     ),

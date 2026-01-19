@@ -11,11 +11,27 @@ import 'core/notifications/local_notification_service.dart';
 import 'core/notifications/notification_navigation.dart';
 import 'core/services/app_init_service.dart';
 import 'core/services/global_stockfish_manager.dart';
+import 'core/subscription/deep_link_service.dart';
+import 'core/widgets/app_loading_wrapper.dart';
 import 'features/analysis/services/stockfish_types.dart';
 
-void main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Run app IMMEDIATELY with loading screen
+  // All initialization happens in background while user sees animation
+  runApp(
+    ProviderScope(
+      child: AppLoadingWrapper(
+        onInit: _initializeAll,
+        child: const ChessShareApp(),
+      ),
+    ),
+  );
+}
+
+/// Initialize all app services (runs while loading screen is shown)
+Future<void> _initializeAll() async {
   // Load environment variables from .env file
   await dotenv.load(fileName: '.env');
 
@@ -28,14 +44,11 @@ void main() async {
   // Initialize local notifications
   await _initializeNotifications();
 
+  // Initialize deep link handling (for LemonSqueezy checkout callbacks)
+  await _initializeDeepLinks();
+
   // Pre-initialize Stockfish in background (so it's ready when user needs it)
   _preInitializeStockfish();
-
-  runApp(
-    const ProviderScope(
-      child: ChessShareApp(),
-    ),
-  );
 }
 
 /// Pre-initialize Stockfish engine in background
@@ -67,6 +80,22 @@ Future<void> _initializeNotifications() async {
     };
   } catch (e) {
     debugPrint('Failed to initialize notifications: $e');
+  }
+}
+
+Future<void> _initializeDeepLinks() async {
+  try {
+    await DeepLinkService.instance.initialize();
+
+    // Handle checkout success - the subscription provider will auto-refresh
+    // via Realtime when the webhook updates Supabase
+    DeepLinkService.instance.onCheckoutSuccess = () {
+      debugPrint('Checkout success deep link received');
+      // The subscription will be refreshed automatically via Realtime
+      // when the LemonSqueezy webhook updates the database
+    };
+  } catch (e) {
+    debugPrint('Failed to initialize deep links: $e');
   }
 }
 

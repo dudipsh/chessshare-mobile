@@ -49,11 +49,12 @@ enum SubscriptionTier {
 }
 
 /// Limits configuration for each tier
+/// Matches the web app (chessy-linker) limits exactly
 class TierLimits {
-  /// Game analyses per day
-  final int dailyAnalyses;
+  /// Game reviews/analyses per day
+  final int dailyGameReviews;
 
-  /// Board views per day
+  /// Board views per day (for FREE users)
   final int dailyBoardViews;
 
   /// Whether user can access all variations (or just first)
@@ -71,67 +72,70 @@ class TierLimits {
   /// Can create clubs
   final bool canCreateClub;
 
-  /// Can upload cover images
-  final bool canUploadCover;
+  /// Can upload/change cover images
+  final bool canChangeCover;
 
   /// Has priority support
   final bool prioritySupport;
 
   const TierLimits({
-    required this.dailyAnalyses,
+    required this.dailyGameReviews,
     required this.dailyBoardViews,
     required this.allVariations,
     required this.maxBoards,
     required this.maxSavedMistakes,
     required this.dailyPuzzles,
     required this.canCreateClub,
-    required this.canUploadCover,
+    required this.canChangeCover,
     required this.prioritySupport,
   });
 
   /// Unlimited value marker
   static const unlimited = 999999;
 
-  /// Get limits for a specific tier
+  /// Get limits for a specific tier (matches web app exactly)
   static TierLimits forTier(SubscriptionTier tier) {
     switch (tier) {
       case SubscriptionTier.free:
+        // FREE: 3 daily board views, 5 max boards, 1 daily game review
         return const TierLimits(
-          dailyAnalyses: 2,
-          dailyBoardViews: 10,
+          dailyGameReviews: 1,
+          dailyBoardViews: 3,
           allVariations: false,
-          maxBoards: 0,
+          maxBoards: 5,
           maxSavedMistakes: 10,
           dailyPuzzles: 1,
           canCreateClub: false,
-          canUploadCover: false,
+          canChangeCover: false,
           prioritySupport: false,
         );
 
       case SubscriptionTier.basic:
+        // BASIC ($4.99/mo): 50 daily board views, 20 max boards, 3 daily game reviews
         return const TierLimits(
-          dailyAnalyses: 10,
+          dailyGameReviews: 3,
           dailyBoardViews: 50,
           allVariations: true,
-          maxBoards: 5,
+          maxBoards: 20,
           maxSavedMistakes: 50,
           dailyPuzzles: 3,
-          canCreateClub: false,
-          canUploadCover: true,
+          canCreateClub: true,
+          canChangeCover: true,
           prioritySupport: false,
         );
 
       case SubscriptionTier.pro:
       case SubscriptionTier.admin:
+        // PRO ($9.99/mo): Unlimited everything
         return TierLimits(
-          dailyAnalyses: TierLimits.unlimited,
+          dailyGameReviews: TierLimits.unlimited,
           dailyBoardViews: TierLimits.unlimited,
           allVariations: true,
           maxBoards: TierLimits.unlimited,
           maxSavedMistakes: TierLimits.unlimited,
-          dailyPuzzles: 5,
+          dailyPuzzles: TierLimits.unlimited,
           canCreateClub: true,
-          canUploadCover: true,
+          canChangeCover: true,
           prioritySupport: true,
         );
     }
@@ -141,36 +145,62 @@ class TierLimits {
   bool isUnlimited(int value) => value >= unlimited;
 }
 
-/// Model representing a user's subscription
+/// Model representing a user's subscription (matches profiles table in Supabase)
 class UserSubscription {
   final String userId;
   final SubscriptionTier tier;
-  final DateTime? expiresAt;
-  final bool isActive;
+  final DateTime? startDate;
+  final DateTime? endDate;
+  final String? lemonSqueezySubscriptionId;
+  final String? lemonSqueezyCustomerId;
 
   const UserSubscription({
     required this.userId,
     required this.tier,
-    this.expiresAt,
-    this.isActive = true,
+    this.startDate,
+    this.endDate,
+    this.lemonSqueezySubscriptionId,
+    this.lemonSqueezyCustomerId,
   });
 
   factory UserSubscription.free(String userId) {
     return UserSubscription(
       userId: userId,
       tier: SubscriptionTier.free,
-      isActive: true,
     );
   }
 
-  factory UserSubscription.fromJson(Map<String, dynamic> json) {
+  /// Parse from profiles table response
+  factory UserSubscription.fromProfile(Map<String, dynamic> json) {
     return UserSubscription(
-      userId: json['user_id'] as String,
-      tier: SubscriptionTier.fromString(json['tier'] as String?),
-      expiresAt: json['expires_at'] != null
-          ? DateTime.parse(json['expires_at'] as String)
+      userId: json['id'] as String? ?? '',
+      tier: SubscriptionTier.fromString(json['subscription_type'] as String?),
+      startDate: json['subscription_start_date'] != null
+          ? DateTime.tryParse(json['subscription_start_date'] as String)
           : null,
-      isActive: json['is_active'] as bool? ?? true,
+      endDate: json['subscription_end_date'] != null
+          ? DateTime.tryParse(json['subscription_end_date'] as String)
+          : null,
+      lemonSqueezySubscriptionId:
+          json['lemonsqueezy_subscription_id'] as String?,
+      lemonSqueezyCustomerId: json['lemonsqueezy_customer_id'] as String?,
+    );
+  }
+
+  /// Parse from RPC get_user_subscription_info response
+  factory UserSubscription.fromRpc(String userId, Map<String, dynamic> json) {
+    return UserSubscription(
+      userId: userId,
+      tier: SubscriptionTier.fromString(json['subscription_type'] as String?),
+      startDate: json['subscription_start_date'] != null
+          ? DateTime.tryParse(json['subscription_start_date'] as String)
+          : null,
+      endDate: json['subscription_end_date'] != null
+          ? DateTime.tryParse(json['subscription_end_date'] as String)
+          : null,
+      lemonSqueezySubscriptionId:
+          json['lemonsqueezy_subscription_id'] as String?,
+      lemonSqueezyCustomerId: json['lemonsqueezy_customer_id'] as String?,
     );
   }
 
@@ -179,13 +209,27 @@ class UserSubscription {
 
   /// Check if subscription is expired
   bool get isExpired {
-    if (expiresAt == null) return false;
-    return DateTime.now().isAfter(expiresAt!);
+    if (endDate == null) return false;
+    return DateTime.now().isAfter(endDate!);
+  }
+
+  /// Check if subscription is active (not expired and has valid tier)
+  bool get isActive {
+    if (tier == SubscriptionTier.free) return true;
+    return !isExpired;
   }
 
   /// Effective tier (considering expiration)
   SubscriptionTier get effectiveTier {
-    if (!isActive || isExpired) return SubscriptionTier.free;
+    if (isExpired) return SubscriptionTier.free;
     return tier;
   }
+
+  /// Check if user has an active paid subscription
+  bool get hasPaidSubscription =>
+      tier != SubscriptionTier.free && isActive;
+
+  /// Check if subscription can be managed (has LemonSqueezy IDs)
+  bool get canManageSubscription =>
+      lemonSqueezySubscriptionId != null && lemonSqueezyCustomerId != null;
 }

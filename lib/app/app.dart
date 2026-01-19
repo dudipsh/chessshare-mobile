@@ -34,8 +34,8 @@ class _ChessShareAppState extends ConsumerState<ChessShareApp> {
 
   /// Check for app updates and show dialog if needed
   Future<void> _checkForUpdates() async {
-    // Wait for app to fully initialize
-    await Future.delayed(const Duration(seconds: 1));
+    // Wait for app to fully initialize and first screen to render
+    await Future.delayed(const Duration(seconds: 3));
 
     final result = await ForceUpdateService.checkForUpdate();
 

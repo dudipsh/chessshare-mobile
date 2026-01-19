@@ -71,6 +71,9 @@ dependencies:
   # URL Launcher
   url_launcher: ^6.2.5
 
+  # Deep Links
+  app_links: ^6.3.3
+
   # App Info
   package_info_plus: ^8.0.0
 
@@ -86,7 +89,6 @@ dev_dependencies:
   freezed: ^2.4.6
   json_serializable: ^6.7.1
   flutter_launcher_icons: ^0.14.3
-  flutter_native_splash: ^2.4.5
 
 # App Icon Configuration
 flutter_launcher_icons:
@@ -97,20 +99,6 @@ flutter_launcher_icons:
   adaptive_icon_background: "#EEEDCF"
   adaptive_icon_foreground: "assets/images/app_icon.png"
   remove_alpha_ios: true
-
-# Splash Screen Configuration
-flutter_native_splash:
-  color: "#EEEDCF"
-  image: "assets/images/app_icon.png"
-  color_dark: "#1a1a1a"
-  image_dark: "assets/images/app_icon.png"
-  android_12:
-    color: "#EEEDCF"
-    icon_background_color: "#EEEDCF"
-    image: "assets/images/app_icon.png"
-    color_dark: "#1a1a1a"
-    icon_background_color_dark: "#1a1a1a"
-    image_dark: "assets/images/app_icon.png"
 
 flutter:
   uses-material-design: true
